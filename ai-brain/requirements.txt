@@ -1,0 +1,12 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+scikit-learn>=1.6,<2.0
+pandas>=2.2,<3.0
+numpy>=2.1,<3.0
+joblib>=1.4,<2.0
+
+# Optional semantic upgrades (Tier 1/2). The /semantic/analyze endpoint runs on
+# scikit-learn (TF-IDF) by default and degrades to keyword rules without these.
+# sentence-transformers>=2.7,<4.0  # Tier 1 dense embeddings
+# transformers>=4.40,<5.0          # Tier 2 DistilBERT (SEMANTIC_USE_TRANSFORMER=1)
+# torch>=2.2,<3.0                  # backend for transformers

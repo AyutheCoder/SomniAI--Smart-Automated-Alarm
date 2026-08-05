@@ -1,0 +1,41 @@
+{
+  "name": "SomniAI - Adaptive Circadian Intelligence",
+  "short_name": "SomniAI",
+  "description": "Autonomous AI sleep-wake optimization: adaptive alarms, wake verification, and behavioral wellness coaching.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "categories": ["health", "lifestyle", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Alarms",
+      "short_name": "Alarms",
+      "url": "/",
+      "description": "View and manage your adaptive alarms"
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Analytics",
+      "url": "/analytics",
+      "description": "Sleep analytics and weekly report"
+    }
+  ]
+}
