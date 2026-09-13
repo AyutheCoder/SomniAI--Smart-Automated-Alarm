@@ -1,0 +1,23 @@
+# Exact versions used to produce every number in the paper.
+#
+# requirements.txt and requirements-research.txt carry ranges, which is right
+# for running the service and for day-to-day work. This file is the opposite:
+# it records what was actually installed when the reported results were
+# generated, so a reviewer reproducing them is not fighting a library that
+# changed its defaults.
+#
+#   python -m venv .venv && . .venv/bin/activate     (Windows: .venv\Scripts\activate)
+#   pip install -r requirements-lock.txt
+#
+# Generated on Python 3.13.0.
+
+numpy==2.4.2
+pandas==3.0.0
+scikit-learn==1.8.0
+scipy==1.17.0
+joblib==1.5.3
+
+# Analysis only - not needed to run the AI Brain service.
+statsmodels==0.15.0
+matplotlib==3.10.8
+pytest==9.1.1

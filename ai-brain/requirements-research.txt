@@ -1,0 +1,11 @@
+# Analysis-only dependencies. NOT needed to run the AI Brain service.
+#
+# Kept separate because requirements.txt is what a deployment installs, and the
+# service has no use for mixed-effects models. The same reasoning is why rl.py
+# is written in pure Python rather than pulling numpy into the serving path.
+#
+#   pip install -r requirements.txt -r requirements-research.txt
+
+statsmodels>=0.14,<1.0     # MixedLM and GEE for repeated nights per participant
+pytest>=8.0                # the test suite
+matplotlib>=3.8,<4.0       # paper figures (evaluation/figures.py)

@@ -191,7 +191,7 @@ def _habit_constraints(features: dict, baseline: float) -> list[dict]:
 
 
 def _optimize_plan(
-    features: dict, target: float, max_rounds: int = 3
+    features: dict, target: float, max_rounds: int = 8
 ) -> tuple[dict, float, list[dict]]:
     """Greedy coordinate ascent over every lever at once.
 
@@ -203,6 +203,14 @@ def _optimize_plan(
 
     Stops as soon as the target is met, so the plan asks for the fewest changes
     that suffice rather than every change available.
+
+    `max_rounds` was 3 until simulation showed the search was running out of
+    budget rather than out of ideas: a traced case reached 0.66 against a 0.70
+    target and needed one further round to clear it. Grading against exhaustive
+    search over 42 scenarios, raising it to 8 cuts false refusals from 10 to 3
+    and never once produces a promise the ground-truth model cannot keep - the
+    soundness property holds at every budget tested. Minimality slips slightly
+    (100% to 95% of solved cases). See `docs/simulation-validation-results.md`.
     """
     current = dict(features)
     steps: list[dict] = []
