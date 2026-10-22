@@ -31,9 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.1** |
-| Last completed | — |
-| Branch for development | `develop` (created by prompt 0.1) |
+| **Next prompt** | **0.2** |
+| Last completed | 0.1 (build green, lint 0/0 via ESLint CLI, 70 tests) |
+| Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
 
@@ -109,11 +109,15 @@ routes with **no tests** (0.3).
 - A stray `package-lock.json` in a parent directory makes Next.js pick the wrong
   workspace root. Fix with `outputFileTracingRoot`, not by deleting files outside
   the repo.
-- `next build` hit `EPERM: kill` on Windows; diagnose in prompt 0.1.
+- `next build` hit `EPERM: kill` on the original Windows machine. It did not
+  reproduce on the second machine (Node 22, no parent lockfile), so it was not
+  diagnosed further; if it returns, suspect an antivirus or file lock on `.next/`.
 - LifeSnaps (Zenodo record 7229547) returned HTTP 504 for days in October 2026.
   PMData downloads fine. `python ai-brain/fetch_datasets.py --out data/external`
   resumes. Datasets are only needed for prompt 5.2.
-- `next lint` is deprecated; prompt 0.1 migrates to the ESLint CLI.
+- Lint is `eslint .` (flat config in `eslint.config.mjs`), not the deprecated
+  `next lint`. It covers the whole repo, not only `app/` and `lib/`, and ignores
+  `ai-brain/` because its virtualenv contains vendored JavaScript.
 
 ## Platform limits to state honestly
 

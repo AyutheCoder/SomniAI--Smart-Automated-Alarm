@@ -8,5 +8,10 @@ const compat = new FlatCompat({
 });
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    // Build output, generated types, and the Python service (its virtualenv
+    // ships vendored JavaScript that is not ours to lint).
+    ignores: [".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "ai-brain/**"],
+  },
 ];
 export default eslintConfig;

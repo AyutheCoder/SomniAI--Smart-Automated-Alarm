@@ -82,7 +82,6 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
 
   const [view, setView] = useState<View>("ringing");
   const [level, setLevel] = useState<EscalationLevel>(plan[0]);
-  const [elapsedSec, setElapsedSec] = useState(0);
   const [methodIndex, setMethodIndex] = useState(0);
   const [backups, setBackups] = useState<BackupResult[]>([]);
   const [results, setResults] = useState<ChallengeResult[]>([]);
@@ -93,6 +92,8 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
   const lastSpokeRef = useRef(0);
   const backupsFiredRef = useRef(false);
 
+  // The page keys this overlay by alarm id, so these primitives are fixed for
+  // the life of one ring and the sound starts exactly once.
   useEffect(() => {
     startAlarm({ intensity: alarm.intensity, strategy: alarm.wakeStrategy });
     vibrate(alarm.wakeStrategy);
@@ -102,7 +103,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       stopAlarm();
       stopVibration();
     };
-  }, []);
+  }, [alarm.intensity, alarm.wakeStrategy, alarm.label]);
 
   const fireBackups = useCallback((kinds: EscalationLevel["backup"]) => {
     if (backupsFiredRef.current || !kinds.length) return;
@@ -111,10 +112,12 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
     setBackups(fired);
   }, [alarm.label]);
 
+  // Elapsed time is measured from startedAt and the current level lives in a
+  // ref, so restarting the timer when the plan changes (a profile arriving
+  // mid-ring) loses nothing and never re-fires a level already reached.
   useEffect(() => {
     const timer = setInterval(() => {
       const secs = Math.floor((Date.now() - startedAt) / 1000);
-      setElapsedSec(secs);
       const next = levelForElapsed(secs, plan);
       if (next.level !== levelRef.current) {
         levelRef.current = next.level;
@@ -142,7 +145,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [startedAt, plan, verifyRequired, alarm.label, alarm.wakeStrategy, fireBackups]);
 
   const finish = useCallback((result: {
     snoozed: boolean;

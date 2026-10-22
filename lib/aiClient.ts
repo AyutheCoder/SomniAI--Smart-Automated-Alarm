@@ -75,7 +75,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T | null> {
       return null;
     return (await res.json()) as T;
   }
-  catch (e) {
+  catch {
     return null;
   }
 }
@@ -89,7 +89,7 @@ export async function aiBrainHealth(): Promise<boolean> {
     });
     return res.ok;
   }
-  catch (e) {
+  catch {
     return false;
   }
 }

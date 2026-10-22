@@ -99,10 +99,8 @@ export function deriveEscalationProfile(history: WakeResponseHistory): Escalatio
   };
 }
 
-export function buildEscalationPlan(
-  strategy: WakeStrategy,
-  profile?: EscalationProfile,
-): EscalationLevel[] {
+/** The shared ladder; personalizeEscalationPlan adapts it to one sleeper. */
+export function buildEscalationPlan(strategy: WakeStrategy): EscalationLevel[] {
   const [t2, t3, t4, t5] = TIMELINE[strategy] ?? TIMELINE.adaptive;
   return [
     {

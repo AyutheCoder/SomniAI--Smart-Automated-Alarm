@@ -289,7 +289,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      {ringingAlarm && <RingingOverlay alarm={ringingAlarm} onResolved={resolveAlarm} />}
+      {ringingAlarm && <RingingOverlay key={ringingAlarm._id} alarm={ringingAlarm} onResolved={resolveAlarm} />}
 
       <header className="mb-8 flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20">
