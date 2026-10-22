@@ -71,6 +71,7 @@ password `demo1234`.
 | `npm test` | Unit tests (vitest) |
 | `npm run verify` | The full web gate: lint (zero warnings), `tsc --noEmit`, vitest, `next build` |
 | `npm run verify:all` | `verify` plus the AI Brain pytest suite |
+| `npm run e2e` | End-to-end flows in headless Chromium (Playwright), about 3 minutes |
 
 ### Checking a change
 
@@ -105,6 +106,25 @@ fails if a route handler has no test. The first run downloads a MongoDB binary
 skipped tests need the LifeSnaps download and four slow simulation studies are
 deselected by default (see `ai-brain/pytest.ini`). Stop `npm run dev` first:
 the build shares its `.next` directory.
+
+### End-to-end flows
+
+`npm run e2e` starts its own `next dev` on port 3100 against a throwaway
+in-memory MongoDB, with no AI Brain and no Google sign-in. The variables it
+sets take precedence over `.env.local`, so the flows never touch your real
+database. In headless Chromium it then:
+
+1. signs up a new user, sets an alarm one minute ahead, waits for it to ring,
+   solves the maths challenge, and checks the alarm history shows it verified;
+2. does the same but answers wrong, and checks the alarm keeps ringing and
+   nothing was dismissed.
+
+Each flow really waits for the alarm, so a run takes about three minutes.
+Before the flows, `e2e/warmup.ts` signs in a throwaway user and requests every
+API route once, because `next dev` compiles a route on first use and a cold
+compile can outlast the alarm's own requests. Retries are off: a flow that
+only passes on a second try is a failure. Run `npx playwright install chromium` once after `npm install`. Like
+`verify`, it shares `.next` with `npm run dev`, so stop that first.
 
 ## Limitations
 

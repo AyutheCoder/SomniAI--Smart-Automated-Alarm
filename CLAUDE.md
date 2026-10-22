@@ -31,8 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.4** |
-| Last completed | 0.3 (274 API tests on in-memory Mongo, route bugs fixed and listed in its commit; `verify:all` green: 358 vitest, 283 pytest) |
+| **Next prompt** | **0.5** |
+| Last completed | 0.4 (Playwright: 2 alarm flows, green headless 3 runs in a row; `verify:all` green: 358 vitest, 283 pytest) |
+| Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
@@ -84,6 +85,7 @@ routes with **no tests** (0.3).
 | AI Brain server | `cd ai-brain && uvicorn main:app --reload` |
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
 | Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
+| End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~3 min; don't run alongside `verify`, both use `.next`) |
 
 ## Where things are
 
