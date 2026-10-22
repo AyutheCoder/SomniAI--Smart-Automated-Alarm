@@ -33,12 +33,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      # The API tests download a MongoDB binary; keep it between runs.
+      - run: npm ci
+      # The API tests download a MongoDB binary into node_modules/.cache; keep
+      # it between runs. After `npm ci`, which would otherwise delete it.
       - uses: actions/cache@v4
         with:
-          path: ~/.cache/mongodb-binaries
+          path: node_modules/.cache/mongodb-memory-server
           key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npm ci
       - run: npm run verify
 
   ai-brain:
@@ -70,16 +71,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/mongodb-binaries
-          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Install Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
