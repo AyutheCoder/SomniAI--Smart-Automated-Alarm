@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.5, finish**: push `develop` and confirm the CI run is green (blocked until `.anonymity-terms.local` is in place and the check passes) |
-| Last completed | 0.4 (Playwright: 2 alarm flows, green headless 3 runs in a row; `verify:all` green: 358 vitest, 283 pytest). 0.5's workflow is committed and passes actionlint, but has never run |
+| **Next prompt** | **1.1** (Phase 1 starts) |
+| Last completed | 0.5 (CI green on GitHub, first run: verify 358 vitest + build, pytest 283 passed / 28 skipped, e2e 2 passed) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
