@@ -7,10 +7,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "seed": "node scripts/seed.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "node scripts/verify.mjs",
+    "verify:all": "node scripts/verify.mjs --all"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

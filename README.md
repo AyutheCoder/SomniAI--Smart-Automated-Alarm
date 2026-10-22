@@ -67,7 +67,33 @@ password `demo1234`.
 | `npm run dev` | Development server |
 | `npm run build` | Production build (stop `dev` first — they share `.next`) |
 | `npm run seed` | Reset the demo account to a known state |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint over the whole repository; any warning fails |
+| `npm test` | Unit tests (vitest) |
+| `npm run verify` | The full web gate: lint (zero warnings), `tsc --noEmit`, vitest, `next build` |
+| `npm run verify:all` | `verify` plus the AI Brain pytest suite |
+
+### Checking a change
+
+Run `npm run verify:all` before calling any change done. It runs every step
+even after one fails, so a single run shows everything that is wrong, then
+prints a summary and exits non-zero if anything failed:
+
+```text
+PASS  lint     93 files, 0 errors, 0 warnings (4.7s)
+PASS  tsc      0 errors (4.1s)
+PASS  vitest   4 files, 84 passed, 0 failed, 0 skipped, 84 total (2.5s)
+PASS  build    production build (58.2s)
+PASS  pytest   283 passed, 0 failed, 0 errors, 28 skipped, 311 total (55.2s)
+
+VERIFY PASSED
+```
+
+A step also fails if it exits cleanly but its report cannot be read or it ran
+zero tests, so an empty run never shows as green. The pytest step uses
+`ai-brain/.venv` when it exists, otherwise `python` on your `PATH`. The 28
+skipped tests need the LifeSnaps download and four slow simulation studies are
+deselected by default (see `ai-brain/pytest.ini`). Stop `npm run dev` first:
+the build shares its `.next` directory.
 
 ## Limitations
 

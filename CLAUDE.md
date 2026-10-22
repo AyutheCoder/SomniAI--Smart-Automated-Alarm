@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.2** |
-| Last completed | 0.1 (build green, lint 0/0 via ESLint CLI, 70 tests) |
+| **Next prompt** | **0.3** |
+| Last completed | 0.2 (`verify:all` green: 84 vitest, 283 pytest) |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
@@ -83,7 +83,7 @@ routes with **no tests** (0.3).
 | AI Brain tests | `cd ai-brain && python -m pytest -p no:warnings` |
 | AI Brain server | `cd ai-brain && uvicorn main:app --reload` |
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
-| Full gate | `npm run verify` / `npm run verify:all` (created by prompt 0.2) |
+| Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
 
 ## Where things are
 
