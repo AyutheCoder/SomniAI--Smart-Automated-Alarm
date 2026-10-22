@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
+import { isNum } from "@/lib/validate";
 
 const ALLOWED_TYPES = new Set([
   "screen_on",
@@ -61,8 +62,15 @@ export async function POST(req: NextRequest) {
 
     const docs = [];
     for (const e of raw) {
+      // A null in the batch used to crash the route on `e.type` with a 500.
+      if (e === null || typeof e !== "object" || Array.isArray(e)) {
+        return jsonError("Each event must be an object", 422);
+      }
       if (!e.type || !ALLOWED_TYPES.has(e.type)) {
         return jsonError(`Unknown event type: ${e.type ?? "(missing)"}`, 422);
+      }
+      if (e.value !== undefined && !isNum(e.value)) {
+        return jsonError("value must be a number", 422);
       }
       const at = e.at ? new Date(e.at) : new Date();
       if (Number.isNaN(at.getTime())) {
@@ -71,7 +79,7 @@ export async function POST(req: NextRequest) {
       docs.push({
         userId,
         type: e.type,
-        value: typeof e.value === "number" ? e.value : undefined,
+        value: e.value,
         meta: e.meta ?? undefined,
         at,
       });
@@ -95,14 +103,20 @@ export async function GET(req: NextRequest) {
     const since = searchParams.get("since");
     const limit = Math.min(500, Math.max(1, Number(searchParams.get("limit")) || 100));
     const filter: Record<string, unknown> = { userId };
-    if (type && ALLOWED_TYPES.has(type)) {
+    // A filter that can't be applied is an error, not a reason to drop it and
+    // hand back every event while the caller believes they were filtered.
+    if (type) {
+      if (!ALLOWED_TYPES.has(type)) {
+        return jsonError(`Unknown event type: ${type}`, 422);
+      }
       filter.type = type;
     }
     if (since) {
       const sinceDate = new Date(since);
-      if (!Number.isNaN(sinceDate.getTime())) {
-        filter.at = { $gte: sinceDate };
+      if (Number.isNaN(sinceDate.getTime())) {
+        return jsonError("since must be a date", 422);
       }
+      filter.at = { $gte: sinceDate };
     }
     const items = await BehaviorEvent.find(filter).sort({ at: -1 }).limit(limit).lean();
     return jsonOk({ items, total: items.length });

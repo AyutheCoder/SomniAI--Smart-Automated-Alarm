@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
+import { foreignTaskError } from "@/lib/ownership";
 import { Alarm } from "@/models/Alarm";
 
 const ALLOWED_FIELDS = [
@@ -75,7 +76,22 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       }
       update.scheduledTime = d;
     }
-    const doc = await Alarm.findOneAndUpdate({ _id: id, userId }, { $set: update }, { new: true }).lean();
+    if (update.linkedTaskId) {
+      const taskError = await foreignTaskError(userId, update.linkedTaskId);
+      if (taskError) {
+        return jsonError(taskError, 422);
+      }
+    }
+    // Updates skip schema validation unless asked; without this a PATCH could
+    // store status "exploded" or intensity -5, and an alarm whose status is not
+    // "scheduled" silently never rings again.
+    // A new time from the user replaces the one a snooze was remembering.
+    const unset = "scheduledTime" in update ? { $unset: { snoozedFrom: 1 } } : {};
+    const doc = await Alarm.findOneAndUpdate(
+      { _id: id, userId },
+      { $set: update, ...unset },
+      { new: true, runValidators: true },
+    ).lean();
     if (!doc) {
       return jsonError("Alarm not found", 404);
     }

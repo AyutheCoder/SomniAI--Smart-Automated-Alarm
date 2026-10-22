@@ -9,12 +9,18 @@ import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 import { recordFeedback } from "@/lib/rlFeedback";
 import type { FeedbackOutcome, RlContext } from "@/lib/aiClient";
+import { isNum } from "@/lib/validate";
 
 interface DismissBody {
-  confidence?: number;
   responseMs?: number;
-  verified?: boolean;
+  // `verified` and `confidence` used to be read from here, which let a client
+  // mark an alarm verified that the server had scored as failed. The verdict
+  // now comes only from the verify route's own record.
 }
+
+/** A verify result counts for this ring only if it is this recent. */
+const VERIFY_WINDOW_MS = 30 * 60_000;
+const DAY_MS = 24 * 3600_000;
 
 type RouteContext = {
   params: Promise<{
@@ -24,7 +30,18 @@ type RouteContext = {
 
 const WEEKDAYS = [1, 2, 3, 4, 5];
 
-function nextOccurrence(from: Date, repeat: AlarmDocument["repeat"]): Date | null {
+/**
+ * The next time a recurring alarm should ring: same clock time as `base`, on
+ * an allowed day, strictly after both `base` and `now`.
+ *
+ * It used to step one day from `base` without looking at `now`, so an alarm
+ * dismissed days late (the tab had been closed) was re-armed in the past and
+ * never rang again.
+ *
+ * Days and clock times are the server's local time; per-user time zones are
+ * not handled yet.
+ */
+function nextOccurrence(base: Date, repeat: AlarmDocument["repeat"], now: Date): Date | null {
   if (!repeat || repeat.type === "none") {
     return null;
   }
@@ -33,12 +50,21 @@ function nextOccurrence(from: Date, repeat: AlarmDocument["repeat"]): Date | nul
     : repeat.type === "custom"
       ? repeat.days ?? []
       : null;
-
-  const candidate = new Date(from);
+  if (allowedDays && allowedDays.length === 0) {
+    return null;
+  }
+  const after = Math.max(base.getTime(), now.getTime());
+  const candidate = new Date(base);
   candidate.setSeconds(0, 0);
-  for (let i = 1; i <= 14; i++) {
+  // Skip most of any backlog in one step, stopping a day short so the loop
+  // below still finds the first allowed day after `after`.
+  const behind = Math.floor((after - candidate.getTime()) / DAY_MS) - 1;
+  if (behind > 0) {
+    candidate.setDate(candidate.getDate() + behind);
+  }
+  for (let i = 0; i < 10; i++) {
     candidate.setDate(candidate.getDate() + 1);
-    if (!allowedDays || allowedDays.includes(candidate.getDay())) {
+    if (candidate.getTime() > after && (!allowedDays || allowedDays.includes(candidate.getDay()))) {
       return candidate;
     }
   }
@@ -57,17 +83,30 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return jsonError("Invalid id", 400);
     }
     const body = (await parseJson<DismissBody>(req)) ?? {};
-    const verified = body.verified ?? true;
-    const confidence = typeof body.confidence === "number"
-      ? Math.min(100, Math.max(0, body.confidence))
-      : undefined;
+    if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
+      return jsonError("responseMs must be a non-negative number", 422);
+    }
 
     const existing = await Alarm.findOne({ _id: id, userId });
     if (!existing) {
       return jsonError("Alarm not found", 404);
     }
+
+    // The verify route scores the challenge server-side and records the result;
+    // that record, not the client's claim, says whether this ring was verified.
+    const verdict = await BehaviorEvent.findOne({
+      userId,
+      type: { $in: ["verify_pass", "verify_fail"] },
+      "meta.alarmId": id,
+      at: { $gte: new Date(Date.now() - VERIFY_WINDOW_MS) },
+    }).sort({ at: -1 }).lean<{ type: string; value?: number }>();
+    const verified = verdict?.type === "verify_pass";
+    const confidence = verdict?.value;
+    const verificationRequired = existing.verificationRequired && existing.verificationMethod !== "none";
+
     const priorSnoozes = existing.lastSnoozeCount ?? 0;
-    const next = nextOccurrence(existing.scheduledTime, existing.repeat);
+    const next = nextOccurrence(existing.snoozedFrom ?? existing.scheduledTime, existing.repeat, new Date());
+    existing.snoozedFrom = undefined;
     if (next) {
       existing.scheduledTime = next;
       existing.status = "scheduled";
@@ -91,17 +130,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
       },
       at: new Date(),
     });
-
-    await BehaviorEvent.create({
-      userId,
-      type: verified ? "verify_pass" : "verify_fail",
-      value: confidence,
-      meta: { alarmId: id },
-      at: new Date(),
-    });
+    // No verify_pass/verify_fail here: the verify route already recorded the
+    // one verdict, and logging it again double-counted every wake.
 
     await recordWakeFeedback(userId, id, existing, {
-      verified,
+      // An alarm with no challenge to fail cannot have been "missed" by failing it.
+      woke: verified || !verificationRequired,
       confidence,
       priorSnoozes,
       responseMs: body.responseMs,
@@ -112,7 +146,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 }
 
 interface WakeFeedbackArgs {
-  verified: boolean;
+  woke: boolean;
   confidence?: number;
   priorSnoozes: number;
   responseMs?: number;
@@ -120,7 +154,7 @@ interface WakeFeedbackArgs {
 
 async function recordWakeFeedback(userId: string, alarmId: string, alarm: AlarmDocument, args: WakeFeedbackArgs): Promise<void> {
   try {
-    const outcome: FeedbackOutcome = !args.verified
+    const outcome: FeedbackOutcome = !args.woke
       ? "missed"
       : args.priorSnoozes > 0
         ? "snooze"

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
+import { isInt, isNum } from "@/lib/validate";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 
@@ -29,18 +30,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return jsonError("Invalid id", 400);
     }
     const body = (await parseJson<SnoozeBody>(req)) ?? {};
-    const minutes = Math.min(60, Math.max(1, Number(body.snoozeMinutes) || 5));
-    const nextTime = new Date(Date.now() + minutes * 60000);
-    const alarm = await Alarm.findOneAndUpdate({ _id: id, userId }, {
-      $set: { scheduledTime: nextTime, status: "scheduled" },
-      $inc: { lastSnoozeCount: 1 },
-    }, { new: true }).lean<{
-      _id: unknown;
-      lastSnoozeCount: number;
-    } | null>();
+    if (body.snoozeMinutes !== undefined && !isInt(body.snoozeMinutes, 1, 60)) {
+      return jsonError("snoozeMinutes must be a whole number from 1 to 60", 422);
+    }
+    if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
+      return jsonError("responseMs must be a non-negative number", 422);
+    }
+    const minutes = body.snoozeMinutes ?? 5;
+    const alarm = await Alarm.findOne({ _id: id, userId });
     if (!alarm) {
       return jsonError("Alarm not found", 404);
     }
+    // Keep the time the alarm was meant to ring. Snoozing moves scheduledTime,
+    // and a recurring alarm re-armed from the snoozed time would drift later
+    // every morning it is snoozed.
+    alarm.snoozedFrom = alarm.snoozedFrom ?? alarm.scheduledTime;
+    alarm.scheduledTime = new Date(Date.now() + minutes * 60000);
+    alarm.status = "scheduled";
+    alarm.lastSnoozeCount = (alarm.lastSnoozeCount ?? 0) + 1;
+    await alarm.save();
     await BehaviorEvent.create({
       userId,
       type: "snooze",
@@ -52,6 +60,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
       },
       at: new Date(),
     });
-    return jsonOk(alarm);
+    return jsonOk(alarm.toObject());
   });
 }

@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { Task } from "@/models/Task";
+import { invalidDue } from "@/lib/taskFields";
 
 const ALLOWED_FIELDS = [
   "title",
@@ -62,14 +63,31 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       }
     }
 
+    if ("completed" in update && typeof update.completed !== "boolean") {
+      return jsonError("completed must be true or false", 422);
+    }
+    const dueError = invalidDue(update);
+    if (dueError) {
+      return jsonError(dueError, 422);
+    }
+
+    // Setting a field to undefined inside $set is dropped, so un-completing a
+    // task used to leave its old completedAt behind; $unset actually clears it.
+    const unset: Record<string, 1> = {};
     if (update.completed === true) {
       update.completedAt = new Date();
     }
     if (update.completed === false) {
-      update.completedAt = undefined;
+      unset.completedAt = 1;
     }
 
-    const doc = await Task.findOneAndUpdate({ _id: id, userId }, { $set: update }, { new: true }).lean();
+    const doc = await Task.findOneAndUpdate(
+      { _id: id, userId },
+      { $set: update, ...(Object.keys(unset).length > 0 ? { $unset: unset } : {}) },
+      // Without runValidators an update skips the schema: blank titles and
+      // made-up priorities were saved.
+      { new: true, runValidators: true },
+    ).lean();
     if (!doc) {
       return jsonError("Task not found", 404);
     }

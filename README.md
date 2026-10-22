@@ -79,17 +79,28 @@ even after one fails, so a single run shows everything that is wrong, then
 prints a summary and exits non-zero if anything failed:
 
 ```text
-PASS  lint     93 files, 0 errors, 0 warnings (4.7s)
-PASS  tsc      0 errors (4.1s)
-PASS  vitest   4 files, 84 passed, 0 failed, 0 skipped, 84 total (2.5s)
-PASS  build    production build (58.2s)
-PASS  pytest   283 passed, 0 failed, 0 errors, 28 skipped, 311 total (55.2s)
+PASS  lint     111 files, 0 errors, 0 warnings (10.8s)
+PASS  tsc      0 errors (19.8s)
+PASS  vitest   15 files, 358 passed, 0 failed, 0 skipped, 358 total (16.2s)
+PASS  build    production build (103.3s)
+PASS  pytest   283 passed, 0 failed, 0 errors, 28 skipped, 311 total (110.1s)
 
 VERIFY PASSED
 ```
 
 A step also fails if it exits cleanly but its report cannot be read or it ran
-zero tests, so an empty run never shows as green. The pytest step uses
+zero tests, so an empty run never shows as green.
+
+The vitest step has two projects. `unit` covers `lib/` and `scripts/`. `api`
+(`tests/api/`) calls every route handler against a throwaway in-memory
+MongoDB from `mongodb-memory-server`, never the database in `.env.local`, and
+with no AI Brain, so routes run on their local fallbacks. For each route it
+checks that a signed-out request is rejected, that bad input gets a clear
+error, the normal case, and that one user can never read, change or delete
+another's alarms, tasks, sleep logs or events. `tests/api/coverage.test.ts`
+fails if a route handler has no test. The first run downloads a MongoDB binary
+(about 100 MB, cached afterwards); run one project with
+`npx vitest run --project api`. The pytest step uses
 `ai-brain/.venv` when it exists, otherwise `python` on your `PATH`. The 28
 skipped tests need the LifeSnaps download and four slow simulation studies are
 deselected by default (see `ai-brain/pytest.ini`). Stop `npm run dev` first:

@@ -235,20 +235,24 @@ export default function Home() {
         setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? json.data : a)));
       }
     } else {
-      await fetch(`/api/alarms/${alarm._id}/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confidence: result.confidence,
-          methods: result.methods,
-          responseMs: result.responseMs,
-          attempts: result.attempts,
-          motion: result.motion,
-          // The server re-scores from these rather than trusting `confidence`.
-          solved: result.solved,
-          correctness: result.correctness,
-        }),
-      });
+      // An alarm with no challenge has nothing to verify; posting one anyway
+      // recorded a failed verification on every such wake.
+      const challenged = alarm.verificationRequired && alarm.verificationMethod !== "none";
+      if (challenged) {
+        await fetch(`/api/alarms/${alarm._id}/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            methods: result.methods,
+            responseMs: result.responseMs,
+            attempts: result.attempts,
+            motion: result.motion,
+            // The server scores from these; it does not take a client score.
+            solved: result.solved,
+            correctness: result.correctness,
+          }),
+        });
+      }
       if (result.escalationLevel >= 5) {
         await fetch(`/api/alarms/${alarm._id}/escalate`, {
           method: "POST",
@@ -268,11 +272,8 @@ export default function Home() {
       const res = await fetch(`/api/alarms/${alarm._id}/dismiss`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confidence: result.confidence,
-          responseMs: result.responseMs,
-          verified: result.verified,
-        }),
+        // The server decides "verified" from its own verify record.
+        body: JSON.stringify({ responseMs: result.responseMs }),
       });
       const json = await res.json();
       if (json.ok) {

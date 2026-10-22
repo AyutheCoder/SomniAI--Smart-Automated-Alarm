@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
+import { foreignTaskError } from "@/lib/ownership";
 import { Alarm } from "@/models/Alarm";
 
 interface CreateAlarmBody {
@@ -63,6 +64,12 @@ export async function POST(req: NextRequest) {
     const scheduledTime = new Date(body.scheduledTime);
     if (Number.isNaN(scheduledTime.getTime())) {
       return jsonError("scheduledTime is not a valid date", 422);
+    }
+    if (body.linkedTaskId) {
+      const taskError = await foreignTaskError(userId, body.linkedTaskId);
+      if (taskError) {
+        return jsonError(taskError, 422);
+      }
     }
     const doc = await Alarm.create({
       userId,

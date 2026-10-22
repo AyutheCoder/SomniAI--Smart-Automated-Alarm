@@ -34,6 +34,8 @@ export interface AlarmDocument {
   status: AlarmStatus;
   enabled: boolean;
   lastSnoozeCount: number;
+  /** When a snoozed alarm was originally due; recurring alarms re-arm from it. */
+  snoozedFrom?: Date;
   decision?: AlarmDecision;
   createdAt: Date;
   updatedAt: Date;
@@ -82,6 +84,7 @@ const AlarmSchema = new Schema<AlarmDocument>({
   },
   enabled: { type: Boolean, default: true },
   lastSnoozeCount: { type: Number, default: 0 },
+  snoozedFrom: { type: Date },
   decision: { type: Schema.Types.Mixed, default: undefined },
 }, { timestamps: true });
 export const Alarm = models.Alarm || model<AlarmDocument>("Alarm", AlarmSchema);

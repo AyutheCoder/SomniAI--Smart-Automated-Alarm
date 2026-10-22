@@ -9,7 +9,29 @@ export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {
     environment: "node",
-    include: ["**/*.test.ts"],
     exclude: ["node_modules/**", ".next/**", "ai-brain/**"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          include: ["**/*.test.ts"],
+          exclude: ["node_modules/**", ".next/**", "ai-brain/**", "tests/api/**"],
+        },
+      },
+      {
+        // Route handlers against a throwaway in-memory MongoDB, never Atlas.
+        extends: true,
+        test: {
+          name: "api",
+          include: ["tests/api/**/*.test.ts"],
+          globalSetup: ["tests/api/globalSetup.ts"],
+          setupFiles: ["tests/api/setup.ts"],
+          // The first run downloads a MongoDB binary; give hooks room for it.
+          hookTimeout: 120_000,
+          testTimeout: 20_000,
+        },
+      },
+    ],
   },
 });

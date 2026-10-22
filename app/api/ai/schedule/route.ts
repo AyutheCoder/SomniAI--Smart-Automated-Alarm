@@ -1,5 +1,7 @@
 import { NextRequest } from "next/server";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/mongoose";
+import { isInt, isStringList } from "@/lib/validate";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { buildUserSignals } from "@/lib/aiFeatures";
@@ -47,8 +49,14 @@ export async function POST(req: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
     const body = (await parseJson<ScheduleBody>(req)) ?? {};
-    const mode = body.mode === "autonomous" ? "autonomous" : "assisted";
-    const horizonDays = clampHorizon(body.horizonDays);
+    // Each of these used to fall back to a default without saying so; a typo
+    // in "autonomous" silently previewed instead of creating alarms.
+    const invalid = invalidSchedule(body);
+    if (invalid) {
+      return jsonError(invalid, 422);
+    }
+    const mode = body.mode ?? "assisted";
+    const horizonDays = body.horizonDays ?? 7;
     await connectToDatabase();
     let profile = DEFAULT_PROFILE;
     try {
@@ -169,9 +177,21 @@ export async function POST(req: NextRequest) {
   });
 }
 
-function clampHorizon(value: unknown): number {
-  const n = typeof value === "number" ? value : 7;
-  return Math.max(1, Math.min(30, Math.round(n)));
+function invalidSchedule(body: ScheduleBody): string | null {
+  if (body.mode !== undefined && body.mode !== "assisted" && body.mode !== "autonomous") {
+    return "mode must be assisted or autonomous";
+  }
+  if (body.horizonDays !== undefined && !isInt(body.horizonDays, 1, 30)) {
+    return "horizonDays must be a whole number from 1 to 30";
+  }
+  if (body.taskIds !== undefined
+    && !(isStringList(body.taskIds) && body.taskIds.every((id) => mongoose.Types.ObjectId.isValid(id)))) {
+    return "taskIds must be a list of task ids";
+  }
+  if (body.runMaintenance !== undefined && typeof body.runMaintenance !== "boolean") {
+    return "runMaintenance must be true or false";
+  }
+  return null;
 }
 
 async function persistPlans(userId: string, plans: AlarmPlan[]) {

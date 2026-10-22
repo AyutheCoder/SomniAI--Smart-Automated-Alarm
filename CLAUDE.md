@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.3** |
-| Last completed | 0.2 (`verify:all` green: 84 vitest, 283 pytest) |
+| **Next prompt** | **0.4** |
+| Last completed | 0.3 (274 API tests on in-memory Mongo, route bugs fixed and listed in its commit; `verify:all` green: 358 vitest, 283 pytest) |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
@@ -90,7 +90,8 @@ routes with **no tests** (0.3).
 | Path | What |
 | --- | --- |
 | `DEVELOPMENT_PLAN.md` | **The plan being executed.** 37 prompts, 8 phases |
-| `app/` | Next.js pages, components, 22 API routes under `app/api/` |
+| `app/` | Next.js pages, components, 23 API routes under `app/api/` (the plan says 22) |
+| `tests/api/` | Route integration tests, in-memory MongoDB, session stubbed in `setup.ts` |
 | `lib/` | Core logic: `scheduler.ts`, `escalation.ts`, `wakeConfidence.ts` (gated scoring), `backupAdapters.ts` (currently fake), `context/` (calendar/wearable simulated), `sensors/` (silent simulated fallbacks) |
 | `models/` | Mongoose models |
 | `ai-brain/` | FastAPI service: `wake_plan.py` (the paper's method), `semantic.py`, `predict.py` |
