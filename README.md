@@ -107,6 +107,16 @@ skipped tests need the LifeSnaps download and four slow simulation studies are
 deselected by default (see `ai-brain/pytest.ini`). Stop `npm run dev` first:
 the build shares its `.next` directory.
 
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `develop`
+and `main`, as three parallel jobs: `npm run verify`, the AI Brain pytest
+suite (Python 3.13, the version `requirements-lock.txt` was made on), and
+`npm run e2e`. npm, pip, the Playwright browser and the MongoDB test binary
+are cached. It needs no secrets: every test brings its own database and the
+build reads no environment. Traces of failed end-to-end flows are kept as a
+run artifact for a week.
+
 ### End-to-end flows
 
 `npm run e2e` starts its own `next dev` on port 3100 against a throwaway
