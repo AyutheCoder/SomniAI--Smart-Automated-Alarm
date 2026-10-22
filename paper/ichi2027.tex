@@ -59,41 +59,47 @@
 \newif\ifanon
 \anontrue                        % <<< \anonfalse for camera-ready / arXiv
 
+%% The real author block deliberately does NOT live in this file. It is in
+%% paper/authors.local.tex, which is gitignored, so no name, e-mail or
+%% affiliation exists anywhere in the repository -- and therefore not in the
+%% anonymised artifact mirror a reviewer browses. Keep it that way.
 \ifanon
   \author{\IEEEauthorblockN{Anonymous Authors}
   \IEEEauthorblockA{Affiliation withheld for double-blind review}}
 \else
-  \author{\IEEEauthorblockN{Ayushi Shukla and Anshuman Ravi}
-  \IEEEauthorblockA{Dept.\ of Computer Science and Engineering\\
-  National Institute of Technology Patna\\
-  Patna, Bihar, India\\
-  \texttt{\{ayushis.ug23.cs, anshumanr.ug23.cs\}@nitp.ac.in}}}
+  \IfFileExists{authors.local.tex}{\input{authors.local.tex}}{%
+    \PackageError{ichi2027}{authors.local.tex is missing}{%
+      Camera-ready needs paper/authors.local.tex (gitignored, so it is not in
+      a fresh clone). Recreate it with the \string\author{} block, or set
+      \string\anontrue to build the anonymous version.}}
 \fi
 
 \maketitle
 
 \begin{abstract}
-Sleep applications forecast: given tonight's behaviour they predict an outcome.
-A person with a fixed obligation the next morning has the inverse question,
-which is a constraint rather than a prediction---\emph{what must I do tonight to
-be up at 05:40?}---and existing systems answer it regardless of whether their
-model supports an answer. We invert a trained sleep model against a required
-reliability, partitioning inputs by what a person can change within the planning
-horizon, and return an explicit infeasibility verdict with counterfactual
-attribution when no admissible plan reaches the target. Validated against
-exhaustive search over seven ground-truth models, the planner never promises an
-unreachable target, returns the latest feasible bedtime in every case, and
-selects a minimal set of changes; its failure mode is conservatism. On two
-public wearable cohorts (85 participants, 5{,}432 person-nights) the underlying
-models are weak: $R^2$ 0.186 for sleep duration on the larger cohort and
-$-0.090$ on the smaller, where it fails to replicate, and AUC 0.660 for
-wake-time regularity, which does replicate. What the models do have is
-calibration (ECE 0.0148), which is what a refusal mechanism actually needs. We
-also find that a physiologically-structured synthetic panel overstates
+Sleep applications forecast. Given tonight's behaviour they predict an outcome,
+and the user is left to work out what to do about it. A person with a fixed
+obligation the next morning has the inverse question, which is a constraint
+rather than a prediction. They need to know what they must do tonight in order
+to be up at 05:40, and existing systems answer that question whether or not
+their model supports an answer. We invert a trained sleep model against a
+required reliability, partitioning the inputs by what a person can change within
+the planning horizon, and we return an explicit infeasibility verdict with
+counterfactual attribution when no admissible plan reaches the target. Validated
+against exhaustive search over seven ground-truth models, the planner never
+promises an unreachable target, it returns the latest feasible bedtime in every
+case, and it selects a minimal set of changes, so its only failure mode is
+conservatism. On two public wearable cohorts covering 85 participants and
+5{,}432 person-nights the underlying models are weak. Sleep duration reaches an
+$R^2$ of 0.186 on the larger cohort and $-0.090$ on the smaller one, where it
+fails to replicate, while wake-time regularity reaches an AUC of 0.660 and does
+replicate. What the models do have is calibration, with an expected calibration
+error of 0.0148, and calibration is what a refusal mechanism actually needs. We
+also find that a physiologically structured synthetic panel overstates
 predictability by roughly fourfold in $R^2$, which we report because training
-sleep models on simulated data is common. Weak models motivate rather than
-undermine the contribution: a planner built on a signal this thin should decline
-to promise, and we show which component makes that possible.
+sleep models on simulated data is common. Weak models motivate the contribution
+rather than undermining it, since a planner built on a signal this thin should
+decline to promise, and we show which component makes that possible.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -520,6 +526,13 @@ used on the synthetic panel so that differences isolate the data.
 splitting rows at random lets a model identify the person rather than learn
 anything about nights. All reported figures are means over 8 grouped splits.
 
+\textbf{Complete cases only.} Nights missing any model input or the target are
+dropped rather than imputed, since the habit features need trailing history that
+the first nights of a record do not have. Table~\ref{tab:data} reports each
+cohort as released; the LifeSnaps models are fitted on the 3{,}376 nights from
+63 participants that survive this filter, which is the 63 in
+Fig.~\ref{fig:splits}.
+
 \textbf{Outcome columns are never predictors.} Sleep duration is approximately
 time-in-bed $\times$ efficiency, so time-in-bed, efficiency and wake time are
 excluded by an assertion rather than by convention. For the regularity
@@ -923,10 +936,9 @@ habit features use strictly prior nights. Datasets are not redistributed; both
 are obtainable without application from the sources in
 Table~\ref{tab:data}. Code and reproduction instructions are available at an
 anonymised URL for review.\footnote{%%
-%% >>> REPLACE BEFORE SUBMITTING <<<  The CFP requires repositories revealing
-%% authorship to be blinded. Mirror the repo to anonymous.4open.science and put
-%% that URL here. Do NOT paste the GitHub link.
-\texttt{[anonymised artifact URL]}}
+%% Anonymised mirror. Verified to contain no author name, e-mail or
+%% affiliation. Swap for the real repository URL at camera-ready / arXiv.
+\url{https://anonymous.4open.science/r/reliability-targeted-bedtime-planning-103C/}}
 
 %% ===============================================================
 \begin{thebibliography}{9}

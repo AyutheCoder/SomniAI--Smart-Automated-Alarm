@@ -7,27 +7,29 @@ traces to a table in `docs/` and regenerates via `python evaluation/run_study.py
 
 ## Abstract
 
-Sleep applications forecast: given tonight's behaviour they predict an outcome.
-A person with a fixed obligation the next morning has the inverse question,
-which is a constraint rather than a prediction — *what must I do tonight to be
-up at 05:40?* — and existing systems answer it regardless of whether their model
-supports an answer. We invert a trained sleep model against a required
-reliability, partitioning inputs by what a person can change within the planning
-horizon, and return an explicit infeasibility verdict with counterfactual
-attribution when no admissible plan reaches the target. Validated against
-exhaustive search over seven ground-truth models, the planner never promises an
-unreachable target, returns the latest feasible bedtime in every case, and
-selects a minimal set of changes; its failure mode is conservatism. On two
-public wearable cohorts (85 participants, 5,432 person-nights) the underlying
-models are weak: R² 0.186 for sleep duration on the larger cohort and −0.090 on
-the smaller, where it fails to replicate, and AUC 0.660 for wake-time regularity,
-which does replicate. What the models do have is calibration (ECE 0.0148), which
-is what a refusal mechanism actually needs. We also find that a
-physiologically-structured synthetic panel overstates predictability by roughly
-fourfold in R², which we report because training sleep models on simulated data
-is common. Weak models motivate rather than undermine the contribution: a
-planner built on a signal this thin should decline to promise, and we show which
-component makes that possible.
+Sleep applications forecast. Given tonight's behaviour they predict an outcome,
+and the user is left to work out what to do about it. A person with a fixed
+obligation the next morning has the inverse question, which is a constraint
+rather than a prediction. They need to know what they must do tonight in order
+to be up at 05:40, and existing systems answer that question whether or not
+their model supports an answer. We invert a trained sleep model against a
+required reliability, partitioning the inputs by what a person can change within
+the planning horizon, and we return an explicit infeasibility verdict with
+counterfactual attribution when no admissible plan reaches the target. Validated
+against exhaustive search over seven ground-truth models, the planner never
+promises an unreachable target, it returns the latest feasible bedtime in every
+case, and it selects a minimal set of changes, so its only failure mode is
+conservatism. On two public wearable cohorts covering 85 participants and
+5,432 person-nights the underlying models are weak. Sleep duration reaches an
+R² of 0.186 on the larger cohort and −0.090 on the smaller one, where it fails
+to replicate, while wake-time regularity reaches an AUC of 0.660 and does
+replicate. What the models do have is calibration, with an expected calibration
+error of 0.0148, and calibration is what a refusal mechanism actually needs. We
+also find that a physiologically structured synthetic panel overstates
+predictability by roughly fourfold in R², which we report because training sleep
+models on simulated data is common. Weak models motivate the contribution rather
+than undermining it, since a planner built on a signal this thin should decline
+to promise, and we show which component makes that possible.
 
 ## 1. Introduction
 

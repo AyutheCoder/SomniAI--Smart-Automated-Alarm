@@ -3,6 +3,36 @@
 **Status:** internal working document, prepared for review by a registered patent
 attorney or agent. **Not legal advice, and not a novelty opinion.**
 
+> ## ⚠ THE DISCLOSURE THIS DOCUMENT WARNED AGAINST HAS ALREADY HAPPENED
+>
+> **Verified 2026-10-22.** The project's GitHub repository is **public**, and
+> this file is visible in its listing on `main`. It entered history in commit
+> `26a8a89` on **2026-08-05**, so the public disclosure date is on or about that
+> day.
+>
+> This document describes all three mechanisms in enabling detail. Published, it
+> is prior art against the inventors' own application. Two further disclosures
+> compound it: the public source code itself, and the anonymised artifact mirror
+> at `anonymous.4open.science` cited in the submitted paper.
+>
+> **Bring this to the attorney first.** The first question is no longer "is this
+> patentable" but "what, if anything, survives an 2026-08-05 public disclosure".
+> A rough and non-authoritative shape, to be confirmed rather than relied on:
+>
+> | Jurisdiction | Position |
+> | --- | --- |
+> | **India** | Absolute novelty. The §31 grace covers papers read before a learned society and government-recognised exhibitions; a public code repository is neither. Likely forfeited. |
+> | **United States** | 12-month inventor grace, 35 U.S.C. §102(b)(1). Clock runs from ~2026-08-05, so a filing deadline of roughly **2027-08-05**. This is the window that still exists. |
+> | **EPO, China** | Absolute novelty, no general grace. Likely forfeited. |
+>
+> Taking the repository private now does **not** undo this. The disclosure is
+> the act of publication, not the current state of the page, and forks, caches
+> and archives persist. Do not let anyone talk themselves into believing a
+> private toggle fixes it.
+>
+> The instruction below is retained as written, because it records what the
+> advice was before it was overtaken.
+
 **Do not publish this file, or the repository containing it, before you have
 taken advice.** Public disclosure — a public GitHub repo, a demo video, a
 conference talk, an app-store listing, a paper — can forfeit patent rights

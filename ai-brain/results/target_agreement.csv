@@ -1,0 +1,16 @@
+a,b,n,agreement
+"paper (30min, weekend, one-sided)","tighter (15min, weekend, one-sided)",1785,0.9227
+"paper (30min, weekend, one-sided)","looser (60min, weekend, one-sided)",1785,0.8857
+"paper (30min, weekend, one-sided)","symmetric (30min, weekend, two-sided)",1785,0.7406
+"paper (30min, weekend, one-sided)","pooled baseline (30min, no day-type)",1785,0.8392
+"paper (30min, weekend, one-sided)","day-of-week (30min, dow)",1558,0.9146
+"tighter (15min, weekend, one-sided)","looser (60min, weekend, one-sided)",1785,0.8084
+"tighter (15min, weekend, one-sided)","symmetric (30min, weekend, two-sided)",1785,0.6633
+"tighter (15min, weekend, one-sided)","pooled baseline (30min, no day-type)",1785,0.8
+"tighter (15min, weekend, one-sided)","day-of-week (30min, dow)",1558,0.8896
+"looser (60min, weekend, one-sided)","symmetric (30min, weekend, two-sided)",1785,0.6263
+"looser (60min, weekend, one-sided)","pooled baseline (30min, no day-type)",1785,0.8168
+"looser (60min, weekend, one-sided)","day-of-week (30min, dow)",1558,0.8485
+"symmetric (30min, weekend, two-sided)","pooled baseline (30min, no day-type)",1785,0.6325
+"symmetric (30min, weekend, two-sided)","day-of-week (30min, dow)",1558,0.6534
+"pooled baseline (30min, no day-type)","day-of-week (30min, dow)",1558,0.8074

@@ -1,5 +1,9 @@
 # SomniAI — Product Build Plan
 
+> **Superseded on 2026-10-22 by [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)**, written from a fresh
+> study of the code. Kept for history; the new plan maps every step from this one.
+
+
 Completing the app after the methods paper is submitted, and turning it into the
 instrument for a second paper.
 
