@@ -95,3 +95,65 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  android:
+    name: Android (unit tests, debug APK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      # Capacitor's Android library compiles for Java 21 (see ANDROID.md).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      # The runner has an Android SDK, but not necessarily the platform this
+      # project compiles against (android/variables.gradle: compileSdk 36).
+      - name: Install SDK platform 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "platform-tools" > /dev/null
+      - run: npm ci
+      - run: npm run android:doctor
+      - run: npm run android:test
+      - run: npm run android:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+  android-emulator:
+    name: Android (installs and opens on an emulator)
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: debug-apk
+          path: apk
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: bash scripts/android-smoke.sh apk/app-debug.apk android-smoke.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke-screenshot
+          path: android-smoke.png
+          retention-days: 7
+          if-no-files-found: ignore

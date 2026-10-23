@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SomniAI is offline</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f172a; color: #e2e8f0; font: 16px/1.5 system-ui, sans-serif; }
+    main { max-width: 26rem; padding: 0 1.5rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+    p { color: #94a3b8; margin: .5rem 0; }
+    button { margin-top: 1rem; padding: .6rem 1.2rem; border: 0; border-radius: .6rem; background: #6366f1; color: white; font: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Can't reach SomniAI right now</h1>
+    <p>The app needs a connection to load. Check your internet and try again.</p>
+    <!-- True once the native alarm (DEVELOPMENT_PLAN prompts 2.2-2.4) ships; until then
+         alarms ring only in the web app. Keep this sentence honest as that changes. -->
+    <p>Native alarms are not in this build yet: until they are, alarms only ring while SomniAI is open.</p>
+    <button onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

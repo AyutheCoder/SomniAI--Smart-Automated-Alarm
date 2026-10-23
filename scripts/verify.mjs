@@ -2,15 +2,18 @@
 // One command that checks everything (DEVELOPMENT_PLAN.md, Part 4).
 //
 //   npm run verify       lint (zero warnings), tsc, vitest, next build
-//   npm run verify:all   all of the above, plus the AI Brain pytest suite
+//   npm run verify:all   all of the above, plus the AI Brain pytest suite, the
+//                        Android unit tests and the debug APK build
 //
 // Every step runs even after an earlier one fails, so one run shows everything
 // that is wrong. Counts come from each tool's machine-readable report, not from
 // scraping its console output, and the exit code is non-zero if any step failed.
 //
 // The AI Brain step uses ai-brain/.venv when it exists, otherwise `python` on PATH.
+// The Android steps need JDK 21 and the Android SDK (npm run android:doctor);
+// without them they fail and say what is missing.
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,6 +22,7 @@ import {
   summarizeJunit,
   summarizeVitest,
 } from "./verify-summary.mjs";
+import { DEBUG_APK, UNIT_TEST_RESULTS, findToolchain, gradle } from "./android.mjs";
 
 const all = process.argv.includes("--all");
 const tmp = mkdtempSync(join(tmpdir(), "somniai-verify-"));
@@ -117,12 +121,63 @@ function pytest() {
   };
 }
 
+/** Fails, naming the fix, when the Android toolchain isn't there: never a quiet skip. */
+function androidToolchain() {
+  const t = findToolchain();
+  return t.missing.length === 0
+    ? { t }
+    : { error: `Android toolchain incomplete: ${t.missing.map((m) => m.split(":")[0]).join(", ")}. Run npm run android:doctor` };
+}
+
+function androidTests() {
+  const { t, error } = androidToolchain();
+  if (error) {
+    return { exitCode: null, error };
+  }
+  // Last run's reports must not be counted as this run's.
+  rmSync(UNIT_TEST_RESULTS, { recursive: true, force: true });
+  const status = gradle("testDebugUnitTest", t);
+  let counts = null;
+  if (existsSync(UNIT_TEST_RESULTS)) {
+    try {
+      const xml = readdirSync(UNIT_TEST_RESULTS)
+        .filter((f) => f.endsWith(".xml"))
+        .map((f) => readFileSync(join(UNIT_TEST_RESULTS, f), "utf8"))
+        .join("\n");
+      counts = summarizeJunit(xml);
+    }
+    catch {
+      counts = null;
+    }
+  }
+  return {
+    exitCode: status,
+    counts,
+    ranSomething: (c) => c.total > 0,
+    extraFailure: (c) => (c.failed + c.errors > 0 ? `${c.failed} failed, ${c.errors} errors` : null),
+  };
+}
+
+function androidApk() {
+  const { t, error } = androidToolchain();
+  if (error) {
+    return { exitCode: null, error };
+  }
+  rmSync(DEBUG_APK, { force: true });
+  const status = gradle("assembleDebug", t);
+  if (status === 0 && !existsSync(DEBUG_APK)) {
+    return { exitCode: 0, needsCounts: false, error: "assembleDebug exited 0 but produced no APK" };
+  }
+  const size = existsSync(DEBUG_APK) ? `${Math.round(statSync(DEBUG_APK).size / 1024)} KB` : "";
+  return { exitCode: status, needsCounts: false, detail: `debug APK ${size}`.trim() };
+}
+
 const steps = [
   ["lint", lint],
   ["tsc", tsc],
   ["vitest", vitest],
   ["build", build],
-  ...(all ? [["pytest", pytest]] : []),
+  ...(all ? [["pytest", pytest], ["android", androidTests], ["apk", androidApk]] : []),
 ];
 
 const outcomes = [];

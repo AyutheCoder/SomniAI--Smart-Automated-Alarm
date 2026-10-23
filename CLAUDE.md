@@ -31,7 +31,7 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.1** (Phase 2: the real Android alarm; needs Android Studio, see plan) |
+| **Next prompt** | **2.1, finish**: install the toolchain (`ANDROID.md`), then build the debug APK and open it on the emulator; `verify:all` is red until then |
 | Last completed | 1.5 ("Tonight" wake planner at the top of the home page: bedtime / smallest changes / honest refusal with ceiling, habit and backup alarm; web bedtime reminder; exact-ceiling boundary tested in `ai-brain/tests/test_wake_plan_boundary.py` and `tests/ui/wake-plan.test.tsx`). Phase 1 complete |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
@@ -85,6 +85,7 @@ routes with **no tests** (0.3).
 | AI Brain server | `cd ai-brain && uvicorn main:app --reload` |
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
 | Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
+| Android | `npm run android:doctor` (what is installed and missing), `android:test`, `android:build`, `android:run`; see `ANDROID.md` |
 | End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~5 min locally; don't run alongside `verify`, both use `.next`) |
 
 ## Where things are
@@ -119,6 +120,17 @@ routes with **no tests** (0.3).
 - LifeSnaps (Zenodo record 7229547) returned HTTP 504 for days in October 2026.
   PMData downloads fine. `python ai-brain/fetch_datasets.py --out data/external`
   resumes. Datasets are only needed for prompt 5.2.
+- **JDK 26 is installed and too new for Android builds**: Gradle 8.14.3 fails
+  on it with `Unsupported class file major version 70`. Android needs JDK 21
+  (Android Studio bundles one); `scripts/android.mjs` finds a usable JDK and
+  never uses the 26 for Gradle.
+- **Java needs IPv4 on this network.** Java downloads (the Gradle wrapper,
+  Maven) time out trying IPv6 first while curl works; `-Djava.net.preferIPv4Stack=true`
+  fixes it, and `android/gradle.properties` and `scripts/android.mjs` set it.
+  The wrapper's `networkTimeout` is also raised to 2 minutes for the slow
+  GitHub release host.
+- **Virtualization-based security is on**, so the Android emulator needs the
+  Windows Hypervisor Platform feature (admin PowerShell, see `ANDROID.md`).
 - **This machine has 8 GB of RAM and often only ~1 GB free.** Two Playwright
   browsers plus `next dev` and MongoDB made it swap so badly that sign-in hung
   for 40+ seconds, which looked like an app bug and wasn't. Locally `npm run e2e`
