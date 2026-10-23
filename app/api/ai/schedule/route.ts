@@ -108,6 +108,9 @@ export async function POST(req: NextRequest) {
 
     let prediction = NEUTRAL_PREDICTION;
     let predictionSource: "ai" | "fallback" = "fallback";
+    // The regularity model's own probability for its answer, shown to the user
+    // as a confidence; the fallback rules have none worth showing.
+    let predictionConfidence: number | null = null;
     try {
       const { features } = await buildUserSignals(userId);
       const [sleep, wake] = await Promise.all([
@@ -121,6 +124,7 @@ export async function POST(req: NextRequest) {
         wakeSuccessProbability: wake.data.wakeSuccessProbability,
       };
       predictionSource = sleep.source === "ai" && wake.source === "ai" ? "ai" : "fallback";
+      predictionConfidence = predictionSource === "ai" ? wake.data.confidence : null;
     } catch {
       prediction = NEUTRAL_PREDICTION;
       predictionSource = "fallback";
@@ -155,6 +159,7 @@ export async function POST(req: NextRequest) {
       return jsonOk({
         mode,
         predictionSource,
+        predictionConfidence,
         prediction,
         proposals,
         skipped,
@@ -168,6 +173,7 @@ export async function POST(req: NextRequest) {
     return jsonOk({
       mode,
       predictionSource,
+      predictionConfidence,
       prediction,
       proposals,
       skipped,

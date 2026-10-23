@@ -7,6 +7,8 @@ export default defineConfig({
   // Resolves the "@/*" alias from tsconfig.json, so tests import modules the
   // same way the app does.
   plugins: [tsconfigPaths()],
+  // Component tests render JSX; tsconfig keeps JSX as-is for Next to compile.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     exclude: ["node_modules/**", ".next/**", "ai-brain/**"],
@@ -15,7 +17,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          include: ["**/*.test.ts"],
+          include: ["**/*.test.ts", "**/*.test.tsx"],
           exclude: ["node_modules/**", ".next/**", "ai-brain/**", "tests/api/**"],
         },
       },

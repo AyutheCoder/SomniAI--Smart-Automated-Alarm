@@ -1,6 +1,7 @@
 // The core promise, end to end in a real browser: an alarm set a minute ahead
 // rings, and only a correct answer turns it off.
 import { expect, test, type Page } from "@playwright/test";
+import { forbiddenWordingIn } from "../lib/predictionCopy";
 
 const RING_TIMEOUT = 100_000; // due within a minute, polled every 3s, plus compile time
 /** How long to wait for the page's background requests to reach the server. */
@@ -73,6 +74,14 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
     /Calendar\s*not connected\s*Not connected/,
     /Wearable\s*not connected\s*Not connected/,
   ]);
+
+  // Predictions name what they measure, where they came from, and how far to
+  // trust them; nothing on the page claims more.
+  const insights = page.getByRole("region", { name: "Sleep score and coaching" });
+  await expect(insights).toContainText("Wake-time regularity", { timeout: 30_000 });
+  await expect(insights).toContainText("Predictions from Fallback rules · rough estimate.");
+  await expect(insights).toContainText("Coaching from Fallback rules · rule-based advice.");
+  expect(forbiddenWordingIn(await page.locator("body").innerText())).toEqual([]);
 
   await addAlarmOneMinuteAhead(page, label);
 

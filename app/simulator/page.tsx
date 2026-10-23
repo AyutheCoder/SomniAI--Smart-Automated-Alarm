@@ -707,8 +707,10 @@ function MetricsPanel() {
             ))}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <Prob label="Wake success" value={metrics.wakeSuccessProbability} higherBetter />
-            <Prob label="Oversleep risk" value={metrics.oversleepProbability} higherBetter={false} />
+            {/* computeMetrics calls this "wakeSuccessProbability", but it is the share of
+                challenges passed; it is not the regularity model's prediction. */}
+            <Prob label="Challenge pass rate" value={metrics.wakeSuccessProbability} higherBetter />
+            <Prob label="Wake difficulty (heuristic)" value={metrics.oversleepProbability} higherBetter={false} />
           </div>
           <p className="mt-3 text-xs text-slate-500">
             From {metrics.nights} night{metrics.nights === 1 ? "" : "s"} &amp; {metrics.events} event{metrics.events === 1 ? "" : "s"}.

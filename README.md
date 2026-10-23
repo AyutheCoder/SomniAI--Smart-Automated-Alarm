@@ -16,10 +16,14 @@ before it will switch off.
   really happened: sent, failed, or not set up.
 - **Verifies wakefulness.** Math, typing, shake or QR challenges, scored into a
   confidence figure that must clear a per-alarm threshold.
-- **Plans backwards.** Give it a wake time and a required reliability and it
-  solves for the latest bedtime that gets you there.
-- **Learns.** A reinforcement-learning policy adapts wake strategy to what has
-  actually worked for you.
+- **Plans backwards.** Give it a wake time and the wake-time regularity you
+  need, and it solves for the latest bedtime that reaches it, or says plainly
+  that tonight can't. Regularity is the chance of waking close to your usual
+  time; it says nothing about how the morning went.
+- **Learns.** A reinforcement-learning policy adapts wake strategy to how you
+  have responded to past alarms (snoozes, challenge results).
+- **Says where every prediction comes from.** Each one is labelled as coming
+  from the AI Brain or the fallback rules, with a confidence in plain words.
 
 ## Architecture
 

@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { Target, ArrowRight, TriangleAlert, CalendarClock, Loader2 } from "lucide-react";
 import type { WakePlan } from "@/lib/aiClient";
+import { MODEL_CAVEAT, REGULARITY_LABEL, type ConfidenceText } from "@/lib/predictionCopy";
+import PredictionOrigin from "./PredictionOrigin";
+
+/** The planner has no fallback: a plan exists only when the AI Brain made it. */
+const PLAN_CONFIDENCE: ConfidenceText = {
+  label: "model estimate",
+  detail: `${MODEL_CAVEAT} The percentages are the chance you wake close to your usual time.`,
+};
 
 const RELIABILITY_CHOICES = [
   { value: 0.7, label: "Nice to have" },
@@ -48,7 +56,6 @@ export default function WakePlanPanel() {
     }
   }
 
-  const met = plan?.reachesTarget ?? false;
 
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
@@ -60,8 +67,10 @@ export default function WakePlanPanel() {
         </span>
       </div>
       <p className="mb-4 text-sm text-slate-400">
-        Tell it when you must be up and how sure you need to be. It works backwards
-        through your sleep model to the latest bedtime that still gets you there.
+        Tell it when you must be up and how much wake-time regularity you need. It
+        works backwards through the regularity model to the latest bedtime that
+        still reaches that target. The percentages are the chance you wake close to
+        your usual time, not a promise that you will be up at a set time.
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -107,94 +116,102 @@ export default function WakePlanPanel() {
         </p>
       )}
 
-      {plan && (
-        <div className="mt-5 space-y-4">
-          <div
-            className={`rounded-xl border p-4 ${
-              met
-                ? "border-emerald-400/30 bg-emerald-500/10"
-                : "border-amber-400/30 bg-amber-500/10"
-            }`}
-          >
-            <div className="flex items-start gap-2">
-              {!met && <TriangleAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300" />}
-              <p className={`text-sm ${met ? "text-emerald-100" : "text-amber-100"}`}>
-                {plan.summary}
-              </p>
-            </div>
+      {plan && <WakePlanView plan={plan} />}
+    </section>
+  );
+}
 
-            {plan.recommendedBedtime && (
-              <div className="mt-3 flex items-center gap-3 text-white">
-                <span className="text-sm text-slate-400">Asleep by</span>
-                <span className="text-3xl font-semibold tabular-nums">
-                  {plan.recommendedBedtime}
-                </span>
-                {plan.predictedSleepHours != null && (
-                  <span className="text-sm text-slate-400">
-                    ≈ {plan.predictedSleepHours} h sleep
-                  </span>
-                )}
-              </div>
+/** A plan's result; separate so its text can be tested. Plans only come from the AI Brain. */
+export function WakePlanView({ plan }: { plan: WakePlan }) {
+  const met = plan.reachesTarget;
+  return (
+    <div className="mt-5 space-y-4">
+      <PredictionOrigin what="Plan" origin="ai" confidence={PLAN_CONFIDENCE} />
+      <div
+        className={`rounded-xl border p-4 ${
+          met
+            ? "border-emerald-400/30 bg-emerald-500/10"
+            : "border-amber-400/30 bg-amber-500/10"
+        }`}
+      >
+        <div className="flex items-start gap-2">
+          {!met && <TriangleAlert className="mt-0.5 h-4 w-4 flex-none text-amber-300" />}
+          <p className={`text-sm ${met ? "text-emerald-100" : "text-amber-100"}`}>
+            {plan.summary}
+          </p>
+        </div>
+
+        {plan.recommendedBedtime && (
+          <div className="mt-3 flex items-center gap-3 text-white">
+            <span className="text-sm text-slate-400">Asleep by</span>
+            <span className="text-3xl font-semibold tabular-nums">
+              {plan.recommendedBedtime}
+            </span>
+            {plan.predictedSleepHours != null && (
+              <span className="text-sm text-slate-400">
+                ≈ {plan.predictedSleepHours} h sleep
+              </span>
             )}
           </div>
+        )}
+      </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center">
-            {[
-              ["Tonight as-is", plan.baselineReliability],
-              ["With the plan", plan.combinedReliability],
-              ["You asked for", plan.targetReliability],
-            ].map(([label, value]) => (
-              <div key={label as string} className="rounded-lg border border-white/10 bg-slate-950/40 p-3">
-                <div className="text-xs text-slate-400">{label as string}</div>
-                <div className="text-xl font-semibold tabular-nums text-white">
-                  {pct(value as number)}
-                </div>
-              </div>
-            ))}
+      <p className="-mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">{REGULARITY_LABEL}</p>
+      <div className="grid grid-cols-3 gap-3 text-center">
+        {[
+          ["Tonight as-is", plan.baselineReliability],
+          ["With the plan", plan.combinedReliability],
+          ["You asked for", plan.targetReliability],
+        ].map(([label, value]) => (
+          <div key={label as string} className="rounded-lg border border-white/10 bg-slate-950/40 p-3">
+            <div className="text-xs text-slate-400">{label as string}</div>
+            <div className="text-xl font-semibold tabular-nums text-white">
+              {pct(value as number)}
+            </div>
           </div>
+        ))}
+      </div>
 
-          {plan.combinedPlan.length > 0 && (
-            <div>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                Do tonight
-              </h3>
-              <ul className="space-y-1.5">
-                {plan.combinedPlan.map((s) => (
-                  <li
-                    key={s.feature}
-                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
-                  >
-                    <ArrowRight className="h-3.5 w-3.5 flex-none text-emerald-300" />
-                    <span className="flex-1">{s.label}</span>
-                    <span className="tabular-nums text-emerald-300">
-                      +{pct(s.reliabilityGain)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {plan.habitConstraints.length > 0 && (
-            <div>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                What actually limits you (takes weeks)
-              </h3>
-              <ul className="space-y-1.5">
-                {plan.habitConstraints.map((h) => (
-                  <li
-                    key={h.feature}
-                    className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300"
-                  >
-                    <span className="flex-1">{h.label}</span>
-                    <span className="tabular-nums text-sky-300">+{pct(h.reliabilityGain)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {plan.combinedPlan.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+            Do tonight
+          </h3>
+          <ul className="space-y-1.5">
+            {plan.combinedPlan.map((s) => (
+              <li
+                key={s.feature}
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+              >
+                <ArrowRight className="h-3.5 w-3.5 flex-none text-emerald-300" />
+                <span className="flex-1">{s.label}</span>
+                <span className="tabular-nums text-emerald-300">
+                  +{pct(s.reliabilityGain)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
-    </section>
+
+      {plan.habitConstraints.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+            What actually limits you (takes weeks)
+          </h3>
+          <ul className="space-y-1.5">
+            {plan.habitConstraints.map((h) => (
+              <li
+                key={h.feature}
+                className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300"
+              >
+                <span className="flex-1">{h.label}</span>
+                <span className="tabular-nums text-sky-300">+{pct(h.reliabilityGain)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }

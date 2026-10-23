@@ -201,7 +201,9 @@ describe("the oversleep risk bump", () => {
   it("explains itself when it fires", () => {
     const plan = planFor({ priority: "critical" }, { oversleepProbability: 0.9 });
     expect(plan.rationale).toContain("90%");
-    expect(plan.rationale.toLowerCase()).toContain("oversleep risk");
+    // Worded as drift from the usual time since prompt 1.3: the paper found the
+    // label measures that, not oversleeping.
+    expect(plan.rationale).toContain("chance of waking off your usual time");
   });
 
   it("says nothing about a bump that did not happen", () => {

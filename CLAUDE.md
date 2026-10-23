@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **1.3** |
-| Last completed | 1.2 (every context value carries live / simulated / missing; models see live only, enforced in `buildUserSignals` via `lib/provenance.ts`; Data sources panel; proven by `tests/api/model-inputs.test.ts`) |
+| **Next prompt** | **1.4** |
+| Last completed | 1.3 ("wake-time regularity" everywhere; every prediction shows origin + plain-words confidence; wording rules in `lib/predictionCopy.ts`, enforced by `tests/ui/rendered-text.test.tsx`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
