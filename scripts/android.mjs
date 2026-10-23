@@ -16,10 +16,11 @@
 //     it fails with "Unsupported class file major version 70" (seen here).
 //   - compileSdk and targetSdk are 36 (android/variables.gradle).
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { summarizeJunit } from "./verify-summary.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ANDROID = join(ROOT, "android");
@@ -217,7 +218,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exit(1);
   }
   if (command === "test") {
-    process.exit(gradle("testDebugUnitTest", t));
+    // Last run's reports must not count, and a run with no tests is a failure.
+    rmSync(UNIT_TEST_RESULTS, { recursive: true, force: true });
+    const status = gradle("testDebugUnitTest", t);
+    const reports = existsSync(UNIT_TEST_RESULTS) ? readdirSync(UNIT_TEST_RESULTS).filter((f) => f.endsWith(".xml")) : [];
+    const c = reports.length > 0
+      ? summarizeJunit(reports.map((f) => readFileSync(join(UNIT_TEST_RESULTS, f), "utf8")).join("\n"))
+      : { passed: 0, failed: 0, errors: 0, skipped: 0, total: 0 };
+    console.log(`Android unit tests: ${c.passed} passed, ${c.failed} failed, ${c.errors} errors, ${c.skipped} skipped, ${c.total} total`);
+    process.exit(status !== 0 ? status : c.total === 0 ? 1 : 0);
   }
   if (command === "build") {
     process.exit(gradle("assembleDebug", t));
