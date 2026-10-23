@@ -19,7 +19,7 @@ async function signUp(page: Page) {
 /** The alarm's row in the list, which is the alarm history the page shows. */
 const alarmRow = (page: Page, label: string) => page.locator("li", { hasText: label });
 
-async function addAlarmOneMinuteAhead(page: Page, label: string) {
+async function addAlarmOneMinuteAhead(page: Page, label: string, strategy?: "gentle" | "adaptive" | "aggressive") {
   // The browser's own clock and time zone, as the form uses them.
   const at = await page.evaluate(() => {
     const d = new Date(Date.now() + 60_000);
@@ -29,6 +29,9 @@ async function addAlarmOneMinuteAhead(page: Page, label: string) {
   const form = page.locator("form", { has: page.getByPlaceholder(/Alarm label/) });
   await form.getByPlaceholder(/Alarm label/).fill(label);
   await form.locator('input[type="datetime-local"]').fill(at);
+  if (strategy) {
+    await form.locator("select").selectOption(strategy);
+  }
   await form.getByRole("button", { name: "Add alarm" }).click();
   await expect(alarmRow(page, label)).toContainText("scheduled");
 }
@@ -78,10 +81,11 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   await expect(alarmRow(page, label)).toContainText("verified");
 });
 
-test("a wrong answer does not turn the alarm off", async ({ page }) => {
+test("a wrong answer does not turn the alarm off, and unset backups say so", async ({ page }) => {
   const label = `Flight ${Date.now()}`;
   await signUp(page);
-  await addAlarmOneMinuteAhead(page, label);
+  // Aggressive reaches the backup level 40s into the ring.
+  await addAlarmOneMinuteAhead(page, label, "aggressive");
 
   await waitForRingAndOpenChallenge(page);
   const wrong = (await readProblem(page)) + 1;
@@ -101,4 +105,14 @@ test("a wrong answer does not turn the alarm off", async ({ page }) => {
   expect(types).toContain("alarm_fire");
   expect(types).not.toContain("dismiss");
   expect(types).not.toContain("verify_pass");
+
+  // Still unanswered at the last level: the backups are tried, and since none
+  // is set up, each one says exactly that and nothing claims to have fired.
+  const backups = page.getByRole("region", { name: "Backup channels" });
+  await expect(backups.getByRole("listitem")).toHaveText(
+    ["Second device: not set up", "Smartwatch: not set up", "Emergency contact: not set up"],
+    { timeout: 60_000 },
+  );
+  await expect(page.getByText(/\bsent\b|activated|triggered/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Check answer" })).toBeVisible();
 });

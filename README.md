@@ -11,7 +11,9 @@ before it will switch off.
 - **Schedules its own alarms.** Task importance and predicted oversleep risk set
   the wake time, intensity, strategy and verification requirements.
 - **Escalates in five stages.** Volume, then vibration, then a wake challenge,
-  then every backup channel — on a timeline that depends on the chosen strategy.
+  then the backup channels, on a timeline that depends on the chosen strategy.
+  Each backup (second device, smartwatch, emergency contact) reports what
+  really happened: sent, failed, or not set up.
 - **Verifies wakefulness.** Math, typing, shake or QR challenges, scored into a
   confidence figure that must clear a per-alarm threshold.
 - **Plans backwards.** Give it a wake time and a required reliability and it
@@ -71,7 +73,7 @@ password `demo1234`.
 | `npm test` | Unit tests (vitest) |
 | `npm run verify` | The full web gate: lint (zero warnings), `tsc --noEmit`, vitest, `next build` |
 | `npm run verify:all` | `verify` plus the AI Brain pytest suite |
-| `npm run e2e` | End-to-end flows in headless Chromium (Playwright), about 3 minutes |
+| `npm run e2e` | End-to-end flows in headless Chromium (Playwright), about 5 minutes locally |
 
 ### Checking a change
 
@@ -129,9 +131,11 @@ database. In headless Chromium it then:
 2. does the same but answers wrong, and checks the alarm keeps ringing and
    nothing was dismissed.
 
-Each flow really waits for the alarm, so a run takes about three minutes.
-Before the flows, `e2e/warmup.ts` signs in a throwaway user and requests every
-API route once, because `next dev` compiles a route on first use and a cold
+Each flow really waits for the alarm, so a run takes about five minutes locally,
+where the flows run one at a time to spare memory, and about two on CI.
+Before the flows, `e2e/warmup.ts` signs in a throwaway user, loads the pages
+the flows visit and requests every API route once, because `next dev`
+compiles a page or route on first use and a cold
 compile can outlast the alarm's own requests. Retries are off: a flow that
 only passes on a second try is a failure. Run `npx playwright install chromium` once after `npm install`. Like
 `verify`, it shares `.next` with `npm run dev`, so stop that first.
@@ -140,4 +144,6 @@ only passes on a second try is a failure. Run `npx playwright install chromium` 
 
 The alarm only fires while a browser tab is open — there is no background
 scheduler or push delivery yet, so it is not yet a replacement for a phone alarm.
-Shake and QR challenges need a device with an accelerometer and camera.
+None of the backup channels can be set up yet, so every one of them reports
+"not set up"; the app never claims a backup reached anyone. Shake and QR
+challenges need a device with an accelerometer and camera.

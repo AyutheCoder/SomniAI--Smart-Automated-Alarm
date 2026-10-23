@@ -1,5 +1,6 @@
 import type { WakeStrategy } from "./types";
-export type BackupKind = "secondaryAlarm" | "smartwatch" | "smartLight" | "smartSpeaker" | "emergencyContact";
+import { BACKUP_KINDS, type BackupKind } from "./backupAdapters";
+export type { BackupKind };
 export type WakeStage = "ramp" | "vibration" | "challenge";
 export interface EscalationLevel {
   level: 1 | 2 | 3 | 4 | 5;
@@ -21,13 +22,8 @@ const TIMELINE: Record<WakeStrategy, [
   adaptive: [10, 22, 35, 75],
   aggressive: [5, 10, 18, 40],
 };
-const ALL_BACKUPS: BackupKind[] = [
-  "secondaryAlarm",
-  "smartwatch",
-  "smartLight",
-  "smartSpeaker",
-  "emergencyContact",
-];
+// Every channel there is; which of them are set up is the adapters' business.
+const ALL_BACKUPS: BackupKind[] = [...BACKUP_KINDS];
 /**
  * What past wakes revealed about how hard this person is to wake.
  *
@@ -146,7 +142,8 @@ export function buildEscalationPlan(strategy: WakeStrategy): EscalationLevel[] {
     {
       level: 5,
       afterSeconds: t5,
-      label: "Emergency backup",
+      // Says what the level does, not what it achieved: the channels report that.
+      label: "Trying backups",
       volumeFactor: 1.8,
       vibrate: true,
       requireVerification: true,

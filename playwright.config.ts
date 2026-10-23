@@ -7,10 +7,12 @@ export default defineConfig({
   testDir: "e2e",
   // Compiles every API route before the flows start; see e2e/warmup.ts.
   globalSetup: "./e2e/warmup.ts",
-  // Each flow waits for a real alarm to come due, up to a minute; the two run
-  // side by side as separate users.
+  // Each flow waits for a real alarm to come due, up to a minute. On CI the
+  // two run side by side as separate users. Locally they run one at a time:
+  // on an 8 GB machine two browsers plus `next dev` swapped badly enough to
+  // leave sign-in pending for over 40 seconds.
   fullyParallel: true,
-  workers: 2,
+  workers: process.env.CI ? 2 : 1,
   // A flow takes about two minutes: up to one waiting for the alarm, the
   // rest sign-up and the dev server compiling pages on first visit.
   timeout: 240_000,

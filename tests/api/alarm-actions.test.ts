@@ -126,22 +126,36 @@ describe("POST /api/alarms/[id]/escalate", () => {
     expect(await BehaviorEvent.countDocuments()).toBe(0);
   });
 
-  it("rejects backups that are not a list of names", async () => {
+  it.each([
+    ["not a list", "all"],
+    ["bare channel names, the old format", ["emergencyContact"]],
+    ["a removed channel", [{ kind: "smartLight", status: "not_configured" }]],
+    ["a made-up status", [{ kind: "smartwatch", status: "triggered" }]],
+  ])("rejects backups that are %s", async (_what, backups) => {
     const id = await alarmFor(alice);
     signInAs(alice);
-    const res = await read(await escalate(request("POST", `/api/alarms/${id}/escalate`, { level: 5, backups: "all" }), idParams(id)));
+    const res = await read(await escalate(request("POST", `/api/alarms/${id}/escalate`, { level: 5, backups }), idParams(id)));
     expect(res.status).toBe(422);
+    expect(res.body.error).toMatch(/backups must be a list of \{ kind, status \}/);
+    expect(await BehaviorEvent.countDocuments()).toBe(0);
   });
 
-  it("records the escalation without claiming any backup was reached", async () => {
+  it("records what each backup channel reported, and claims nothing itself", async () => {
     const id = await alarmFor(alice);
     signInAs(alice);
+    const backups = [
+      { kind: "secondaryAlarm", status: "not_configured" },
+      { kind: "smartwatch", status: "not_configured" },
+      { kind: "emergencyContact", status: "failed" },
+    ];
     const res = await read(await escalate(request("POST", `/api/alarms/${id}/escalate`, {
-      level: 5, backups: ["emergencyContact"],
+      level: 5, backups: backups.map((b) => ({ ...b, extra: "dropped" })),
     }), idParams(id)));
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ level: 5, backups: ["emergencyContact"] });
-    expect(await BehaviorEvent.findOne({ type: "escalation" }).lean()).toMatchObject({ userId: alice, value: 5 });
+    expect(res.body.data).toEqual({ level: 5, backups });
+    expect(await BehaviorEvent.findOne({ type: "escalation" }).lean()).toMatchObject({
+      userId: alice, value: 5, meta: { alarmId: id, backups },
+    });
   });
 });
 

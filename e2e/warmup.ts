@@ -49,6 +49,15 @@ export default async function warmup(config: FullConfig) {
       throw new Error("warm-up: could not sign in");
     }
 
+    // The pages the flows visit compile on first load too, and two browsers
+    // waiting on that at once once left sign-in pending for over 40 seconds.
+    for (const page of ["/sign-up", "/sign-in", "/"]) {
+      const res = await api.get(page, { maxRedirects: 0 });
+      if (res.status() !== 200) {
+        throw new Error(`warm-up: GET ${page} answered ${res.status()}`);
+      }
+    }
+
     const urls = routeFiles(join(process.cwd(), "app", "api")).map(urlFor).filter((u): u is string => u !== null);
     for (const path of urls) {
       // POST to a GET-only route answers 405 with no body, which still compiles it.

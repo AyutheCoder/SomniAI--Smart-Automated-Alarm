@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **1.1** (Phase 1 starts) |
-| Last completed | 0.5 (CI green on GitHub, first run: verify 358 vitest + build, pytest 283 passed / 28 skipped, e2e 2 passed) |
+| **Next prompt** | **1.2** |
+| Last completed | 1.1 (backup channels report delivered / failed / not_configured; delivered needs a transport receipt; smart lights and speaker removed; `verify:all` green: 413 vitest, 283 pytest; e2e 3 runs green) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
@@ -85,7 +85,7 @@ routes with **no tests** (0.3).
 | AI Brain server | `cd ai-brain && uvicorn main:app --reload` |
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
 | Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
-| End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~3 min; don't run alongside `verify`, both use `.next`) |
+| End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~5 min locally; don't run alongside `verify`, both use `.next`) |
 
 ## Where things are
 
@@ -118,6 +118,11 @@ routes with **no tests** (0.3).
 - LifeSnaps (Zenodo record 7229547) returned HTTP 504 for days in October 2026.
   PMData downloads fine. `python ai-brain/fetch_datasets.py --out data/external`
   resumes. Datasets are only needed for prompt 5.2.
+- **This machine has 8 GB of RAM and often only ~1 GB free.** Two Playwright
+  browsers plus `next dev` and MongoDB made it swap so badly that sign-in hung
+  for 40+ seconds, which looked like an app bug and wasn't. Locally `npm run e2e`
+  runs one browser at a time (`workers: CI ? 2 : 1`). If e2e suddenly times out
+  everywhere at once, check free memory before debugging the app.
 - Lint is `eslint .` (flat config in `eslint.config.mjs`), not the deprecated
   `next lint`. It covers the whole repo, not only `app/` and `lib/`, and ignores
   `ai-brain/` because its virtualenv contains vendored JavaScript.

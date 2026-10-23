@@ -257,15 +257,10 @@ export default function Home() {
         await fetch(`/api/alarms/${alarm._id}/escalate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          // What each backup channel actually did, not the list it was asked to try.
           body: JSON.stringify({
             level: result.escalationLevel,
-            backups: [
-              "secondaryAlarm",
-              "smartwatch",
-              "smartLight",
-              "smartSpeaker",
-              "emergencyContact",
-            ],
+            backups: result.backups.map((b) => ({ kind: b.kind, status: b.status })),
           }),
         });
       }

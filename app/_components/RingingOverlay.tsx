@@ -21,7 +21,13 @@ import {
   STAGE_LABELS,
   type EscalationLevel,
 } from "@/lib/escalation";
-import { triggerBackups, type BackupResult } from "@/lib/backupAdapters";
+import {
+  BACKUP_LABELS,
+  describeOutcome,
+  dispatchBackups,
+  type BackupKind,
+  type BackupOutcome,
+} from "@/lib/backupAdapters";
 import { accumulateWakeEvidence, meetsThreshold } from "@/lib/wakeConfidence";
 import {
   CHALLENGE_COMPONENTS,
@@ -43,6 +49,8 @@ export interface ResolveResult {
   /** Fraction of challenges solved, 0..1. */
   correctness: number;
   escalationLevel: number;
+  /** What each backup channel really did, if the ladder reached them. */
+  backups: BackupOutcome[];
 }
 
 interface RingingOverlayProps {
@@ -83,7 +91,10 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
   const [view, setView] = useState<View>("ringing");
   const [level, setLevel] = useState<EscalationLevel>(plan[0]);
   const [methodIndex, setMethodIndex] = useState(0);
-  const [backups, setBackups] = useState<BackupResult[]>([]);
+  // Channels being tried, then what each one actually did.
+  const [backupsTrying, setBackupsTrying] = useState<BackupKind[]>([]);
+  const [backups, setBackups] = useState<BackupOutcome[]>([]);
+  const backupsRef = useRef<BackupOutcome[]>([]);
   const [results, setResults] = useState<ChallengeResult[]>([]);
   const [confidence, setConfidence] = useState(0);
   const [retryNote, setRetryNote] = useState("");
@@ -105,11 +116,20 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
     };
   }, [alarm.intensity, alarm.wakeStrategy, alarm.label]);
 
+  // Not awaited by anything that rings: the alarm keeps going while channels
+  // are tried, and the panel shows each one's real outcome as it arrives.
   const fireBackups = useCallback((kinds: EscalationLevel["backup"]) => {
     if (backupsFiredRef.current || !kinds.length) return;
     backupsFiredRef.current = true;
-    const fired = triggerBackups(kinds, { alarmLabel: alarm.label });
-    setBackups(fired);
+    setBackupsTrying(kinds);
+    void dispatchBackups(kinds, {
+      alarmLabel: alarm.label,
+      text: `SomniAI: "${alarm.label}" has been ringing and has not been answered.`,
+    }).then((outcomes) => {
+      backupsRef.current = outcomes;
+      setBackups(outcomes);
+      setBackupsTrying([]);
+    });
   }, [alarm.label]);
 
   // Elapsed time is measured from startedAt and the current level lives in a
@@ -173,6 +193,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       solved: result.collected.length > 0 && solvedCount === result.collected.length,
       correctness: result.collected.length ? solvedCount / result.collected.length : 0,
       escalationLevel: levelRef.current,
+      backups: backupsRef.current,
     });
   }, [methods, onResolved, startedAt]);
 
@@ -323,15 +344,28 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
           </div>
         )}
 
-        {backups.length > 0 && view !== "done" && view !== "result" && (
-          <div className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-left">
+        {(backupsTrying.length > 0 || backups.length > 0) && view !== "done" && view !== "result" && (
+          <section aria-label="Backup channels" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-left">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-rose-300">
-              <Siren className="h-4 w-4" /> Emergency backups activated
+              <Siren className="h-4 w-4" /> Backup channels
             </p>
-            <ul className="mt-2 space-y-1 text-xs text-rose-200/80">
-              {backups.map((b) => (<li key={b.kind}>{b.label}</li>))}
+            <ul className="mt-2 space-y-1 text-xs">
+              {backups.length === 0
+                ? backupsTrying.map((kind) => (
+                  <li key={kind} className="text-rose-200/80">{BACKUP_LABELS[kind]}: trying…</li>
+                ))
+                : backups.map((b) => (
+                  <li
+                    key={b.kind}
+                    data-status={b.status}
+                    title={b.status === "delivered" ? undefined : b.reason}
+                    className={b.status === "delivered" ? "text-emerald-300" : "text-slate-400"}
+                  >
+                    {b.label}: {describeOutcome(b)}
+                  </li>
+                ))}
             </ul>
-          </div>
+          </section>
         )}
       </div>
     </div>
