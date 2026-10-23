@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **1.5** |
-| Last completed | 1.4 (self-contained `ringPlan` on every alarm, computed at creation with Brain/fallback recorded; ring time makes no server call, proven by `tests/ui/ring-time-offline.test.ts` and the database-down e2e flow; outbox + device cache for outages) |
+| **Next prompt** | **2.1** (Phase 2: the real Android alarm; needs Android Studio, see plan) |
+| Last completed | 1.5 ("Tonight" wake planner at the top of the home page: bedtime / smallest changes / honest refusal with ceiling, habit and backup alarm; web bedtime reminder; exact-ceiling boundary tested in `ai-brain/tests/test_wake_plan_boundary.py` and `tests/ui/wake-plan.test.tsx`). Phase 1 complete |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 

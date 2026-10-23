@@ -16,10 +16,14 @@ before it will switch off.
   really happened: sent, failed, or not set up.
 - **Verifies wakefulness.** Math, typing, shake or QR challenges, scored into a
   confidence figure that must clear a per-alarm threshold.
-- **Plans backwards.** Give it a wake time and the wake-time regularity you
-  need, and it solves for the latest bedtime that reaches it, or says plainly
-  that tonight can't. Regularity is the chance of waking close to your usual
-  time; it says nothing about how the morning went.
+- **Plans backwards, every evening.** The home page opens on *Tonight*: give it
+  a must-wake time and how much it matters, and it answers with the latest
+  bedtime that reaches it, or the smallest set of changes that does. If nothing
+  tonight can, it says so plainly: the most it can reach, the habit holding you
+  back, and a nudge to set a second alarm, with a button that adds one.
+  "Remind me at 22:15" sends a web notification at bedtime while a SomniAI tab
+  is open (native in a later phase). Regularity is the chance of waking close
+  to your usual time; it says nothing about how the morning went.
 - **Learns.** A reinforcement-learning policy adapts wake strategy to how you
   have responded to past alarms (snoozes, challenge results).
 - **Says where every prediction comes from.** Each one is labelled as coming
@@ -133,7 +137,14 @@ database. In headless Chromium it then:
 1. signs up a new user, sets an alarm one minute ahead, waits for it to ring,
    solves the maths challenge, and checks the alarm history shows it verified;
 2. does the same but answers wrong, and checks the alarm keeps ringing and
-   nothing was dismissed.
+   nothing was dismissed;
+3. takes the database down at ring time, and checks the alarm still rings and
+   is dismissed with no API call during the ring, then syncs when it is back;
+4. plans an evening the planner refuses, and adds the recommended backup alarm;
+5. plans a feasible evening, sets the bedtime reminder and the alarm, and
+   moves the clock to bedtime to see the reminder fire;
+6. sets an alarm while the page's first load is still out, and checks the
+   late, older answer doesn't wipe it.
 
 Each flow really waits for the alarm, so a run takes about five minutes locally,
 where the flows run one at a time to spare memory, and about two on CI.

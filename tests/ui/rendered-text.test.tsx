@@ -176,7 +176,7 @@ describe("the wake planner", () => {
   };
 
   it("says the plan is the AI Brain's estimate and what its percentages mean", () => {
-    const text = textOf(<WakePlanView plan={plan} />);
+    const text = textOf(<WakePlanView plan={plan} wakeTime="06:30" />);
     expect(text).toContain("Plan from AI Brain · model estimate .");
     expect(text).toContain("The percentages are the chance you wake close to your usual time.");
     expect(text).toContain("Wake-time regularity Tonight as-is 70%");

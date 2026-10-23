@@ -2,23 +2,12 @@
 // rings, and only a correct answer turns it off.
 import { expect, test, type Page } from "@playwright/test";
 import { forbiddenWordingIn } from "../lib/predictionCopy";
+import { alarmRow, signUp } from "./helpers";
 
 const RING_TIMEOUT = 100_000; // due within a minute, polled every 3s, plus compile time
 /** How long to wait for the page's background requests to reach the server. */
 const SERVER = { timeout: 30_000 };
 
-async function signUp(page: Page) {
-  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
-  await page.goto("/sign-up");
-  await page.getByLabel("Name").fill("E2E Sleeper");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill("e2e-password-123");
-  await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page.getByRole("heading", { name: "Adaptive Alarms" })).toBeVisible({ timeout: 60_000 });
-}
-
-/** The alarm's row in the list, which is the alarm history the page shows. */
-const alarmRow = (page: Page, label: string) => page.locator("li", { hasText: label });
 
 async function addAlarmOneMinuteAhead(page: Page, label: string, strategy?: "gentle" | "adaptive" | "aggressive") {
   // The browser's own clock and time zone, as the form uses them.
@@ -209,4 +198,41 @@ test("with the database down at ring time, the alarm still rings and is dismisse
   await expect.poll(() => alarmStatus(page, label), { timeout: 45_000 }).toBe("verified");
   await expect(alarmRow(page, label)).toContainText("verified", { timeout: 20_000 });
   await expect(sync).toBeHidden();
+});
+
+test("an alarm set while the alarm list is still loading survives the late load", async ({ page }) => {
+  const label = `Dentist ${Date.now()}`;
+  await signUp(page);
+
+  // Let the page's next alarm-list load reach the server now, but hold its
+  // answer back, as a slow network would. (Holding the request instead would
+  // let the server answer after the new alarm exists, which is no race.)
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let heldOnce = false;
+  await page.route("**/api/alarms", async (route) => {
+    if (route.request().method() === "GET" && !heldOnce) {
+      heldOnce = true;
+      const answer = await route.fetch();
+      await held;
+      await route.fulfill({ response: answer });
+      return;
+    }
+    await route.continue();
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Adaptive Alarms" })).toBeVisible();
+
+  // Set an alarm while that load is still out.
+  await addAlarmOneMinuteAhead(page, label);
+  expect(heldOnce).toBe(true);
+
+  // The old answer arrives after the new alarm. The alarm must stay.
+  const loaded = page.waitForResponse((r) => r.url().endsWith("/api/alarms") && r.request().method() === "GET");
+  release();
+  await loaded;
+  await page.waitForTimeout(2_000);
+  await expect(alarmRow(page, label)).toContainText("scheduled");
 });

@@ -14,6 +14,7 @@ import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
+import BedtimeReminder from "./_components/BedtimeReminder";
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   low: "text-slate-400 bg-slate-500/10",
@@ -74,6 +75,18 @@ export default function Home() {
   const flushingRef = useRef(false);
   const [pendingSync, setPendingSync] = useState(0);
   const [offline, setOffline] = useState(false);
+  // Counts changes made on this page to the alarm and task lists. A list load
+  // that started before such a change is older than it, and must not replace
+  // it: a fresh alarm used to vanish when the page's first load landed late.
+  const localEdits = useRef(0);
+  const editAlarms = useCallback((update: (prev: Alarm[]) => Alarm[]) => {
+    localEdits.current += 1;
+    setAlarms(update);
+  }, []);
+  const editTasks = useCallback((update: (prev: Task[]) => Task[]) => {
+    localEdits.current += 1;
+    setTasks(update);
+  }, []);
 
   const loadData = useCallback(async () => {
     // Wait for the session: the device's own copy of the alarms is per user.
@@ -82,20 +95,29 @@ export default function Home() {
     }
     const store = browserStore();
     try {
-      const [tRes, aRes] = await Promise.all([
-        fetch("/api/tasks"),
-        fetch("/api/alarms"),
-      ]);
-      const tJson = await tRes.json();
-      const aJson = await aRes.json();
-      if (tJson.ok) {
-        setTasks(tJson.data.items);
+      // Load again if something changed on the page meanwhile; after three
+      // tries, keep what the page has rather than apply an older answer.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const before = localEdits.current;
+        const [tRes, aRes] = await Promise.all([
+          fetch("/api/tasks"),
+          fetch("/api/alarms"),
+        ]);
+        const tJson = await tRes.json();
+        const aJson = await aRes.json();
+        if (localEdits.current !== before) {
+          continue;
+        }
+        if (tJson.ok) {
+          setTasks(tJson.data.items);
+        }
+        if (!aJson.ok) {
+          throw new Error(aJson.error ?? "alarms unavailable");
+        }
+        setAlarms(mergeWithLocal(aJson.data.items, loadAlarmCache(store, userId), outbox?.pendingAlarmIds() ?? new Set()));
+        setOffline(false);
+        return;
       }
-      if (!aJson.ok) {
-        throw new Error(aJson.error ?? "alarms unavailable");
-      }
-      setAlarms(mergeWithLocal(aJson.data.items, loadAlarmCache(store, userId), outbox?.pendingAlarmIds() ?? new Set()));
-      setOffline(false);
     } catch {
       // The server or its database can't be reached: ring from what this
       // device last knew rather than from nothing.
@@ -138,7 +160,7 @@ export default function Home() {
       // Once an alarm has nothing left to send, the server's copy is current.
       const stillPending = outbox.pendingAlarmIds();
       if (result.alarms.size > 0) {
-        setAlarms((prev) => prev.map((a) => (
+        editAlarms((prev) => prev.map((a) => (
           !stillPending.has(a._id) && result.alarms.has(a._id) ? (result.alarms.get(a._id) as unknown as Alarm) : a
         )));
       }
@@ -148,7 +170,7 @@ export default function Home() {
       flushingRef.current = false;
       setPendingSync(outbox.pending().length);
     }
-  }, [outbox]);
+  }, [outbox, editAlarms]);
 
   useEffect(() => {
     if (!outbox) {
@@ -171,15 +193,15 @@ export default function Home() {
     // closed; the end-to-end test checks that no API call falls inside it.
     document.documentElement.dataset.ringing = "true";
     setRingingAlarm(alarm);
-    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "ringing" } : a)));
-  }, []);
+    editAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "ringing" } : a)));
+  }, [editAlarms]);
 
   const markMissed = useCallback((alarm: Alarm) => {
-    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "missed", enabled: false } : a)));
+    editAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "missed", enabled: false } : a)));
     outbox?.enqueue([{ alarmId: alarm._id, method: "PATCH", path: `/api/alarms/${alarm._id}`, body: { status: "missed", enabled: false } }]);
     setPendingSync(outbox?.pending().length ?? 0);
     void flushOutbox();
-  }, [outbox, flushOutbox]);
+  }, [outbox, flushOutbox, editAlarms]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -222,7 +244,7 @@ export default function Home() {
     });
     const json = await res.json();
     if (json.ok) {
-      setTasks((prev) => [json.data, ...prev]);
+      editTasks((prev) => [json.data, ...prev]);
       setTaskTitle("");
       setTaskDue("");
       setTaskPriority("medium");
@@ -237,7 +259,7 @@ export default function Home() {
     });
     const json = await res.json();
     if (json.ok) {
-      setTasks((prev) => prev.map((t) => (t._id === task._id ? json.data : t)));
+      editTasks((prev) => prev.map((t) => (t._id === task._id ? json.data : t)));
     }
   }
 
@@ -245,7 +267,7 @@ export default function Home() {
     const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
     const json = await res.json();
     if (json.ok) {
-      setTasks((prev) => prev.filter((t) => t._id !== id));
+      editTasks((prev) => prev.filter((t) => t._id !== id));
     }
   }
 
@@ -273,7 +295,7 @@ export default function Home() {
     });
     const json = await res.json();
     if (json.ok) {
-      setAlarms((prev) => [...prev, json.data].sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()));
+      editAlarms((prev) => [...prev, json.data].sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()));
       setAlarmLabel("");
     }
   }
@@ -282,7 +304,7 @@ export default function Home() {
     const res = await fetch(`/api/alarms/${id}`, { method: "DELETE" });
     const json = await res.json();
     if (json.ok) {
-      setAlarms((prev) => prev.filter((a) => a._id !== id));
+      editAlarms((prev) => prev.filter((a) => a._id !== id));
     }
   }
 
@@ -302,7 +324,7 @@ export default function Home() {
     if (local.status === "scheduled") {
       firedIdsRef.current.delete(alarm._id);
     }
-    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? local : a)));
+    editAlarms((prev) => prev.map((a) => (a._id === alarm._id ? local : a)));
     outbox?.enqueue(syncCalls(alarm._id, {
       snoozed: result.snoozed,
       snoozedUntil: result.snoozed ? local.scheduledTime : undefined,
@@ -385,6 +407,11 @@ export default function Home() {
         </p>
       )}
 
+      <BedtimeReminder userId={userId} />
+
+      {/* The evening starts here: when you must be up, and what tonight takes. */}
+      <WakePlanPanel userId={userId} onAlarmsChanged={loadData} />
+
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Pending tasks" value={pendingTasks} />
         <StatCard label="Total tasks" value={tasks.length} />
@@ -395,8 +422,6 @@ export default function Home() {
       <InsightsPanel />
 
       <DataSourcesPanel />
-
-      <WakePlanPanel />
 
       <SmartSchedulePanel onChange={loadData} />
 
