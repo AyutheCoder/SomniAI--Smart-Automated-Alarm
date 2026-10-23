@@ -184,7 +184,10 @@ export function gradle(task, t = findToolchain(), stdio = "inherit") {
   if (sync.status !== 0) {
     return sync.status ?? 1;
   }
-  const res = spawnSync(WIN ? "gradlew.bat" : "./gradlew", [task, "--console=plain"], { cwd: ANDROID, env, stdio, shell: WIN });
+  // By full path: with NoDefaultCurrentDirectoryInExePath set (it is in some
+  // shells), cmd won't run "gradlew.bat" from the current folder by name.
+  const wrapper = WIN ? `"${join(ANDROID, "gradlew.bat")}"` : join(ANDROID, "gradlew");
+  const res = spawnSync(wrapper, [task, "--console=plain"], { cwd: ANDROID, env, stdio, shell: WIN });
   return res.status ?? 1;
 }
 

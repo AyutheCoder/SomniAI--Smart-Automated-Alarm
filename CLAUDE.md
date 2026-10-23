@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.1, finish**: install the toolchain (`ANDROID.md`), then build the debug APK and open it on the emulator; `verify:all` is red until then |
-| Last completed | 1.5 ("Tonight" wake planner at the top of the home page: bedtime / smallest changes / honest refusal with ceiling, habit and backup alarm; web bedtime reminder; exact-ceiling boundary tested in `ai-brain/tests/test_wake_plan_boundary.py` and `tests/ui/wake-plan.test.tsx`). Phase 1 complete |
+| **Next prompt** | **2.2** |
+| Last completed | 2.1 (Capacitor 8.5.3 Android shell loading the app from a server, decision in `ANDROID.md`; debug APK installs and opens on the local emulator (API 37) and CI's (API 35); `verify:all` green: lint, tsc, vitest 631, build, pytest 286 / 28 skipped, android 4, apk 4022 KB) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
@@ -132,6 +132,15 @@ routes with **no tests** (0.3).
   GitHub release host.
 - **Virtualization-based security is on**, so the Android emulator needs the
   Windows Hypervisor Platform feature (admin PowerShell, see `ANDROID.md`).
+- **`NoDefaultCurrentDirectoryInExePath` is set in this shell**, so `cmd` won't
+  run `gradlew.bat` by bare name from `android/`; `scripts/android.mjs` calls it
+  by full path. In Git Bash, `export MSYS_NO_PATHCONV=1` before `adb shell`
+  commands, or `/sdcard/...` arguments get rewritten into Windows paths.
+- **The emulator plus Android Studio don't fit in free RAM.** Close Android
+  Studio and run `android\gradlew --stop` before starting the emulator. Even
+  then the emulator's System UI can show "isn't responding" dialogs under host
+  memory pressure; that is the emulator, not SomniAI (check
+  `adb logcat -b crash` and `dumpsys activity` for the app's own state).
 - **This machine has 8 GB of RAM and often only ~1 GB free.** Two Playwright
   browsers plus `next dev` and MongoDB made it swap so badly that sign-in hung
   for 40+ seconds, which looked like an app bug and wasn't. Locally `npm run e2e`
