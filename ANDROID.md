@@ -133,3 +133,121 @@ Move to bundled pages if the Play Store review (prompt 7.5) objects, if the UI
 is needed offline, or if the server-as-trusted-code risk stops being acceptable.
 The route is a static export of the pages plus Capacitor's native HTTP, so that
 sign-in cookies work across origins.
+
+## Native alarms (prompt 2.2)
+
+`android/app/src/main/java/app/somniai/alarm/alarms/` is an in-app Capacitor
+plugin, `SomniAlarm`. The web app's typed handle on it is `lib/nativeAlarm.ts`.
+
+- **Scheduling.** Every alarm goes through `AlarmManager.setAlarmClock`. It is
+  exact, the system shows it as the next alarm, and it fires through Doze.
+  Android's Doze page: "Alarms set with `setAlarmClock()` continue to fire
+  normally. The system exits Doze shortly before those alarms fire."
+- **Storage.** Alarms are kept as wall-clock times (hour, minute, and days or a
+  date) in device-protected storage, so they survive the process being killed
+  and can be read before the first unlock after a reboot.
+- **When it reschedules.**
+  - Boot, both before and after the first unlock.
+  - A change of time or time zone.
+  - An app update.
+  - The exact-alarm permission being granted.
+  - Every app start.
+- **When an alarm fires.** For now it posts a notification and records the
+  firing. Ringing it on the alarm stream is prompt 2.3. The web app's alarm list
+  is connected to the plugin in prompt 2.5.
+
+### Exact alarms: the permission on each Android version
+
+Checked on 2026-10-24 against Android's documentation and the SDK's own
+Javadoc (`sources/android-37.0`), not from memory:
+
+| Android | Permission | How it is granted | What the app does |
+| --- | --- | --- | --- |
+| 8–11 (API 26–30) | none | — | Schedules directly. `canScheduleExactAlarms()` doesn't exist yet. |
+| 12, 12L (API 31–32) | `SCHEDULE_EXACT_ALARM` | "Alarms & reminders" special access. The user and the system can turn it off, which deletes the app's exact alarms and stops the app. Without it, `setAlarmClock` throws `SecurityException`. | Checks `canScheduleExactAlarms()`. If access is off, the alarm is saved as `waiting_for_permission` and `openExactAlarmSettings()` opens `ACTION_REQUEST_SCHEDULE_EXACT_ALARM` with `package:` for this app. When access is turned on, Android sends `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`, and everything is rescheduled. No broadcast is sent when access is turned off. |
+| 13+ (API 33+) | `USE_EXACT_ALARM` | A normal permission, granted at install, that the user cannot revoke. | Schedules. It still asks `canScheduleExactAlarms()` and reports `unavailable` instead of pretending if the answer is ever no. |
+
+- **Google Play.** Play's "Permissions and APIs that Access Sensitive
+  Information" policy, Exact Alarm section, allows `USE_EXACT_ALARM` only when
+  "The app is an alarm or timer app" (or a calendar app). It also requires the
+  Play Console permission declaration, which belongs to prompt 7.5. SomniAI is
+  an alarm app, so it qualifies.
+- **Android 14 change.** `SCHEDULE_EXACT_ALARM` is no longer pre-granted to new
+  installs. That is why it isn't the permission relied on for 13+.
+- **The `maxSdkVersion="32"` cap on `SCHEDULE_EXACT_ALARM` is this project's
+  choice.** No Android page we found recommends it. It means Android 13+ holds
+  only the permission the user can't switch off, rather than also a duplicate
+  that can be revoked. On the API 37 emulator the app holds `USE_EXACT_ALARM`
+  (`granted=true`) and doesn't request `SCHEDULE_EXACT_ALARM`.
+  `AlarmManifestTest` keeps the declarations as they are.
+- **The rest of the manifest.**
+  - `RECEIVE_BOOT_COMPLETED`.
+  - `POST_NOTIFICATIONS`, because Android 13+ asks the user (`requestNotifications()`).
+  - Both receivers are `exported="false"` and `directBootAware="true"`.
+  - Every action the reschedule receiver listens for is a protected broadcast
+    that only the system can send. Each is also allowed to reach a manifest
+    receiver on Android 8+: the boot, time and time zone broadcasts are on
+    Android's implicit-broadcast exceptions list, and `MY_PACKAGE_REPLACED`
+    goes only to the app that was replaced.
+
+### Time rules (tested in `NextTriggerTest` and `AlarmPlannerTest`)
+
+- An alarm keeps its clock time through daylight-saving changes and moves with
+  the phone's time zone: 07:00 stays 07:00 local.
+- **A time the clocks skip** (02:30 when 02:00 jumps to 03:00) rings at the
+  moment of the jump.
+- **A time that happens twice** (01:30 when 02:00 falls back to 01:00) rings
+  once, the first time.
+- **Strictly after now.** A repeating alarm moves on to its next occurrence
+  even if it was delivered a moment early.
+- **No second ring after the clock is set back.** An occurrence that already
+  rang doesn't ring again.
+- **Late and missed occurrences.**
+  - If one was due less than 15 minutes ago and hasn't rung (a short reboot,
+    for example), it is rung late.
+  - If it is older than that, it is recorded as `missed` instead.
+  - A one-off past its time is refused when it is first set.
+
+### Force-stop deletes alarms: this is Android, not a bug
+
+"Force stop" in Settings, or `am force-stop`, deletes all of an app's alarms.
+The SDK's Javadoc says a force stop returns the app to the "stopped" state.
+Android 15's behaviour changes say "the system also cancels all pending intents
+when the app enters the stopped state". On the API 37 emulator, AlarmManager's
+removal history showed `Reason=pi_cancelled` for SomniAI's alarm each time.
+
+No app can ring after a force-stop until the user opens it again. When they
+do, SomniAI reschedules everything: at app start, and on Android 15+ through
+the `BOOT_COMPLETED` that Android delivers when the app leaves the stopped
+state. That was seen on the emulator. An occurrence that went by meanwhile is
+logged as missed.
+
+Being killed in the ordinary ways is different. A swipe from recents, the
+low-memory killer or a battery manager kill only ends the process, and the
+alarm still fires. The checks below show that.
+
+### Checking alarms on a device
+
+Debug builds include an adb-only test hook (`src/debug/`, guarded by
+`android.permission.DUMP`):
+
+```bash
+export MSYS_NO_PATHCONV=1   # Git Bash only
+R="-n app.somniai.alarm/.alarms.DebugAlarmReceiver"
+adb shell am broadcast -a app.somniai.alarm.debug.SCHEDULE $R --ei minutes 2   # one-off; add --ez daily true to repeat
+adb shell am broadcast -a app.somniai.alarm.debug.LIST $R
+adb shell am broadcast -a app.somniai.alarm.debug.CANCEL $R
+adb logcat -s SomniAlarm
+```
+
+`bash scripts/android-alarm-check.sh <apk>` does the whole check on whatever
+device is connected:
+
+- The permission is the right one for that Android version.
+- On 12/12L, the alarm waits while access is off and is rescheduled when it
+  is turned on.
+- An alarm set about two minutes ahead fires after the app's process has been
+  killed.
+
+CI runs it on API 26, 32 and 35 emulators. Results on a real phone go in
+`DEVICE_TESTS.md`.

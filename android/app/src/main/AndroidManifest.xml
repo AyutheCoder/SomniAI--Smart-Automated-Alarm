@@ -33,9 +33,50 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- AlarmManager delivers due alarms here. Not exported: only this
+             app's own PendingIntent reaches it. Direct-boot aware so alarms
+             fire after a reboot before the first unlock. -->
+        <receiver
+            android:name=".alarms.AlarmFiredReceiver"
+            android:directBootAware="true"
+            android:exported="false" />
+
+        <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
+             for each action). All are protected broadcasts sent by the
+             system, which reaches a non-exported receiver. -->
+        <receiver
+            android:name=".alarms.RescheduleReceiver"
+            android:directBootAware="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Exact alarms (ANDROID.md, "Exact alarms"). Android 8-11 need nothing.
+         Android 13+: USE_EXACT_ALARM, granted at install, not revocable by the
+         user; Google Play allows it for "an alarm or timer app".
+         Android 12/12L: SCHEDULE_EXACT_ALARM, the user-controlled "Alarms &
+         reminders" access. Capped at 32 so that on 13+ the app holds only
+         USE_EXACT_ALARM. The cap is this project's choice, not a documented
+         recommendation. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+
+    <!-- Reschedule after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Show that an alarm fired (Android 13+ asks the user). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

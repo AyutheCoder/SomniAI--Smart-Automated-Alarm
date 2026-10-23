@@ -127,10 +127,16 @@ jobs:
           retention-days: 7
 
   android-emulator:
-    name: Android (installs and opens on an emulator)
+    name: Android ${{ matrix.api-level }} (opens; native alarm fires)
     needs: android
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # One per exact-alarm regime: 8.0 (no permission), 12L (user-controlled
+        # SCHEDULE_EXACT_ALARM), 15 (USE_EXACT_ALARM).
+        api-level: [26, 32, 35]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -145,15 +151,15 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: bash scripts/android-smoke.sh apk/app-debug.apk android-smoke.png
+          script: bash scripts/android-smoke.sh apk/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/app-debug.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-smoke-screenshot
+          name: android-smoke-screenshot-api${{ matrix.api-level }}
           path: android-smoke.png
           retention-days: 7
           if-no-files-found: ignore

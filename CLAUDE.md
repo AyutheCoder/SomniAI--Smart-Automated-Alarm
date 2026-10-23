@@ -31,8 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.2** |
-| Last completed | 2.1 (Capacitor 8.5.3 Android shell loading the app from a server, decision in `ANDROID.md`; debug APK installs and opens on the local emulator (API 37) and CI's (API 35); `verify:all` green: lint, tsc, vitest 631, build, pytest 286 / 28 skipped, android 4, apk 4022 KB) |
+| **Next prompt** | **2.3** |
+| Last completed | 2.2 (native `SomniAlarm` plugin: `setAlarmClock`, per-version exact-alarm permission, device-protected storage, reschedule on boot / time / zone / update / permission / app start; 47 new JVM tests incl. DST and midnight; emulator checks in `DEVICE_TESTS.md`, CI alarm check on API 26/32/35; `verify:all` green: vitest 638, pytest 286 / 28 skipped, android 51, apk 4031 KB) |
+| Waiting on the human | Phone checks for 2.1 and 2.2 in `DEVICE_TESTS.md` (only emulators so far). The 2.2 gate's "fires with the app force-stopped" can't be met by any app: force-stop deletes alarms (`ANDROID.md`); tested as process-killed instead, and restore-on-reopen |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
@@ -97,6 +98,8 @@ routes with **no tests** (0.3).
 | `tests/api/` | Route integration tests, in-memory MongoDB, session stubbed in `setup.ts` |
 | `lib/` | Core logic: `scheduler.ts`, `escalation.ts`, `wakeConfidence.ts` (gated scoring), `backupAdapters.ts` (currently fake), `context/` (calendar/wearable simulated), `sensors/` (silent simulated fallbacks) |
 | `lib/ringPlan.ts` | What an alarm needs to ring, fixed at creation (`ringPlanServer.ts` computes it). Ring time reads only this; outcomes go through `lib/outbox.ts` afterwards |
+| `android/app/src/main/java/app/somniai/alarm/alarms/` | Native alarms: `NextTrigger` / `AlarmPlanner` (pure, JVM-tested), `AlarmScheduler` (AlarmManager), receivers, `SomniAlarmPlugin`. Web handle: `lib/nativeAlarm.ts` |
+| `DEVICE_TESTS.md` | Device-only results, emulator and phone, with dates and versions |
 | `models/` | Mongoose models |
 | `ai-brain/` | FastAPI service: `wake_plan.py` (the paper's method), `semantic.py`, `predict.py` |
 | `INVENTION_DISCLOSURE.md` | Patent notes. Public disclosure already happened 2026-08-05 |
