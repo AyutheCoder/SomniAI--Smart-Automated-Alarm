@@ -20,16 +20,28 @@ DEBUG="-n $PKG/.alarms.DebugAlarmReceiver"
 say() { echo "alarm-check: $*"; }
 fail() { echo "alarm-check: FAIL: $*" >&2; exit 1; }
 sh_() { "$ADB" shell "$@" | tr -d '\r'; }
-log() { "$ADB" logcat -d -s SomniAlarm:* | tr -d '\r'; }
+# Output is captured before it is searched: `cmd | grep -q` under pipefail
+# fails when grep exits early and cmd gets SIGPIPE, even though it matched.
+has() { local out; out=$("${@:2}"); grep -q -- "$1" <<<"$out"; }
+# `logcat -c` fails on some images (API 26: "failed to clear the 'main' log"),
+# so instead of clearing, write a marker and read only what comes after it.
+MARK=0
+mark() { MARK=$((MARK + 1)); sh_ log -t SomniAlarm "alarm-check mark $MARK" >/dev/null; }
+log() { "$ADB" logcat -d -s SomniAlarm:* | tr -d '\r' | sed -n "/alarm-check mark $MARK\$/,\$p"; }
 wait_log() { # pattern, seconds
   for _ in $(seq 1 $(($2 / 2))); do
-    if log | grep -q "$1"; then return 0; fi
+    if has "$1" log; then return 0; fi
     sleep 2
   done
   return 1
 }
-granted() { sh_ dumpsys package "$PKG" | grep -q "$1: granted=true"; }
-requested() { sh_ dumpsys package "$PKG" | grep -A200 "requested permissions:" | grep -q "^ *$1\$"; }
+granted() { has "$1: granted=true" sh_ dumpsys package "$PKG"; }
+requested() {
+  local out
+  out=$(sh_ dumpsys package "$PKG")
+  out=$(sed -n '/requested permissions:/,/install permissions:/p' <<<"$out")
+  grep -q "^ *$1\$" <<<"$out"
+}
 kill_app() {
   sh_ input keyevent KEYCODE_HOME
   sleep 1
@@ -58,7 +70,7 @@ else
   say "no exact-alarm permission exists on API $SDK"
 fi
 
-"$ADB" logcat -c
+mark
 sh_ am start -W -n "$PKG/.MainActivity" >/dev/null
 wait_log "after app_start" 60 || fail "plugin did not load (no app_start reschedule)"
 say "plugin loaded"
@@ -67,7 +79,7 @@ say "plugin loaded"
 if [ "$SDK" -ge 31 ] && [ "$SDK" -le 32 ]; then
   sh_ appops set "$PKG" SCHEDULE_EXACT_ALARM deny
   sleep 3   # turning it off stops the app
-  "$ADB" logcat -c
+  mark
   sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 5 >/dev/null
   wait_log '"status":"waiting_for_permission"' 30 || fail "with access off the alarm was not reported waiting: $(log | tail -3)"
   say "access off: alarm saved and reported waiting_for_permission, not scheduled"
@@ -77,10 +89,10 @@ if [ "$SDK" -ge 31 ] && [ "$SDK" -le 32 ]; then
 fi
 
 # Fires with the process killed.
-"$ADB" logcat -c
+mark
 sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 2 >/dev/null
 wait_log '"status":"scheduled"' 30 || fail "alarm not scheduled: $(log | tail -3)"
-sh_ dumpsys alarm | grep -q "$PKG/.alarms.AlarmFiredReceiver" || fail "AlarmManager has no alarm for the app"
+has "$PKG/.alarms.AlarmFiredReceiver" sh_ dumpsys alarm || fail "AlarmManager has no alarm for the app"
 kill_app
 say "alarm set, app process killed; waiting for it to fire"
 wait_log "fired device-test" 200 || fail "alarm did not fire within 200 s"
