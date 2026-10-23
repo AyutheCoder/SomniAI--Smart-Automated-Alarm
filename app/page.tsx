@@ -7,6 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import type { Alarm, Priority, Task, WakeStrategy } from "@/lib/types";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
+import DataSourcesPanel from "./_components/DataSourcesPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
 
@@ -336,6 +337,8 @@ export default function Home() {
       </section>
 
       <InsightsPanel />
+
+      <DataSourcesPanel />
 
       <WakePlanPanel />
 

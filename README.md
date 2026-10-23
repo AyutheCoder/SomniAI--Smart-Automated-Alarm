@@ -145,5 +145,14 @@ only passes on a second try is a failure. Run `npx playwright install chromium` 
 The alarm only fires while a browser tab is open — there is no background
 scheduler or push delivery yet, so it is not yet a replacement for a phone alarm.
 None of the backup channels can be set up yet, so every one of them reports
-"not set up"; the app never claims a backup reached anyone. Shake and QR
+"not set up"; the app never claims a backup reached anyone.
+
+Calendar and wearable data aren't connected yet. Predictions use only live
+data: the sleep logs and alarm history you record, and live weather once you
+allow location. The home page's **Data sources** panel shows which sources are
+connected. Everything carries its source (`live`, `simulated` or `missing`);
+anything simulated, such as the developer simulator's data, is treated as
+missing by every model. In development only, `SOMNIAI_SIMULATED_INPUTS=allow`
+lets simulated data through so the simulator can demonstrate predictions;
+production ignores it. Shake and QR
 challenges need a device with an accelerometer and camera.

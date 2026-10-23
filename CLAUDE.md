@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **1.2** |
-| Last completed | 1.1 (backup channels report delivered / failed / not_configured; delivered needs a transport receipt; smart lights and speaker removed; `verify:all` green: 413 vitest, 283 pytest; e2e 3 runs green) |
+| **Next prompt** | **1.3** |
+| Last completed | 1.2 (every context value carries live / simulated / missing; models see live only, enforced in `buildUserSignals` via `lib/provenance.ts`; Data sources panel; proven by `tests/api/model-inputs.test.ts`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 

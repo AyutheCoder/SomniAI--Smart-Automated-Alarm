@@ -19,11 +19,14 @@ const ALLOWED_TYPES = new Set([
   "escalation",
 ]);
 
+type EventSource = "live" | "simulated";
+
 interface EventInput {
   type?: string;
   value?: number;
   meta?: Record<string, unknown>;
   at?: string;
+  source?: EventSource;
 }
 
 interface EventsBody {
@@ -32,7 +35,11 @@ interface EventsBody {
   value?: number;
   meta?: Record<string, unknown>;
   at?: string;
+  /** Applies to every event in the batch that doesn't give its own. */
+  source?: EventSource;
 }
+
+const EVENT_SOURCES: readonly string[] = ["live", "simulated"];
 
 const MAX_BATCH = 200;
 
@@ -50,7 +57,7 @@ export async function POST(req: NextRequest) {
     const raw: EventInput[] = Array.isArray(body.events)
       ? body.events
       : body.type
-        ? [{ type: body.type, value: body.value, meta: body.meta, at: body.at }]
+        ? [{ type: body.type, value: body.value, meta: body.meta, at: body.at, source: body.source }]
         : [];
 
     if (raw.length === 0) {
@@ -76,11 +83,18 @@ export async function POST(req: NextRequest) {
       if (Number.isNaN(at.getTime())) {
         return jsonError("Invalid event timestamp", 422);
       }
+      // Required, not defaulted: only the sender knows whether a reading came
+      // from a real sensor, and a simulated one must never be taken for live.
+      const source = e.source ?? body.source;
+      if (!source || !EVENT_SOURCES.includes(source)) {
+        return jsonError("Each event needs a source: live or simulated", 422);
+      }
       docs.push({
         userId,
         type: e.type,
         value: e.value,
         meta: e.meta ?? undefined,
+        source,
         at,
       });
     }

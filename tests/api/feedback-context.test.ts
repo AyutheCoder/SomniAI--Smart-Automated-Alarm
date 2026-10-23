@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as listFeedback, POST as postFeedback } from "@/app/api/feedback/route";
 import { GET as listContext, POST as postContext } from "@/app/api/context/route";
 import { Alarm } from "@/models/Alarm";
 import { ContextSnapshot } from "@/models/ContextSnapshot";
 import { ModelFeedback } from "@/models/ModelFeedback";
 import { RlPolicy } from "@/models/RlPolicy";
+import { SleepLog } from "@/models/SleepLog";
 import { read, request, signInAs, twoUsers } from "./helpers";
 
 let alice: string;
@@ -81,10 +82,9 @@ describe("POST /api/context", () => {
   it.each([
     ["a latitude out of range", { lat: 123, lon: 10 }, /lat must be a number from -90 to 90/],
     ["a latitude without a longitude", { lat: 12 }, /lat and lon must be given together/],
-    ["an override that is not an object", { override: "sunny" }, /override must be an object/],
-    ["an override calendar entry without a valid start", {
-      override: { calendar: [{ title: "Exam", start: "whenever" }] },
-    }, /Each calendar entry needs a title and a valid start/],
+    ["simulate as text", { simulate: "yes" }, /simulate must be true or false/],
+    // Removed in 1.2: caller-typed values are neither live nor simulated.
+    ["an override of any kind", { override: { weather: { tempC: 21, condition: "Clear" } } }, /override is no longer accepted/],
   ])("rejects %s", async (_what, body, message) => {
     signInAs(alice);
     const res = await read(await postContext(request("POST", "/api/context", body)));
@@ -93,27 +93,46 @@ describe("POST /api/context", () => {
     expect(await ContextSnapshot.countDocuments()).toBe(0);
   });
 
-  it("stores a simulated snapshot for the caller, labelled simulated", async () => {
+  it("stores nothing made up by default: every group missing", async () => {
+    signInAs(alice);
+    const res = await read(await postContext(request("POST", "/api/context", {})));
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ userId: alice, sources: { weather: "missing", calendar: "missing", wearable: "missing" } });
+    expect(res.body.data.wearable).toBeUndefined();
+    expect(res.body.data.source).toBeUndefined();
+  });
+
+  it("labels each simulated group simulated", async () => {
     signInAs(alice);
     const res = await read(await postContext(request("POST", "/api/context", { simulate: true })));
-    expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ userId: alice, source: "simulated" });
+    expect(res.body.data.sources).toEqual({ weather: "simulated", calendar: "simulated", wearable: "simulated" });
   });
 
-  it("never labels simulated data live, even when coordinates are sent", async () => {
-    signInAs(alice);
-    // simulate:true makes buildContextData simulate everything; this used to be stored as "live".
-    const res = await read(await postContext(request("POST", "/api/context", { simulate: true, lat: 28.6, lon: 77.2 })));
-    expect(res.body.data.source).toBe("simulated");
-  });
+  describe("with a location", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
 
-  it("labels data the user supplied as manual", async () => {
-    signInAs(alice);
-    const res = await read(await postContext(request("POST", "/api/context", {
-      override: { weather: { tempC: 21, condition: "Clear" }, calendar: [{ title: "Exam", start: "2026-11-02T09:00:00Z" }] },
-    })));
-    expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ source: "manual", weather: { tempC: 21 } });
+    it("fetches live weather by default and labels only it live", async () => {
+      const weather = vi.fn<(url: string) => Promise<Response>>(async () =>
+        new Response(JSON.stringify({ current: { temperature_2m: 24.5, weather_code: 2 } })));
+      vi.stubGlobal("fetch", weather);
+      signInAs(alice);
+      const res = await read(await postContext(request("POST", "/api/context", { lat: 28.6, lon: 77.2 })));
+      expect(res.body.data).toMatchObject({
+        weather: { tempC: 24.5, condition: "Partly cloudy" },
+        sources: { weather: "live", calendar: "missing", wearable: "missing" },
+      });
+      expect(String(weather.mock.calls[0][0])).toMatch(/latitude=28\.6&longitude=77\.2/);
+    });
+
+    it("stores weather as missing when the weather service fails, never as simulated", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 502 })));
+      signInAs(alice);
+      const res = await read(await postContext(request("POST", "/api/context", { lat: 28.6, lon: 77.2, simulate: true })));
+      expect(res.body.data.sources.weather).toBe("missing");
+      expect(res.body.data.weather).toBeUndefined();
+    });
   });
 });
 
@@ -123,10 +142,44 @@ describe("GET /api/context", () => {
   });
 
   it("lists only the caller's snapshots", async () => {
-    await ContextSnapshot.create({ userId: alice, source: "manual" });
-    await ContextSnapshot.create({ userId: bob, source: "manual" });
+    await ContextSnapshot.create({ userId: alice, sources: { weather: "missing", calendar: "missing", wearable: "missing" } });
+    await ContextSnapshot.create({ userId: bob, sources: { weather: "missing", calendar: "missing", wearable: "missing" } });
     signInAs(alice);
     const res = await read(await listContext(request("GET", "/api/context?limit=5")));
     expect(res.body.data.items.map((s: { userId: string }) => s.userId)).toEqual([alice]);
+  });
+
+  it("says which sources are connected, from the caller's data only", async () => {
+    await ContextSnapshot.create({ userId: bob, sources: { weather: "live", calendar: "live", wearable: "live" } });
+    await SleepLog.create({ userId: bob, date: "2026-10-20", durationHours: 7 });
+    signInAs(alice);
+    const none = await read(await listContext(request("GET", "/api/context")));
+    expect(none.body.data.sources).toEqual({
+      sleepLogs: { source: "missing", detail: "No nights logged yet" },
+      weather: { source: "missing", detail: "Not connected: allow location for live weather" },
+      calendar: { source: "missing", detail: "Not connected" },
+      wearable: { source: "missing", detail: "Not connected" },
+    });
+  });
+
+  it("shows live weather as connected, and simulated groups and nights as simulated and unused", async () => {
+    await ContextSnapshot.create({ userId: alice, sources: { weather: "live", calendar: "simulated", wearable: "simulated" } });
+    await SleepLog.create({ userId: alice, date: "2026-10-20", durationHours: 7, source: "manual" });
+    await SleepLog.create({ userId: alice, date: "2026-10-19", durationHours: 3, source: "simulated" });
+    signInAs(alice);
+    const { body } = await read(await listContext(request("GET", "/api/context")));
+    expect(body.data.sources).toEqual({
+      sleepLogs: { source: "live", detail: "1 night logged; 1 simulated night not used" },
+      weather: { source: "live", detail: "Live, from your location" },
+      calendar: { source: "simulated", detail: "Simulated: not used for predictions" },
+      wearable: { source: "simulated", detail: "Simulated: not used for predictions" },
+    });
+  });
+
+  it("treats a snapshot from before sources existed as connecting nothing", async () => {
+    await ContextSnapshot.create({ userId: alice, source: "live", wearable: { restingHr: 60 } });
+    signInAs(alice);
+    const { body } = await read(await listContext(request("GET", "/api/context")));
+    expect(body.data.sources.wearable.source).toBe("missing");
   });
 });

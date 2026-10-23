@@ -22,6 +22,11 @@ export async function POST(req: NextRequest) {
     }
     const body = await parseJson<PredictionBody>(req);
     const supplied = body?.features as unknown;
+    // Features sent by the caller have no source anyone can check, so in
+    // production a prediction is built only from the user's own live data.
+    if (supplied !== undefined && process.env.NODE_ENV === "production") {
+      return jsonError("features can't be supplied in production; predictions use your own recorded data", 422);
+    }
     if (supplied !== undefined && !isFeatureMap(supplied)) {
       return jsonError("features must map feature names to numbers", 422);
     }

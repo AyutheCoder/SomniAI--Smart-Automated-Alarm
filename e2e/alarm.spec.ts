@@ -63,6 +63,17 @@ async function alarmStatus(page: Page, label: string): Promise<string | undefine
 test("an alarm a minute ahead rings, and solving the maths turns it off", async ({ page }) => {
   const label = `Exam ${Date.now()}`;
   await signUp(page);
+
+  // A new user with no location permission: nothing is connected, and the
+  // page says so rather than showing made-up context.
+  const sources = page.getByRole("region", { name: "Data sources" }).getByRole("listitem");
+  await expect(sources).toHaveText([
+    /Sleep log\s*not connected\s*No nights logged yet/,
+    /Weather\s*not connected\s*Not connected: allow location for live weather\s*Use my location/,
+    /Calendar\s*not connected\s*Not connected/,
+    /Wearable\s*not connected\s*Not connected/,
+  ]);
+
   await addAlarmOneMinuteAhead(page, label);
 
   await waitForRingAndOpenChallenge(page);

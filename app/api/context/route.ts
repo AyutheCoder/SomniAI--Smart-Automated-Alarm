@@ -3,14 +3,16 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { ContextSnapshot } from "@/models/ContextSnapshot";
-import { buildContextData, type ContextData } from "@/lib/context";
+import { buildContextData } from "@/lib/context";
+import { describeDataSources } from "@/lib/aiFeatures";
 import { isNum } from "@/lib/validate";
 
 interface ContextBody {
   simulate?: boolean;
   lat?: number;
   lon?: number;
-  override?: ContextData;
+  // `override` (store whatever values the caller sends) is gone: no client
+  // used it, and values typed in by a caller are neither live nor simulated.
 }
 
 function invalidContext(body: ContextBody): string | null {
@@ -28,24 +30,13 @@ function invalidContext(body: ContextBody): string | null {
   if (body.simulate !== undefined && typeof body.simulate !== "boolean") {
     return "simulate must be true or false";
   }
-  if (body.override !== undefined) {
-    const o = body.override as unknown;
-    if (o === null || typeof o !== "object" || Array.isArray(o)) {
-      return "override must be an object";
-    }
-    const calendar = (o as ContextData).calendar;
-    if (calendar !== undefined) {
-      const ok = Array.isArray(calendar) && calendar.every((c) =>
-        c !== null && typeof c === "object" && typeof c.title === "string" && c.title.trim() !== ""
-        && !Number.isNaN(new Date(c.start).getTime()));
-      if (!ok) {
-        return "Each calendar entry needs a title and a valid start";
-      }
-    }
+  if ("override" in body) {
+    return "override is no longer accepted; context is built from connected sources";
   }
   return null;
 }
 
+/** Recent snapshots, and which of the user's data sources are connected. */
 export async function GET(req: NextRequest) {
   return guard(async () => {
     const userId = await getUserId();
@@ -55,11 +46,11 @@ export async function GET(req: NextRequest) {
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
     const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit")) || 10));
-    const items = await ContextSnapshot.find({ userId })
-      .sort({ at: -1 })
-      .limit(limit)
-      .lean();
-    return jsonOk({ items, total: items.length });
+    const [items, sources] = await Promise.all([
+      ContextSnapshot.find({ userId }).sort({ at: -1 }).limit(limit).lean(),
+      describeDataSources(userId),
+    ]);
+    return jsonOk({ items, total: items.length, sources });
   });
 }
 
@@ -74,13 +65,7 @@ export async function POST(req: NextRequest) {
     if (invalid) {
       return jsonError(invalid, 422);
     }
-    const data = body.override
-      ? body.override
-      : await buildContextData({
-          simulate: body.simulate,
-          lat: body.lat,
-          lon: body.lon,
-        });
+    const data = await buildContextData({ simulate: body.simulate, lat: body.lat, lon: body.lon });
 
     const calendar = (data.calendar ?? []).map((c) => ({
       title: c.title,
@@ -95,11 +80,9 @@ export async function POST(req: NextRequest) {
       weather: data.weather,
       calendar: calendar.length > 0 ? calendar : undefined,
       wearable: data.wearable,
-      // This used to say "live" when simulate was true, i.e. exactly when
-      // everything was simulated, and called the user's own data simulated.
-      // Calendar and wearable values are always simulated today, so a built
-      // snapshot is never wholly live; per-source labels come with real sources.
-      source: body.override ? "manual" : "simulated",
+      // One label per group. The single `source` this replaced said "live"
+      // exactly when everything was simulated.
+      sources: data.sources,
     });
     return jsonOk(doc.toObject(), { status: 201 });
   });

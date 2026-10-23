@@ -65,6 +65,13 @@ describe("POST /api/sleep-logs", () => {
     expect((await SleepLog.findOne({ userId: alice }).lean<{ durationHours: number }>())?.durationHours).toBe(8);
   });
 
+  it("stores a simulator night as simulated, so it never reaches a model", async () => {
+    signInAs(alice);
+    const res = await read(await upsert(request("POST", "/api/sleep-logs", { date: "2026-10-21", durationHours: 5, source: "simulated" })));
+    expect(res.status).toBe(201);
+    expect(res.body.data.source).toBe("simulated");
+  });
+
   it("cannot overwrite another user's night, even for the same date or with their userId", async () => {
     await SleepLog.create({ userId: bob, date: "2026-10-21", durationHours: 9 });
     signInAs(alice);

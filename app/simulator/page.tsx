@@ -20,7 +20,7 @@ import type { BehavioralMetrics } from "@/lib/features";
 
 interface ContextSnapshotView {
   at: string;
-  source: string;
+  sources?: { weather: string; calendar: string; wearable: string };
   weather?: {
     tempC: number;
     condition: string;
@@ -42,6 +42,8 @@ type EventPayload = {
   value?: number;
   meta?: Record<string, unknown>;
   at?: string;
+  /** Defaults to simulated: only a real browser sensor reading is live. */
+  source?: "live" | "simulated";
 };
 
 function ymd(d: Date) {
@@ -60,7 +62,7 @@ export default function SimulatorPage() {
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events }),
+      body: JSON.stringify({ events: events.map((e) => ({ source: "simulated", ...e })) }),
     });
     return res.json();
   }
@@ -231,7 +233,7 @@ function MotionTile({
         async () => {
           if (!sample) return;
           await onLog([
-            { type: "motion", value: Math.round(sample.magnitude * 100) / 100 },
+            { type: "motion", value: Math.round(sample.magnitude * 100) / 100, source: simulated ? "simulated" : "live" },
           ]);
           flash("Logged motion sample");
         }
@@ -270,7 +272,7 @@ function MicTile({
         async () => {
           if (!sample) return;
           await onLog([
-            { type: "ambient_noise", value: Math.round(sample.rms * 1000) / 1000 },
+            { type: "ambient_noise", value: Math.round(sample.rms * 1000) / 1000, source: simulated ? "simulated" : "live" },
           ]);
           flash("Logged ambient noise");
         }
@@ -314,7 +316,7 @@ function ScreenTile({
         async () => {
           if (!sample) return;
           await onLog([
-            { type: sample.state, value: Math.round(sample.idleMs) },
+            { type: sample.state, value: Math.round(sample.idleMs), source: simulated ? "simulated" : "live" },
           ]);
           flash("Logged screen state");
         }
@@ -415,7 +417,8 @@ function InjectSleep({
           durationHours: duration,
           snoozeCount,
           wakeConfidence: confidence,
-          source: "manual",
+          // Nights made up in the simulator are simulated, whoever types them.
+          source: "simulated",
         }),
       });
       const json = await res.json();
@@ -451,7 +454,7 @@ function InjectSleep({
             snoozeCount: snoozes,
             alarmResponseMs: responseMs,
             wakeConfidence: conf,
-            source: "sensor",
+            source: "simulated",
           }),
         });
 
@@ -601,21 +604,21 @@ function ContextPanel({ flash }: { flash: (m: string) => void }) {
             <div className="flex items-center gap-2 text-slate-300">
               <CloudSun className="h-4 w-4 text-amber-300" />
               {snapshot.weather.condition} · {snapshot.weather.tempC}°C
-              <span className="ml-auto text-[10px] uppercase tracking-wide text-slate-500">
-                {snapshot.source}
-              </span>
+              <SourceTag source={snapshot.sources?.weather} />
             </div>
           )}
           {snapshot.wearable && (
             <div className="flex items-center gap-2 text-slate-300">
               <Watch className="h-4 w-4 text-emerald-300" />
               {snapshot.wearable.restingHr} bpm · {snapshot.wearable.steps} steps · {snapshot.wearable.lastSleepHours} h sleep
+              <SourceTag source={snapshot.sources?.wearable} />
             </div>
           )}
           {snapshot.calendar && snapshot.calendar.length > 0 && (
             <div>
               <p className="mb-1 flex items-center gap-2 text-slate-300">
                 <CalendarDays className="h-4 w-4 text-indigo-300" /> Upcoming
+                <SourceTag source={snapshot.sources?.calendar} />
               </p>
               <ul className="space-y-1 pl-6 text-xs text-slate-400">
                 {snapshot.calendar.map((c, i) => (
@@ -632,6 +635,15 @@ function ContextPanel({ flash }: { flash: (m: string) => void }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** A snapshot group's source; snapshots from before sources existed say so. */
+function SourceTag({ source }: { source?: string }) {
+  return (
+    <span className="ml-auto text-[10px] uppercase tracking-wide text-slate-500">
+      {source ?? "source unknown"}
+    </span>
   );
 }
 

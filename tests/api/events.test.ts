@@ -20,9 +20,14 @@ describe("POST /api/events", () => {
     ["no events", {}, 422, /No events provided/],
     ["an unknown type", { type: "teleport" }, 422, /Unknown event type: teleport/],
     ["a bad timestamp", { type: "motion", at: "dawn" }, 422, /Invalid event timestamp/],
-    ["a null entry in a batch", { events: [{ type: "motion" }, null] }, 422, /Each event must be an object/],
+    ["a null entry in a batch", { events: [{ type: "motion", source: "live" }, null] }, 422, /Each event must be an object/],
     ["a non-numeric value", { type: "motion", value: "lots" }, 422, /value must be a number/],
     ["a batch over 200", { events: Array.from({ length: 201 }, () => ({ type: "motion" })) }, 422, /max 200/],
+    ["an event without a source", { type: "motion", value: 1 }, 422, /Each event needs a source: live or simulated/],
+    ["an unknown source", { type: "motion", source: "probably" }, 422, /Each event needs a source/],
+    ["a batch where one event lacks a source", {
+      events: [{ type: "motion", source: "live" }, { type: "motion" }],
+    }, 422, /Each event needs a source/],
   ])("rejects %s with a clear error and writes nothing", async (_what, body, status, message) => {
     signInAs(alice);
     const res = await read(await record(request("POST", "/api/events", body)));
@@ -33,14 +38,25 @@ describe("POST /api/events", () => {
 
   it("records a single event and a batch for the caller", async () => {
     signInAs(alice);
-    const one = await read(await record(request("POST", "/api/events", { type: "screen_on", userId: bob })));
+    const one = await read(await record(request("POST", "/api/events", { type: "screen_on", source: "live", userId: bob })));
     expect(one).toEqual({ status: 201, body: { ok: true, data: { inserted: 1 } } });
     const batch = await read(await record(request("POST", "/api/events", {
       events: [{ type: "motion", value: 0.4 }, { type: "ambient_noise", value: 41, at: "2026-10-21T06:00:00Z" }],
+      source: "simulated",
     })));
     expect(batch.body.data.inserted).toBe(2);
     expect(await BehaviorEvent.countDocuments({ userId: alice })).toBe(3);
     expect(await BehaviorEvent.countDocuments({ userId: bob })).toBe(0);
+  });
+
+  it("stores each event's source; an event's own source overrides the batch's", async () => {
+    signInAs(alice);
+    await record(request("POST", "/api/events", {
+      source: "simulated",
+      events: [{ type: "motion", value: 1 }, { type: "ambient_noise", value: 40, source: "live" }],
+    }));
+    const stored = await BehaviorEvent.find({ userId: alice }).sort({ type: 1 }).lean<{ type: string; source: string }[]>();
+    expect(stored.map((e) => [e.type, e.source])).toEqual([["ambient_noise", "live"], ["motion", "simulated"]]);
   });
 });
 
