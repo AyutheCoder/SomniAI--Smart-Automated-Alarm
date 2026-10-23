@@ -23,7 +23,7 @@ What the project needs, read from the generated files rather than assumed:
 
 | Need | Why | Source |
 | --- | --- | --- |
-| JDK 21 (21-24 work) | Capacitor compiles for Java 21; Gradle 8.14.3 can't run on newer. JDK 26 fails with `Unsupported class file major version 70` | `node_modules/@capacitor/android/capacitor/build.gradle`, `android/gradle/wrapper/gradle-wrapper.properties` |
+| JDK 21 (21-24 work) | Capacitor compiles for Java 21; Gradle 8.14.3 can't run on newer. Tried here: JDK 25 fails with `Unsupported class file major version 69`, JDK 26 with `70` | `node_modules/@capacitor/android/capacitor/build.gradle`, `android/gradle/wrapper/gradle-wrapper.properties` |
 | Android SDK Platform 36 | `compileSdkVersion = 36` | `android/variables.gradle` |
 | SDK Build-Tools, Platform-Tools | building and installing (`adb`) | Android Gradle Plugin 8.13.0 |
 | Android Emulator + an x86_64 system image | running the APK without a phone | |
@@ -31,16 +31,22 @@ What the project needs, read from the generated files rather than assumed:
 Steps:
 
 1. **Install Android Studio** (the current stable release) from
-   <https://developer.android.com/studio>. It brings its own JDK 21, so you
-   don't need to install Java separately; the JDK 26 already installed stays
-   as it is and is simply not used for Android builds.
+   <https://developer.android.com/studio>.
 2. **Run its setup wizard** on first start and choose **Standard**. That
-   installs the SDK, Platform-Tools, Build-Tools and the Emulator.
-3. **Add API 36** if the wizard installed a different one: *More Actions →
+   installs the SDK, Platform-Tools, Build-Tools and the Emulator. If the
+   wizard was skipped or closed, *More Actions → SDK Manager* offers to install
+   the SDK instead.
+3. **Get a JDK 21 through Android Studio.** Its own bundled JDK is too new:
+   Android Studio 2026.2.1 bundles JDK 25, which this Gradle can't run on.
+   *Settings → Build, Execution, Deployment → Build Tools → Gradle → Gradle JDK
+   → Download JDK…*, version **21**, vendor **Eclipse Temurin**. It goes into
+   `.jdks` in your user folder, where `npm run android:doctor` looks. The JDK
+   26 already installed stays as it is and is not used for Android builds.
+4. **Add API 36** if the wizard installed a different one: *More Actions →
    SDK Manager → SDK Platforms →* tick **Android 16.0 ("Baklava") API 36**, then
    *SDK Tools →* make sure **Android SDK Build-Tools**, **Android SDK
    Platform-Tools** and **Android Emulator** are ticked. Apply.
-4. **Turn on Windows Hypervisor Platform.** Virtualization-based security is
+5. **Turn on Windows Hypervisor Platform.** Virtualization-based security is
    running on this machine, so the emulator can only accelerate through it. In
    an **administrator** PowerShell:
    ```powershell
@@ -48,11 +54,11 @@ Steps:
    Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform   # if State is Disabled
    ```
    Restart when asked.
-5. **Create a virtual device:** *More Actions → Virtual Device Manager → Create
+6. **Create a virtual device:** *More Actions → Virtual Device Manager → Create
    device →* a Pixel phone *→* system image **API 36, Google APIs, x86_64**.
    This machine has 8 GB of RAM and little free, so under *Advanced* give the
    device **2048 MB** of RAM, and close other apps before starting it.
-6. **Check:** `npm run android:doctor` should report everything OK. It looks for
+7. **Check:** `npm run android:doctor` should report everything OK. It looks for
    the JDK in `JAVA_HOME`, then where Android Studio installed its own, then the
    `java` on your PATH; and for the SDK in `ANDROID_HOME`, `ANDROID_SDK_ROOT`,
    then Android Studio's default location. If it can't find them, set

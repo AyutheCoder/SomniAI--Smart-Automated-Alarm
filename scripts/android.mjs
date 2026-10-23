@@ -52,6 +52,15 @@ function javaOnPath() {
   return m ? m[1].trim() : null;
 }
 
+/**
+ * JDKs that Android Studio's "Download JDK" put in ~/.jdks. Each is version
+ * checked like any other candidate; only folders that exist are listed.
+ */
+function downloadedJdks() {
+  const dir = join(homedir(), ".jdks");
+  return listDir(dir).map((name) => join(dir, name)).filter((d) => statSync(d).isDirectory());
+}
+
 /** Where Android Studio puts its bundled JDK, for installs that exist. */
 function androidStudioJdks() {
   const dirs = WIN
@@ -81,7 +90,7 @@ export function findToolchain() {
   const missing = [];
   const notes = [];
 
-  const jdkCandidates = [...new Set([process.env.JAVA_HOME, ...androidStudioJdks(), javaOnPath()].filter(Boolean))];
+  const jdkCandidates = [...new Set([process.env.JAVA_HOME, ...downloadedJdks(), ...androidStudioJdks(), javaOnPath()].filter(Boolean))];
   let jdk = null;
   for (const home of jdkCandidates) {
     const major = javaMajor(home);
@@ -94,13 +103,13 @@ export function findToolchain() {
     }
   }
   if (!jdk) {
-    missing.push(`JDK ${JDK_MIN}: install Android Studio (it bundles one) or a JDK ${JDK_MIN}, then set JAVA_HOME to it`);
+    missing.push(`JDK ${JDK_MIN}: in Android Studio, Settings > Build Tools > Gradle > Gradle JDK > Download JDK > version ${JDK_MIN} (Android Studio's own bundled JDK is too new), or set JAVA_HOME to a JDK ${JDK_MIN}`);
   }
 
   const sdk = sdkCandidates()[0] ?? null;
   const sdkParts = {};
   if (!sdk) {
-    missing.push("Android SDK: install Android Studio and run its setup wizard, or set ANDROID_HOME");
+    missing.push("Android SDK: in Android Studio, More Actions > SDK Manager, and let it install the SDK (or finish the setup wizard), or set ANDROID_HOME");
   }
   else {
     sdkParts.platform = existsSync(join(sdk, "platforms", PLATFORM));

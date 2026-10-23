@@ -122,7 +122,8 @@ routes with **no tests** (0.3).
   resumes. Datasets are only needed for prompt 5.2.
 - **JDK 26 is installed and too new for Android builds**: Gradle 8.14.3 fails
   on it with `Unsupported class file major version 70`. Android needs JDK 21
-  (Android Studio bundles one); `scripts/android.mjs` finds a usable JDK and
+  (Android Studio 2026.2.1 bundles JDK 25, also too new: download a 21 from
+  its Gradle JDK setting); `scripts/android.mjs` finds a usable JDK and
   never uses the 26 for Gradle.
 - **Java needs IPv4 on this network.** Java downloads (the Gradle wrapper,
   Maven) time out trying IPv6 first while curl works; `-Djava.net.preferIPv4Stack=true`
