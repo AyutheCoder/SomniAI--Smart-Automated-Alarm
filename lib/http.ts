@@ -106,7 +106,9 @@ export function routeError(err: unknown) {
   // (MongoServerSelectionError vs MongooseServerSelectionError), so match the
   // family rather than an exhaustive list of exact names.
   const isConnectionFailure =
-    /^Mongoo?se?(ServerSelection|Network|NotConnected|Timeout|Topology)/.test(name) ||
+    // "Mongo" or "Mongoose", then the condition. This was /^Mongoo?se?(...)/,
+    // which demands an "s" after "Mongo" and so missed every driver error.
+    /^Mongo(ose)?(ServerSelection|Network|NotConnected|Timeout|Topology)/.test(name) ||
     /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|server selection|topology was destroyed|buffering timed out/i.test(
       e.message ?? "",
     );

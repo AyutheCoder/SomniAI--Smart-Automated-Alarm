@@ -35,6 +35,8 @@ async function addAlarmOneMinuteAhead(page: Page, label: string, strategy?: "gen
   }
   await form.getByRole("button", { name: "Add alarm" }).click();
   await expect(alarmRow(page, label)).toContainText("scheduled");
+  // No AI Brain in the e2e server, so the plan is rule-based and says so.
+  await expect(alarmRow(page, label)).toContainText("plan: rule-based");
 }
 
 async function waitForRingAndOpenChallenge(page: Page) {
@@ -113,18 +115,17 @@ test("a wrong answer does not turn the alarm off, and unset backups say so", asy
   await page.getByRole("button", { name: "Check answer" }).click();
 
   await expect(page.getByText("Incorrect — try again.")).toBeVisible();
-  // The alarm rings without waiting on the server; wait for the fire to land.
-  await expect.poll(() => alarmStatus(page, label), SERVER).toBe("ringing");
   // Still ringing a while later: the challenge is up and nothing was dismissed.
   await page.waitForTimeout(5_000);
   await expect(page.getByRole("button", { name: "Check answer" })).toBeVisible();
-  expect(await alarmStatus(page, label)).toBe("ringing");
+  await expect(alarmRow(page, label)).toContainText("ringing");
 
+  // Since 1.4 the server is told nothing while the alarm rings (it used to get
+  // a "fire" call here): its record is untouched and it has no events at all,
+  // so certainly no dismissal or passed wake check.
+  expect(await alarmStatus(page, label)).toBe("scheduled");
   const events = await (await page.request.get("/api/events")).json();
-  const types = events.data.items.map((e: { type: string }) => e.type);
-  expect(types).toContain("alarm_fire");
-  expect(types).not.toContain("dismiss");
-  expect(types).not.toContain("verify_pass");
+  expect(events.data.items).toEqual([]);
 
   // Still unanswered at the last level: the backups are tried, and since none
   // is set up, each one says exactly that and nothing claims to have fired.
@@ -135,4 +136,77 @@ test("a wrong answer does not turn the alarm off, and unset backups say so", asy
   );
   await expect(page.getByText(/\bsent\b|activated|triggered/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check answer" })).toBeVisible();
+});
+
+test("with the database down at ring time, the alarm still rings and is dismissed, then syncs", async ({ page }) => {
+  const label = `Interview ${Date.now()}`;
+  // Records each fetch/XHR to /api, with whether the ringing screen was on
+  // screen at that exact moment. Installed before any page script runs.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __apiCalls: { path: string; ringing: boolean }[] };
+    w.__apiCalls = [];
+    const note = (url: string) => {
+      const path = new URL(url, location.href).pathname;
+      if (path.startsWith("/api/")) {
+        w.__apiCalls.push({
+          path,
+          ringing: document.documentElement.dataset.ringing === "true" || document.querySelector("[data-ringing]") !== null,
+        });
+      }
+    };
+    const realFetch = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      note(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      return realFetch(input, init);
+    };
+    const realOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]) {
+      note(String(url));
+      return (realOpen as (...a: unknown[]) => void).call(this, method, url, ...rest);
+    } as typeof XMLHttpRequest.prototype.open;
+  });
+  await signUp(page);
+  await addAlarmOneMinuteAhead(page, label);
+
+  // The database goes down. Every API route then answers 503, as the routes do
+  // when Mongo is unreachable; sign-in uses a token, not the database, so it
+  // keeps working.
+  const dataApi = (url: URL) => /^\/api\/(?!auth\/)/.test(url.pathname);
+  await page.route(dataApi, (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ ok: false, error: "The database is unavailable. Please try again shortly." }),
+  }));
+
+  // Even a reload during the outage still knows the alarm, from this device.
+  await page.reload();
+  const sync = page.getByRole("status", { name: "Sync status" });
+  await expect(sync).toContainText("Can't reach the server right now. Alarms still ring from this device.");
+  await expect(alarmRow(page, label)).toContainText("scheduled");
+
+  await waitForRingAndOpenChallenge(page);
+  await page.getByPlaceholder("Answer").fill(String(await readProblem(page)));
+  await page.getByRole("button", { name: "Check answer" }).click();
+  await expect(page.getByText("You're awake — good morning!")).toBeVisible();
+  await expect(page.locator("[data-ringing]")).toHaveCount(0, { timeout: 15_000 });
+
+  // Every API call the page made, and whether the ringing screen was up at
+  // that moment: none may have been, and the outcome is only sent afterwards.
+  const calls = await page.evaluate(() => (window as unknown as { __apiCalls: { path: string; ringing: boolean }[] }).__apiCalls);
+  const duringRing = calls.filter((c) => c.ringing && !c.path.startsWith("/api/auth/"));
+  expect(duringRing, "API calls made while the alarm was ringing").toEqual([]);
+  await expect.poll(async () => (await page.evaluate(() =>
+    (window as unknown as { __apiCalls: { path: string }[] }).__apiCalls.map((c) => c.path))).some((p) => p.endsWith("/fire")))
+    .toBe(true);
+
+  // Dismissed on the device; the server is still unreachable, so the outcome waits.
+  await expect(alarmRow(page, label)).toContainText("dismissed");
+  await expect(sync).toContainText(/alarm updates? (is|are) waiting to reach the server/);
+
+  // The database is back: the waiting updates go through on their own, and
+  // the server, which scores the wake check itself, records it as verified.
+  await page.unroute(dataApi);
+  await expect.poll(() => alarmStatus(page, label), { timeout: 45_000 }).toBe("verified");
+  await expect(alarmRow(page, label)).toContainText("verified", { timeout: 20_000 });
+  await expect(sync).toBeHidden();
 });

@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **1.4** |
-| Last completed | 1.3 ("wake-time regularity" everywhere; every prediction shows origin + plain-words confidence; wording rules in `lib/predictionCopy.ts`, enforced by `tests/ui/rendered-text.test.tsx`) |
+| **Next prompt** | **1.5** |
+| Last completed | 1.4 (self-contained `ringPlan` on every alarm, computed at creation with Brain/fallback recorded; ring time makes no server call, proven by `tests/ui/ring-time-offline.test.ts` and the database-down e2e flow; outbox + device cache for outages) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
@@ -95,6 +95,7 @@ routes with **no tests** (0.3).
 | `app/` | Next.js pages, components, 23 API routes under `app/api/` (the plan says 22) |
 | `tests/api/` | Route integration tests, in-memory MongoDB, session stubbed in `setup.ts` |
 | `lib/` | Core logic: `scheduler.ts`, `escalation.ts`, `wakeConfidence.ts` (gated scoring), `backupAdapters.ts` (currently fake), `context/` (calendar/wearable simulated), `sensors/` (silent simulated fallbacks) |
+| `lib/ringPlan.ts` | What an alarm needs to ring, fixed at creation (`ringPlanServer.ts` computes it). Ring time reads only this; outcomes go through `lib/outbox.ts` afterwards |
 | `models/` | Mongoose models |
 | `ai-brain/` | FastAPI service: `wake_plan.py` (the paper's method), `semantic.py`, `predict.py` |
 | `INVENTION_DISCLOSURE.md` | Patent notes. Public disclosure already happened 2026-08-05 |

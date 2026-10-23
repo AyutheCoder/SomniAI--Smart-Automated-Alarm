@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { foreignTaskError } from "@/lib/ownership";
+import { computeRingPlan } from "@/lib/ringPlanServer";
 import { Alarm } from "@/models/Alarm";
 
 interface CreateAlarmBody {
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
         return jsonError(taskError, 422);
       }
     }
-    const doc = await Alarm.create({
+    const doc = new Alarm({
       userId,
       label,
       scheduledTime,
@@ -87,6 +88,11 @@ export async function POST(req: NextRequest) {
       minConfidence: body.minConfidence ?? 70,
       repeat: body.repeat || { type: "none" },
     });
-    return jsonOk(doc, { status: 201 });
+    // Validate before asking the AI Brain anything, then fix everything the
+    // alarm needs to ring into the record itself.
+    await doc.validate();
+    doc.ringPlan = await computeRingPlan(userId, doc);
+    await doc.save();
+    return jsonOk(doc.toObject(), { status: 201 });
   });
 }

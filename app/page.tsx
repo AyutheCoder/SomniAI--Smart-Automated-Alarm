@@ -1,10 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AlarmClock, BarChart3, CheckCircle2, Circle, ListTodo, LogOut, Moon, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import type { Alarm, Priority, Task, WakeStrategy } from "@/lib/types";
+import { Outbox, browserStore } from "@/lib/outbox";
+import { loadAlarmCache, mergeWithLocal, saveAlarmCache } from "@/lib/alarmCache";
+import { dismissLocally, snoozeLocally, syncCalls } from "@/lib/ringFlow";
+import { resolveRingPlan } from "@/lib/ringPlan";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
@@ -62,7 +66,21 @@ export default function Home() {
   const [alarmVerify, setAlarmVerify] = useState(true);
   const [alarmMethods, setAlarmMethods] = useState<string[]>(["math"]);
 
+  const userId = session?.user?.id ?? null;
+  // What a ring changed is recorded here and sent once the ring is over, so
+  // nothing at ring time calls the server; it survives reloads and retries.
+  const outbox = useMemo(() => (userId ? new Outbox(browserStore(), `somniai.outbox.v1:${userId}`) : null), [userId]);
+  const ringingRef = useRef(false);
+  const flushingRef = useRef(false);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [offline, setOffline] = useState(false);
+
   const loadData = useCallback(async () => {
+    // Wait for the session: the device's own copy of the alarms is per user.
+    if (!userId) {
+      return;
+    }
+    const store = browserStore();
     try {
       const [tRes, aRes] = await Promise.all([
         fetch("/api/tasks"),
@@ -73,45 +91,95 @@ export default function Home() {
       if (tJson.ok) {
         setTasks(tJson.data.items);
       }
-      if (aJson.ok) {
-        setAlarms(aJson.data.items);
+      if (!aJson.ok) {
+        throw new Error(aJson.error ?? "alarms unavailable");
       }
+      setAlarms(mergeWithLocal(aJson.data.items, loadAlarmCache(store, userId), outbox?.pendingAlarmIds() ?? new Set()));
+      setOffline(false);
     } catch {
+      // The server or its database can't be reached: ring from what this
+      // device last knew rather than from nothing.
+      const cached = loadAlarmCache(store, userId);
+      if (cached) {
+        setAlarms(cached);
+      }
+      setOffline(true);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId, outbox]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  const fireAlarm = useCallback(async (alarm: Alarm) => {
-    setRingingAlarm(alarm);
-    try {
-      const res = await fetch(`/api/alarms/${alarm._id}/fire`, { method: "POST" });
-      const json = await res.json();
-      if (json.ok) {
-        setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? json.data : a)));
-      }
-    } catch {
+  useEffect(() => {
+    if (userId && !loading) {
+      saveAlarmCache(browserStore(), userId, alarms);
     }
+  }, [alarms, userId, loading]);
+
+  const flushOutbox = useCallback(async () => {
+    // Never while an alarm is ringing.
+    if (!outbox || ringingRef.current || flushingRef.current) {
+      return;
+    }
+    if (outbox.pending().length === 0) {
+      setPendingSync(0);
+      return;
+    }
+    flushingRef.current = true;
+    try {
+      const result = await outbox.flush((entry) => fetch(entry.path, {
+        method: entry.method,
+        headers: { "Content-Type": "application/json" },
+        body: entry.body === undefined ? undefined : JSON.stringify(entry.body),
+      }));
+      // Once an alarm has nothing left to send, the server's copy is current.
+      const stillPending = outbox.pendingAlarmIds();
+      if (result.alarms.size > 0) {
+        setAlarms((prev) => prev.map((a) => (
+          !stillPending.has(a._id) && result.alarms.has(a._id) ? (result.alarms.get(a._id) as unknown as Alarm) : a
+        )));
+      }
+      setOffline(result.stalled);
+    }
+    finally {
+      flushingRef.current = false;
+      setPendingSync(outbox.pending().length);
+    }
+  }, [outbox]);
+
+  useEffect(() => {
+    if (!outbox) {
+      return;
+    }
+    void flushOutbox();
+    const timer = setInterval(() => void flushOutbox(), 15_000);
+    const online = () => void flushOutbox();
+    window.addEventListener("online", online);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("online", online);
+    };
+  }, [outbox, flushOutbox]);
+
+  // Rings from the alarm record alone; the server hears about it afterwards.
+  const fireAlarm = useCallback((alarm: Alarm) => {
+    ringingRef.current = true;
+    // Marks the whole ring, from this instant until the ringing screen has
+    // closed; the end-to-end test checks that no API call falls inside it.
+    document.documentElement.dataset.ringing = "true";
+    setRingingAlarm(alarm);
+    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "ringing" } : a)));
   }, []);
 
-  const markMissed = useCallback(async (alarm: Alarm) => {
-    try {
-      const res = await fetch(`/api/alarms/${alarm._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "missed", enabled: false }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? json.data : a)));
-      }
-    } catch {
-    }
-  }, []);
+  const markMissed = useCallback((alarm: Alarm) => {
+    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "missed", enabled: false } : a)));
+    outbox?.enqueue([{ alarmId: alarm._id, method: "PATCH", path: `/api/alarms/${alarm._id}`, body: { status: "missed", enabled: false } }]);
+    setPendingSync(outbox?.pending().length ?? 0);
+    void flushOutbox();
+  }, [outbox, flushOutbox]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -218,68 +286,49 @@ export default function Home() {
     }
   }
 
-  async function resolveAlarm(result: ResolveResult) {
+  // The ring is over: its outcome takes effect on this device at once (a
+  // snoozed alarm is armed again, a repeating one moves to its next time), and
+  // the server is told afterwards through the outbox, which keeps trying if it
+  // can't get through.
+  function resolveAlarm(result: ResolveResult) {
     const alarm = ringingAlarm;
     setRingingAlarm(null);
+    ringingRef.current = false;
     if (!alarm) {
       return;
     }
-    if (result.snoozed) {
-      const res = await fetch(`/api/alarms/${alarm._id}/snooze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snoozeMinutes: 5, responseMs: result.responseMs }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        firedIdsRef.current.delete(alarm._id);
-        setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? json.data : a)));
-      }
-    } else {
-      // An alarm with no challenge has nothing to verify; posting one anyway
-      // recorded a failed verification on every such wake.
-      const challenged = alarm.verificationRequired && alarm.verificationMethod !== "none";
-      if (challenged) {
-        await fetch(`/api/alarms/${alarm._id}/verify`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            methods: result.methods,
-            responseMs: result.responseMs,
-            attempts: result.attempts,
-            motion: result.motion,
-            // The server scores from these; it does not take a client score.
-            solved: result.solved,
-            correctness: result.correctness,
-          }),
-        });
-      }
-      if (result.escalationLevel >= 5) {
-        await fetch(`/api/alarms/${alarm._id}/escalate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // What each backup channel actually did, not the list it was asked to try.
-          body: JSON.stringify({
-            level: result.escalationLevel,
-            backups: result.backups.map((b) => ({ kind: b.kind, status: b.status })),
-          }),
-        });
-      }
-      const res = await fetch(`/api/alarms/${alarm._id}/dismiss`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // The server decides "verified" from its own verify record.
-        body: JSON.stringify({ responseMs: result.responseMs }),
-      });
-      const json = await res.json();
-      if (json.ok) {
-        if (json.data.enabled && json.data.status === "scheduled") {
-          firedIdsRef.current.delete(alarm._id);
-        }
-        setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? json.data : a)));
-      }
+    const now = new Date();
+    const local = result.snoozed ? snoozeLocally(alarm, now) : dismissLocally(alarm, now);
+    if (local.status === "scheduled") {
+      firedIdsRef.current.delete(alarm._id);
     }
+    setAlarms((prev) => prev.map((a) => (a._id === alarm._id ? local : a)));
+    outbox?.enqueue(syncCalls(alarm._id, {
+      snoozed: result.snoozed,
+      snoozedUntil: result.snoozed ? local.scheduledTime : undefined,
+      responseMs: result.responseMs,
+      // An alarm with no challenge has nothing to verify.
+      challenged: resolveRingPlan(alarm).challenge.required,
+      methods: result.methods,
+      attempts: result.attempts,
+      motion: result.motion,
+      solved: result.solved,
+      correctness: result.correctness,
+      escalationLevel: result.escalationLevel,
+      backups: result.backups.map((b) => ({ kind: b.kind, status: b.status })),
+    }));
+    setPendingSync(outbox?.pending().length ?? 0);
+    // Sent by the effect below, once the ringing screen has actually closed.
   }
+
+  // The ring is over only when the ringing screen has gone; send what it
+  // queued after that, never in the same moment it is dismissed.
+  useEffect(() => {
+    if (!ringingAlarm) {
+      delete document.documentElement.dataset.ringing;
+      void flushOutbox();
+    }
+  }, [ringingAlarm, flushOutbox]);
 
   const pendingTasks = tasks.filter((t) => !t.completed).length;
   const upcomingAlarms = alarms.filter((a) => a.enabled && a.status === "scheduled").length;
@@ -328,6 +377,13 @@ export default function Home() {
           </button>
         </div>
       </header>
+
+      {(offline || pendingSync > 0) && (
+        <p role="status" aria-label="Sync status" className="mb-6 rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
+          {offline && "Can't reach the server right now. Alarms still ring from this device. "}
+          {pendingSync > 0 && `${pendingSync} alarm ${pendingSync === 1 ? "update is" : "updates are"} waiting to reach the server.`}
+        </p>
+      )}
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Pending tasks" value={pendingTasks} />
@@ -416,6 +472,10 @@ text-white transition hover:bg-indigo-400">
           {new Date(alarm.scheduledTime).toLocaleString()} • {" "}
           <span className="capitalize">{alarm.wakeStrategy}</span> • {" "}
           {alarm.status}
+          {" • "}
+          <span title={resolveRingPlan(alarm).note}>
+            {!alarm.ringPlan ? "plan: built on this device" : alarm.ringPlan.decidedBy === "ai" ? "plan: AI Brain" : "plan: rule-based"}
+          </span>
         </p>
       </div>
       <button onClick={() => deleteAlarm(alarm._id)} className="text-slate-500 transition hover:text-rose-400" aria-label="Delete alarm">

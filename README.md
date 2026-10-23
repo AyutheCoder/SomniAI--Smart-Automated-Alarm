@@ -148,6 +148,15 @@ only passes on a second try is a failure. Run `npx playwright install chromium` 
 
 The alarm only fires while a browser tab is open — there is no background
 scheduler or push delivery yet, so it is not yet a replacement for a phone alarm.
+
+Within that limit, ringing needs no server. Each alarm stores its whole ring
+plan (sound, escalation ladder, challenge, criticality) when it is set, along
+with whether the AI Brain or the rule-based fallback decided it and why. The
+ringing screen plays only from that record, so a server, database or AI Brain
+outage at ring time changes nothing: the alarm rings, its challenge runs and a
+snooze or dismissal takes effect on the device. The outcome is sent to the
+server afterwards and retried until it gets through, and the alarm list is
+kept on the device so a reload during an outage still has it.
 None of the backup channels can be set up yet, so every one of them reports
 "not set up"; the app never claims a backup reached anyone.
 

@@ -10,7 +10,15 @@ import { BehaviorEvent } from "@/models/BehaviorEvent";
 interface SnoozeBody {
   snoozeMinutes?: number;
   responseMs?: number;
+  /**
+   * When the browser set the alarm to ring again. Sent because the snooze is
+   * recorded after the ring, possibly much later if the server was down, and
+   * "now + minutes" at that point would be the wrong time.
+   */
+  until?: string;
 }
+
+const DAY_MS = 86_400_000;
 
 type RouteContext = {
   params: Promise<{
@@ -36,6 +44,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
       return jsonError("responseMs must be a non-negative number", 422);
     }
+    let until: Date | null = null;
+    if (body.until !== undefined) {
+      until = typeof body.until === "string" ? new Date(body.until) : null;
+      const offset = until ? until.getTime() - Date.now() : NaN;
+      if (!until || Number.isNaN(offset) || offset > 60 * 60_000 || offset < -DAY_MS) {
+        return jsonError("until must be a time within the last day or the next hour", 422);
+      }
+    }
     const minutes = body.snoozeMinutes ?? 5;
     const alarm = await Alarm.findOne({ _id: id, userId });
     if (!alarm) {
@@ -45,7 +61,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // and a recurring alarm re-armed from the snoozed time would drift later
     // every morning it is snoozed.
     alarm.snoozedFrom = alarm.snoozedFrom ?? alarm.scheduledTime;
-    alarm.scheduledTime = new Date(Date.now() + minutes * 60000);
+    alarm.scheduledTime = until ?? new Date(Date.now() + minutes * 60000);
     alarm.status = "scheduled";
     alarm.lastSnoozeCount = (alarm.lastSnoozeCount ?? 0) + 1;
     await alarm.save();

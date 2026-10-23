@@ -5,7 +5,9 @@ import { isInt, isStringList } from "@/lib/validate";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { buildUserSignals } from "@/lib/aiFeatures";
-import { predictSleep, predictWakeSuccess } from "@/lib/aiClient";
+import { aiBrainConfigured, predictSleep, predictWakeSuccess } from "@/lib/aiClient";
+import { computeRingPlan, type KnownPrediction } from "@/lib/ringPlanServer";
+import type { BrainStatus } from "@/lib/ringPlan";
 import {
   proposeAlarmsFromTasks,
   type SkippedTask,
@@ -168,7 +170,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const created = await persistPlans(userId, proposals);
+    const created = await persistPlans(userId, proposals, {
+      prediction: { offScheduleChance: prediction.oversleepProbability, source: predictionSource },
+      brain: !aiBrainConfigured() ? "not_configured" : predictionSource === "ai" ? "used" : "unreachable",
+    });
     const maintenance = body.runMaintenance === false ? undefined : await runLifecycle(userId, new Date());
     return jsonOk({
       mode,
@@ -200,10 +205,14 @@ function invalidSchedule(body: ScheduleBody): string | null {
   return null;
 }
 
-async function persistPlans(userId: string, plans: AlarmPlan[]) {
+async function persistPlans(
+  userId: string,
+  plans: AlarmPlan[],
+  known: { prediction: KnownPrediction; brain: BrainStatus },
+) {
   const created: Array<Record<string, unknown>> = [];
   for (const plan of plans) {
-    const doc = await Alarm.create({
+    const doc = new Alarm({
       userId,
       label: plan.label,
       scheduledTime: new Date(plan.scheduledTime),
@@ -225,7 +234,10 @@ async function persistPlans(userId: string, plans: AlarmPlan[]) {
         at: new Date(),
       },
     });
-    created.push(doc.toObject ? doc.toObject() : doc);
+    // The same prediction the scheduler planned with, fixed into the record.
+    doc.ringPlan = await computeRingPlan(userId, doc, known);
+    await doc.save();
+    created.push(doc.toObject());
   }
   return created;
 }

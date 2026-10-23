@@ -1,4 +1,5 @@
 import { Schema, model, models } from "mongoose";
+import type { RingPlan } from "@/lib/ringPlan";
 export type WakeStrategy = "gentle" | "adaptive" | "aggressive";
 export interface AlarmDecision {
   summary: string;
@@ -37,6 +38,8 @@ export interface AlarmDocument {
   /** When a snoozed alarm was originally due; recurring alarms re-arm from it. */
   snoozedFrom?: Date;
   decision?: AlarmDecision;
+  /** Everything needed to ring, fixed when the alarm is set (lib/ringPlan.ts). */
+  ringPlan?: RingPlan;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -86,5 +89,6 @@ const AlarmSchema = new Schema<AlarmDocument>({
   lastSnoozeCount: { type: Number, default: 0 },
   snoozedFrom: { type: Date },
   decision: { type: Schema.Types.Mixed, default: undefined },
+  ringPlan: { type: Schema.Types.Mixed, default: undefined },
 }, { timestamps: true });
 export const Alarm = models.Alarm || model<AlarmDocument>("Alarm", AlarmSchema);

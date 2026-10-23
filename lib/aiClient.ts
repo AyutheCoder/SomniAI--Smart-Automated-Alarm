@@ -1,6 +1,10 @@
 import type { BehavioralMetrics } from "@/lib/features";
 const AI_BRAIN_URL = process.env.AI_BRAIN_URL?.replace(/\/+$/, "") ?? "";
 const TIMEOUT_MS = 4000;
+/** Whether an AI Brain is configured at all, as opposed to configured and not answering. */
+export function aiBrainConfigured(): boolean {
+  return AI_BRAIN_URL !== "";
+}
 export type AISource = "ai" | "fallback";
 export type ModelFeatures = Record<string, number>;
 export interface SleepPrediction {

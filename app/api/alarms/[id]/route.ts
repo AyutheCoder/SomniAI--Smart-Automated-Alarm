@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { foreignTaskError } from "@/lib/ownership";
+import { computeRingPlan, type PlanContext } from "@/lib/ringPlanServer";
 import { Alarm } from "@/models/Alarm";
 
 const ALLOWED_FIELDS = [
@@ -21,6 +22,17 @@ const ALLOWED_FIELDS = [
   "status",
   "enabled",
   "lastSnoozeCount",
+] as const;
+
+/** Fields that change how an alarm rings, and so its ring plan. */
+const PLAN_FIELDS = [
+  "intensity",
+  "wakeStrategy",
+  "verificationRequired",
+  "verificationMethod",
+  "verificationMethods",
+  "minConfidence",
+  "linkedTaskId",
 ] as const;
 
 type RouteContext = {
@@ -94,6 +106,13 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     ).lean();
     if (!doc) {
       return jsonError("Alarm not found", 404);
+    }
+    // A change to how the alarm rings changes its ring plan; work it out now,
+    // never at ring time.
+    if (PLAN_FIELDS.some((key) => key in update)) {
+      const ringPlan = await computeRingPlan(userId, doc as unknown as PlanContext);
+      const replanned = await Alarm.findOneAndUpdate({ _id: id, userId }, { $set: { ringPlan } }, { new: true }).lean();
+      return jsonOk(replanned ?? doc);
     }
     return jsonOk(doc);
   });
