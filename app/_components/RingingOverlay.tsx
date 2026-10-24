@@ -14,15 +14,19 @@ import {
   notify,
 } from "@/lib/clientAlarm";
 import {
-  buildEscalationPlan,
-  personalizeEscalationPlan,
-  type EscalationProfile,
   levelForElapsed,
   STAGE_LABELS,
   type EscalationLevel,
 } from "@/lib/escalation";
-import { triggerBackups, type BackupResult } from "@/lib/backupAdapters";
+import {
+  BACKUP_LABELS,
+  describeOutcome,
+  dispatchBackups,
+  type BackupKind,
+  type BackupOutcome,
+} from "@/lib/backupAdapters";
 import { accumulateWakeEvidence, meetsThreshold } from "@/lib/wakeConfidence";
+import { resolveRingPlan } from "@/lib/ringPlan";
 import {
   CHALLENGE_COMPONENTS,
   CHALLENGE_LABELS,
@@ -34,7 +38,10 @@ export interface ResolveResult {
   confidence: number;
   snoozed: boolean;
   verified: boolean;
+  /** From the start of the ring to its end. */
   responseMs: number;
+  /** Time spent on the challenges themselves (lib/ringFlow.ts, timeOnTaskMs). */
+  timeOnTaskMs: number;
   methods: ChallengeType[];
   attempts: number;
   motion?: number;
@@ -43,48 +50,37 @@ export interface ResolveResult {
   /** Fraction of challenges solved, 0..1. */
   correctness: number;
   escalationLevel: number;
+  /** What each backup channel really did, if the ladder reached them. */
+  backups: BackupOutcome[];
 }
 
 interface RingingOverlayProps {
   alarm: Alarm;
   onResolved: (result: ResolveResult) => void;
-  /** Learned wake-response profile; omit to use the shared timeline. */
-  escalationProfile?: EscalationProfile | null;
 }
 
 type View = "ringing" | "challenge" | "result" | "done";
 
-const VALID_METHODS: ChallengeType[] = ["math", "typing", "shake", "qr"];
-
-function resolveMethods(alarm: Alarm): ChallengeType[] {
-  const raw = alarm.verificationMethods && alarm.verificationMethods.length > 0
-    ? alarm.verificationMethods
-    : [alarm.verificationMethod];
-  const picked = raw.filter((m): m is ChallengeType => VALID_METHODS.includes(m as ChallengeType));
-  return picked.length > 0 ? picked : ["math"];
-}
-
-export default function RingingOverlay({ alarm, onResolved, escalationProfile }: RingingOverlayProps) {
-  // Personalize the ladder when we know how this sleeper actually responds;
-  // falls back to the shared timeline until there are enough resolved alarms.
-  const plan = useMemo(() => {
-    const base = buildEscalationPlan(alarm.wakeStrategy);
-    if (!escalationProfile) {
-      return base;
-    }
-    return personalizeEscalationPlan(base, escalationProfile, {
-      critical: alarm.verificationRequired && (alarm.minConfidence ?? 0) >= 80,
-    });
-  }, [alarm.wakeStrategy, alarm.verificationRequired, alarm.minConfidence, escalationProfile]);
-  const methods = useMemo(() => resolveMethods(alarm), [alarm]);
-  const verifyRequired = alarm.verificationRequired && alarm.verificationMethod !== "none";
-  const minConfidence = alarm.minConfidence ?? 70;
+/**
+ * Rings from the alarm record alone: its ring plan fixes the sound, the whole
+ * escalation ladder and the challenge, so nothing here calls the server. An
+ * alarm stored before plans existed gets one built on the device.
+ */
+export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProps) {
+  const ringPlan = useMemo(() => resolveRingPlan(alarm), [alarm]);
+  const plan = ringPlan.escalation;
+  const methods = ringPlan.challenge.methods;
+  const verifyRequired = ringPlan.challenge.required;
+  const minConfidence = ringPlan.challenge.minConfidence;
+  const { intensity, strategy } = ringPlan.sound;
 
   const [view, setView] = useState<View>("ringing");
   const [level, setLevel] = useState<EscalationLevel>(plan[0]);
-  const [elapsedSec, setElapsedSec] = useState(0);
   const [methodIndex, setMethodIndex] = useState(0);
-  const [backups, setBackups] = useState<BackupResult[]>([]);
+  // Channels being tried, then what each one actually did.
+  const [backupsTrying, setBackupsTrying] = useState<BackupKind[]>([]);
+  const [backups, setBackups] = useState<BackupOutcome[]>([]);
+  const backupsRef = useRef<BackupOutcome[]>([]);
   const [results, setResults] = useState<ChallengeResult[]>([]);
   const [confidence, setConfidence] = useState(0);
   const [retryNote, setRetryNote] = useState("");
@@ -93,35 +89,48 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
   const lastSpokeRef = useRef(0);
   const backupsFiredRef = useRef(false);
 
+  // The page keys this overlay by alarm id, so these primitives are fixed for
+  // the life of one ring and the sound starts exactly once.
   useEffect(() => {
-    startAlarm({ intensity: alarm.intensity, strategy: alarm.wakeStrategy });
-    vibrate(alarm.wakeStrategy);
+    startAlarm({ intensity, strategy });
+    vibrate(strategy);
     speak(`Time to wake up. ${alarm.label}`);
     notify("⏰ SomniAI alarm", alarm.label);
     return () => {
       stopAlarm();
       stopVibration();
     };
-  }, []);
+  }, [intensity, strategy, alarm.label]);
 
+  // Not awaited by anything that rings: the alarm keeps going while channels
+  // are tried, and the panel shows each one's real outcome as it arrives.
   const fireBackups = useCallback((kinds: EscalationLevel["backup"]) => {
     if (backupsFiredRef.current || !kinds.length) return;
     backupsFiredRef.current = true;
-    const fired = triggerBackups(kinds, { alarmLabel: alarm.label });
-    setBackups(fired);
+    setBackupsTrying(kinds);
+    void dispatchBackups(kinds, {
+      alarmLabel: alarm.label,
+      text: `SomniAI: "${alarm.label}" has been ringing and has not been answered.`,
+    }).then((outcomes) => {
+      backupsRef.current = outcomes;
+      setBackups(outcomes);
+      setBackupsTrying([]);
+    });
   }, [alarm.label]);
 
+  // Elapsed time is measured from startedAt and the current level lives in a
+  // ref, so restarting the timer when the plan changes (a profile arriving
+  // mid-ring) loses nothing and never re-fires a level already reached.
   useEffect(() => {
     const timer = setInterval(() => {
       const secs = Math.floor((Date.now() - startedAt) / 1000);
-      setElapsedSec(secs);
       const next = levelForElapsed(secs, plan);
       if (next.level !== levelRef.current) {
         levelRef.current = next.level;
         setLevel(next);
         escalateAlarm(next.volumeFactor);
         if (next.vibrate) {
-          startVibrationLoop(alarm.wakeStrategy);
+          startVibrationLoop(strategy);
         }
         if (next.backup.length > 0) {
           fireBackups(next.backup);
@@ -142,7 +151,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [startedAt, plan, verifyRequired, alarm.label, strategy, fireBackups]);
 
   const finish = useCallback((result: {
     snoozed: boolean;
@@ -162,6 +171,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       snoozed: result.snoozed,
       verified: result.verified,
       responseMs: elapsed,
+      timeOnTaskMs: result.collected.reduce((s, r) => s + r.responseMs, 0),
       methods,
       attempts: totalAttempts,
       motion,
@@ -170,6 +180,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       solved: result.collected.length > 0 && solvedCount === result.collected.length,
       correctness: result.collected.length ? solvedCount / result.collected.length : 0,
       escalationLevel: levelRef.current,
+      backups: backupsRef.current,
     });
   }, [methods, onResolved, startedAt]);
 
@@ -207,7 +218,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       levelRef.current = top.level;
       setLevel(top);
       escalateAlarm(top.volumeFactor);
-      startVibrationLoop(alarm.wakeStrategy);
+      startVibrationLoop(strategy);
       fireBackups(top.backup);
       setRetryNote(`Confidence ${score}% is below the ${minConfidence}% needed - let's try again.`);
       speak("That wasn't convincing enough. Try again.");
@@ -215,7 +226,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
       setMethodIndex(0);
       setView("challenge");
     }
-  }, [minConfidence, plan, alarm.wakeStrategy, finish, fireBackups]);
+  }, [minConfidence, plan, strategy, finish, fireBackups]);
 
   function handleChallengeComplete(result: ChallengeResult) {
     const collected = [...results, result];
@@ -234,7 +245,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
 
   const ActiveChallenge = CHALLENGE_COMPONENTS[methods[methodIndex]] ?? CHALLENGE_COMPONENTS["math"];
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm">
+    <div data-ringing="" className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-3xl border border-indigo-500/30 bg-slate-900/80 p-8 text-center shadow-2xl">
 
         <div className="mb-2 flex items-center gap-1.5">
@@ -258,7 +269,7 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
             <h2 className="text-2xl font-bold text-white">{alarm.label}</h2>
             <p className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-400">
               <Volume2 className="h-4 w-4" />
-              <span className="capitalize">{alarm.wakeStrategy}</span> · Intensity {alarm.intensity}%
+              <span className="capitalize">{strategy}</span> · Intensity {intensity}%
             </p>
             <p className="mt-1 text-xs font-medium uppercase tracking-wide text-indigo-300">
               {STAGE_LABELS[level.stage]}s
@@ -320,15 +331,28 @@ export default function RingingOverlay({ alarm, onResolved, escalationProfile }:
           </div>
         )}
 
-        {backups.length > 0 && view !== "done" && view !== "result" && (
-          <div className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-left">
+        {(backupsTrying.length > 0 || backups.length > 0) && view !== "done" && view !== "result" && (
+          <section aria-label="Backup channels" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-left">
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-rose-300">
-              <Siren className="h-4 w-4" /> Emergency backups activated
+              <Siren className="h-4 w-4" /> Backup channels
             </p>
-            <ul className="mt-2 space-y-1 text-xs text-rose-200/80">
-              {backups.map((b) => (<li key={b.kind}>{b.label}</li>))}
+            <ul className="mt-2 space-y-1 text-xs">
+              {backups.length === 0
+                ? backupsTrying.map((kind) => (
+                  <li key={kind} className="text-rose-200/80">{BACKUP_LABELS[kind]}: trying…</li>
+                ))
+                : backups.map((b) => (
+                  <li
+                    key={b.kind}
+                    data-status={b.status}
+                    title={b.status === "delivered" ? undefined : b.reason}
+                    className={b.status === "delivered" ? "text-emerald-300" : "text-slate-400"}
+                  >
+                    {b.label}: {describeOutcome(b)}
+                  </li>
+                ))}
             </ul>
-          </div>
+          </section>
         )}
       </div>
     </div>

@@ -9,12 +9,20 @@ import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 import { recordFeedback } from "@/lib/rlFeedback";
 import type { FeedbackOutcome, RlContext } from "@/lib/aiClient";
+import { isNum, isOccurredAt } from "@/lib/validate";
+import { nextOccurrence } from "@/lib/recurrence";
 
 interface DismissBody {
-  confidence?: number;
   responseMs?: number;
-  verified?: boolean;
+  /** When it was dismissed, if it is being reported later (a phone that was offline). */
+  at?: string;
+  // `verified` and `confidence` used to be read from here, which let a client
+  // mark an alarm verified that the server had scored as failed. The verdict
+  // now comes only from the verify route's own record.
 }
+
+/** A verify result counts for this ring only if it is this recent. */
+const VERIFY_WINDOW_MS = 30 * 60_000;
 
 type RouteContext = {
   params: Promise<{
@@ -22,28 +30,6 @@ type RouteContext = {
   }>;
 };
 
-const WEEKDAYS = [1, 2, 3, 4, 5];
-
-function nextOccurrence(from: Date, repeat: AlarmDocument["repeat"]): Date | null {
-  if (!repeat || repeat.type === "none") {
-    return null;
-  }
-  const allowedDays = repeat.type === "weekdays"
-    ? WEEKDAYS
-    : repeat.type === "custom"
-      ? repeat.days ?? []
-      : null;
-
-  const candidate = new Date(from);
-  candidate.setSeconds(0, 0);
-  for (let i = 1; i <= 14; i++) {
-    candidate.setDate(candidate.getDate() + 1);
-    if (!allowedDays || allowedDays.includes(candidate.getDay())) {
-      return candidate;
-    }
-  }
-  return null;
-}
 
 export async function POST(req: NextRequest, context: RouteContext) {
   return guard(async () => {
@@ -57,17 +43,36 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return jsonError("Invalid id", 400);
     }
     const body = (await parseJson<DismissBody>(req)) ?? {};
-    const verified = body.verified ?? true;
-    const confidence = typeof body.confidence === "number"
-      ? Math.min(100, Math.max(0, body.confidence))
-      : undefined;
+    if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
+      return jsonError("responseMs must be a non-negative number", 422);
+    }
+    if (body.at !== undefined && !isOccurredAt(body.at)) {
+      return jsonError("at must be an ISO time within the last 7 days and not in the future", 422);
+    }
+    const dismissedAt = body.at ? new Date(body.at) : new Date();
 
     const existing = await Alarm.findOne({ _id: id, userId });
     if (!existing) {
       return jsonError("Alarm not found", 404);
     }
+
+    // The verify route scores the challenge server-side and records the result;
+    // that record, not the client's claim, says whether this ring was verified.
+    // The window is around the dismissal itself, so a ring a phone reports
+    // hours later still finds the verification it made at the time.
+    const verdict = await BehaviorEvent.findOne({
+      userId,
+      type: { $in: ["verify_pass", "verify_fail"] },
+      "meta.alarmId": id,
+      at: { $gte: new Date(dismissedAt.getTime() - VERIFY_WINDOW_MS), $lte: new Date(dismissedAt.getTime() + 60_000) },
+    }).sort({ at: -1 }).lean<{ type: string; value?: number }>();
+    const verified = verdict?.type === "verify_pass";
+    const confidence = verdict?.value;
+    const verificationRequired = existing.verificationRequired && existing.verificationMethod !== "none";
+
     const priorSnoozes = existing.lastSnoozeCount ?? 0;
-    const next = nextOccurrence(existing.scheduledTime, existing.repeat);
+    const next = nextOccurrence(existing.snoozedFrom ?? existing.scheduledTime, existing.repeat, new Date());
+    existing.snoozedFrom = undefined;
     if (next) {
       existing.scheduledTime = next;
       existing.status = "scheduled";
@@ -88,20 +93,16 @@ export async function POST(req: NextRequest, context: RouteContext) {
         verified,
         responseMs: body.responseMs ?? null,
         recurring: Boolean(next),
+        reportedLate: body.at !== undefined,
       },
-      at: new Date(),
+      at: dismissedAt,
     });
-
-    await BehaviorEvent.create({
-      userId,
-      type: verified ? "verify_pass" : "verify_fail",
-      value: confidence,
-      meta: { alarmId: id },
-      at: new Date(),
-    });
+    // No verify_pass/verify_fail here: the verify route already recorded the
+    // one verdict, and logging it again double-counted every wake.
 
     await recordWakeFeedback(userId, id, existing, {
-      verified,
+      // An alarm with no challenge to fail cannot have been "missed" by failing it.
+      woke: verified || !verificationRequired,
       confidence,
       priorSnoozes,
       responseMs: body.responseMs,
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 }
 
 interface WakeFeedbackArgs {
-  verified: boolean;
+  woke: boolean;
   confidence?: number;
   priorSnoozes: number;
   responseMs?: number;
@@ -120,7 +121,7 @@ interface WakeFeedbackArgs {
 
 async function recordWakeFeedback(userId: string, alarmId: string, alarm: AlarmDocument, args: WakeFeedbackArgs): Promise<void> {
   try {
-    const outcome: FeedbackOutcome = !args.verified
+    const outcome: FeedbackOutcome = !args.woke
       ? "missed"
       : args.priorSnoozes > 0
         ? "snooze"

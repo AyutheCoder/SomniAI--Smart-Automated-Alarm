@@ -399,7 +399,7 @@ def analyze(text: str) -> dict[str, Any]:
     # actually decided, and never claim "routine" for a task we escalated.
     parts: list[str] = []
     if cues:
-        parts.append("Detected " + ", ".join(cues[:4]))
+        parts.append("Matched cues: " + ", ".join(cues[:4]))
     if ml_drove:
         parts.append(("Recognized " if not cues else "also ") + ", ".join(ml_drove[:3]))
 

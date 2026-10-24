@@ -55,3 +55,8 @@ paper/authors.local.tex
 
 # Identity list for scripts/check-anonymity.mjs. Never commit.
 .anonymity-terms.local
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/

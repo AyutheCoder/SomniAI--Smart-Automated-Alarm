@@ -1,6 +1,10 @@
 import type { BehavioralMetrics } from "@/lib/features";
 const AI_BRAIN_URL = process.env.AI_BRAIN_URL?.replace(/\/+$/, "") ?? "";
 const TIMEOUT_MS = 4000;
+/** Whether an AI Brain is configured at all, as opposed to configured and not answering. */
+export function aiBrainConfigured(): boolean {
+  return AI_BRAIN_URL !== "";
+}
 export type AISource = "ai" | "fallback";
 export type ModelFeatures = Record<string, number>;
 export interface SleepPrediction {
@@ -75,7 +79,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T | null> {
       return null;
     return (await res.json()) as T;
   }
-  catch (e) {
+  catch {
     return null;
   }
 }
@@ -89,7 +93,7 @@ export async function aiBrainHealth(): Promise<boolean> {
     });
     return res.ok;
   }
-  catch (e) {
+  catch {
     return false;
   }
 }
@@ -195,7 +199,7 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   else if (durationHours > 9.5) {
     tips.push({
-      text: `You're sleeping about ${durationHours.toFixed(1)} h. Consistently long sleep can signal sleep debt or low quality.`,
+      text: `You're sleeping about ${durationHours.toFixed(1)} h. That is more than the 7-9 h most adults are advised to get.`,
       priority: "low",
       icon: "moon",
       basis: "long sleep duration",
@@ -211,15 +215,15 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (oversleep > OVERSLEEP_ALERT) {
     tips.push({
-      text: "Elevated oversleep risk for your next wake. Enable verification and a backup escalation level.",
+      text: "Your next wake time is likely to drift from your usual one. If it matters, turn on verification and a backup level.",
       priority: "high",
       icon: "alert-triangle",
-      basis: "high oversleep probability",
+      basis: "low predicted wake-time regularity",
     });
   }
   if (num(m.fatigueScore, 40) > 60) {
     tips.push({
-      text: "High fatigue detected. Cut caffeine after midday and reduce evening screen time.",
+      text: "Your logs point to building fatigue. Try cutting caffeine after midday and reducing evening screen time.",
       priority: "medium",
       icon: "battery-low",
       basis: "high fatigue score",
@@ -235,7 +239,7 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (num(m.sleepDisruptionScore, 30) > 55) {
     tips.push({
-      text: "Nighttime noise or movement is disrupting your sleep. Aim for a quieter, cooler, darker room.",
+      text: "Your logs show frequent nighttime noise or movement. A quieter, cooler, darker room may help.",
       priority: "medium",
       icon: "volume-x",
       basis: "high sleep disruption",
@@ -243,10 +247,10 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (wakeSuccess >= WAKE_RELIABLE && num(m.sleepConsistencyScore, 50) >= 60) {
     tips.push({
-      text: "Great wake reliability and steady timing - keep your current routine going.",
+      text: "You usually wake close to your usual time, and your sleep timing is steady. Keep your current routine.",
       priority: "low",
       icon: "check",
-      basis: "strong wake success",
+      basis: "high predicted wake-time regularity",
     });
   }
   if (tips.length === 0) {
@@ -262,10 +266,10 @@ function fallbackReport(p: ReportPayload): SleepReport {
     }
     else {
       tips.push({
-        text: "Nothing needs attention - your sleep and wake routine are on track.",
+        text: "Nothing in your logged data needs attention right now.",
         priority: "low",
         icon: "check",
-        basis: "all metrics within target",
+        basis: "no rule triggered",
       });
     }
   }
@@ -507,7 +511,7 @@ export function fallbackSemantic(text: string): SemanticAnalysis {
     stressScore: Math.round(stress),
     wakeReliabilityNeed,
     rationale: cues.length
-      ? `Detected ${cues.slice(0, 5).join(", ")}`
+      ? `Matched cues: ${cues.slice(0, 5).join(", ")}`
       : "No strong urgency or emotion cues; treated as routine",
     tier: "rules",
   };

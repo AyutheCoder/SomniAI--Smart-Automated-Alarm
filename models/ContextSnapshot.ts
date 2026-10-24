@@ -1,4 +1,5 @@
 import { Schema, model, models } from "mongoose";
+import { SOURCES, type ContextSources } from "@/lib/provenance";
 export interface ContextSnapshotDocument {
   userId: string;
   at: Date;
@@ -16,7 +17,10 @@ export interface ContextSnapshotDocument {
     steps?: number;
     lastSleepHours?: number;
   };
-  source: "manual" | "simulated" | "live";
+  /** Where each group came from. Snapshots without it predate sources: none of it is live. */
+  sources?: ContextSources;
+  /** Legacy one-label-for-everything source; no longer written. */
+  source?: "manual" | "simulated" | "live";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,16 +35,22 @@ const WearableSchema = new Schema({
   steps: { type: Number },
   lastSleepHours: { type: Number },
 }, { _id: false });
+const sourceField = { type: String, enum: [...SOURCES], required: true };
+const SourcesSchema = new Schema({
+  weather: sourceField,
+  calendar: sourceField,
+  wearable: sourceField,
+}, { _id: false });
 const ContextSnapshotSchema = new Schema<ContextSnapshotDocument>({
   userId: { type: String, required: true, index: true },
   at: { type: Date, default: Date.now, index: true },
   weather: { type: WeatherSchema, default: undefined },
   calendar: { type: [CalendarEntrySchema], default: undefined },
   wearable: { type: WearableSchema, default: undefined },
+  sources: { type: SourcesSchema, default: undefined },
   source: {
     type: String,
     enum: ["manual", "simulated", "live"],
-    default: "simulated",
   },
 }, { timestamps: true });
 export const ContextSnapshot = models.ContextSnapshot ||

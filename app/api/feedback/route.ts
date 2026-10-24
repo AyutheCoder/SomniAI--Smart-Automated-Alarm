@@ -5,6 +5,8 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { ModelFeedback } from "@/models/ModelFeedback";
 import { RlPolicy } from "@/models/RlPolicy";
 import { recordFeedback } from "@/lib/rlFeedback";
+import { foreignAlarmError } from "@/lib/ownership";
+import { isInt, isNum } from "@/lib/validate";
 import type { FeedbackOutcome, RlAction, RlContext } from "@/lib/aiClient";
 
 interface FeedbackBody {
@@ -20,6 +22,33 @@ interface FeedbackBody {
 
 const OUTCOMES: FeedbackOutcome[] = ["success", "snooze", "missed"];
 
+const isPlainObject = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+function invalidFeedback(body: FeedbackBody): string | null {
+  if (!OUTCOMES.includes(body.outcome as FeedbackOutcome)) {
+    return `outcome must be one of ${OUTCOMES.join(", ")}`;
+  }
+  if (body.snoozes !== undefined && !isInt(body.snoozes, 0, 1000)) {
+    return "snoozes must be a non-negative whole number";
+  }
+  if (body.ttwMin !== undefined && !isNum(body.ttwMin, 0)) {
+    return "ttwMin must be a non-negative number";
+  }
+  if (body.satisfaction !== undefined && !isNum(body.satisfaction, -1, 1)) {
+    return "satisfaction must be a number from -1 to 1";
+  }
+  if (body.reward !== undefined && !isNum(body.reward)) {
+    return "reward must be a number";
+  }
+  if (body.context !== undefined && !isPlainObject(body.context)) {
+    return "context must be an object";
+  }
+  if (body.action !== undefined && !isPlainObject(body.action)) {
+    return "action must be an object";
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   return guard(async () => {
     const userId = await getUserId();
@@ -27,9 +56,19 @@ export async function POST(req: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
     const body = (await parseJson<FeedbackBody>(req)) ?? {};
-    const outcome = body.outcome ?? "success";
-    if (!OUTCOMES.includes(outcome)) {
-      return jsonError("Invalid outcome", 400);
+    // A missing outcome used to default to "success", so an empty request
+    // trained the policy on a wake that never happened.
+    const invalid = invalidFeedback(body);
+    if (invalid) {
+      return jsonError(invalid, 422);
+    }
+    const outcome = body.outcome as FeedbackOutcome;
+    if (body.alarmId !== undefined) {
+      await connectToDatabase();
+      const alarmError = await foreignAlarmError(userId, body.alarmId);
+      if (alarmError) {
+        return jsonError(alarmError, 422);
+      }
     }
     try {
       const { data, source, explanation } = await recordFeedback({

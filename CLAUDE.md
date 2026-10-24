@@ -31,9 +31,12 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **0.1** |
-| Last completed | — |
-| Branch for development | `develop` (created by prompt 0.1) |
+| **Next prompt** | **2.7, finish on the phone**: the matrix ran on the emulator; your phone run is next (`DEVICE_TESTS.md`, "Running it on your phone"), then record its results and fix every failure. 3.1 after that |
+| Last completed | 2.7 on the emulator (`scripts/device-matrix.sh`: 12 conditions, all pass or not applicable on API 37; manufacturer table for Samsung/Xiaomi/Oppo/Realme from dontkillmyapp.com; found and fixed: a reboot or crash mid-ring left the alarm volume raised (`AlarmVolume`); the restricted standby bucket can't apply to exact-alarm apps (AOSP floors them at working set)). 2.6 before that |
+| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (emulators only so far; 2.4 history and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
+| Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
+| Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
 
@@ -83,15 +86,21 @@ routes with **no tests** (0.3).
 | AI Brain tests | `cd ai-brain && python -m pytest -p no:warnings` |
 | AI Brain server | `cd ai-brain && uvicorn main:app --reload` |
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
-| Full gate | `npm run verify` / `npm run verify:all` (created by prompt 0.2) |
+| Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
+| Android | `npm run android:doctor` (what is installed and missing), `android:test`, `android:build`, `android:run`; see `ANDROID.md` |
+| End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~5 min locally; don't run alongside `verify`, both use `.next`) |
 
 ## Where things are
 
 | Path | What |
 | --- | --- |
 | `DEVELOPMENT_PLAN.md` | **The plan being executed.** 37 prompts, 8 phases |
-| `app/` | Next.js pages, components, 22 API routes under `app/api/` |
+| `app/` | Next.js pages, components, 23 API routes under `app/api/` (the plan says 22) |
+| `tests/api/` | Route integration tests, in-memory MongoDB, session stubbed in `setup.ts` |
 | `lib/` | Core logic: `scheduler.ts`, `escalation.ts`, `wakeConfidence.ts` (gated scoring), `backupAdapters.ts` (currently fake), `context/` (calendar/wearable simulated), `sensors/` (silent simulated fallbacks) |
+| `lib/ringPlan.ts` | What an alarm needs to ring, fixed at creation (`ringPlanServer.ts` computes it). Ring time reads only this; outcomes go through `lib/outbox.ts` afterwards |
+| `android/app/src/main/java/app/somniai/alarm/alarms/` | Native alarms: `NextTrigger` / `AlarmPlanner` (pure, JVM-tested), `AlarmScheduler` (AlarmManager), receivers, `SomniAlarmPlugin`. Web handle: `lib/nativeAlarm.ts` |
+| `DEVICE_TESTS.md` | Device-only results, emulator and phone, with dates and versions |
 | `models/` | Mongoose models |
 | `ai-brain/` | FastAPI service: `wake_plan.py` (the paper's method), `semantic.py`, `predict.py` |
 | `INVENTION_DISCLOSURE.md` | Patent notes. Public disclosure already happened 2026-08-05 |
@@ -109,11 +118,45 @@ routes with **no tests** (0.3).
 - A stray `package-lock.json` in a parent directory makes Next.js pick the wrong
   workspace root. Fix with `outputFileTracingRoot`, not by deleting files outside
   the repo.
-- `next build` hit `EPERM: kill` on Windows; diagnose in prompt 0.1.
+- `next build` hit `EPERM: kill` on the original Windows machine. It did not
+  reproduce on the second machine (Node 22, no parent lockfile), so it was not
+  diagnosed further; if it returns, suspect an antivirus or file lock on `.next/`.
 - LifeSnaps (Zenodo record 7229547) returned HTTP 504 for days in October 2026.
   PMData downloads fine. `python ai-brain/fetch_datasets.py --out data/external`
   resumes. Datasets are only needed for prompt 5.2.
-- `next lint` is deprecated; prompt 0.1 migrates to the ESLint CLI.
+- **JDK 26 is installed and too new for Android builds**: Gradle 8.14.3 fails
+  on it with `Unsupported class file major version 70`. Android needs JDK 21
+  (Android Studio 2026.2.1 bundles JDK 25, also too new: download a 21 from
+  its Gradle JDK setting); `scripts/android.mjs` finds a usable JDK and
+  never uses the 26 for Gradle.
+- **Decline Android Studio's "upgrade Gradle" offer.** On 2026-10-24 it moved
+  the wrapper to Gradle 9.7.1, which breaks the build: AGP 8.13 uses an internal
+  API removed in Gradle 9.6 ("use Gradle 9.5"). The wrapper stays at 8.14.3
+  until AGP is upgraded with it on purpose. `git diff android/gradle` shows it.
+- **Java needs IPv4 on this network.** Java downloads (the Gradle wrapper,
+  Maven) time out trying IPv6 first while curl works; `-Djava.net.preferIPv4Stack=true`
+  fixes it, and `android/gradle.properties` and `scripts/android.mjs` set it.
+  The wrapper's `networkTimeout` is also raised to 2 minutes for the slow
+  GitHub release host.
+- **Virtualization-based security is on**, so the Android emulator needs the
+  Windows Hypervisor Platform feature (admin PowerShell, see `ANDROID.md`).
+- **`NoDefaultCurrentDirectoryInExePath` is set in this shell**, so `cmd` won't
+  run `gradlew.bat` by bare name from `android/`; `scripts/android.mjs` calls it
+  by full path. In Git Bash, `export MSYS_NO_PATHCONV=1` before `adb shell`
+  commands, or `/sdcard/...` arguments get rewritten into Windows paths.
+- **The emulator plus Android Studio don't fit in free RAM.** Close Android
+  Studio and run `android\gradlew --stop` before starting the emulator. Even
+  then the emulator's System UI can show "isn't responding" dialogs under host
+  memory pressure; that is the emulator, not SomniAI (check
+  `adb logcat -b crash` and `dumpsys activity` for the app's own state).
+- **This machine has 8 GB of RAM and often only ~1 GB free.** Two Playwright
+  browsers plus `next dev` and MongoDB made it swap so badly that sign-in hung
+  for 40+ seconds, which looked like an app bug and wasn't. Locally `npm run e2e`
+  runs one browser at a time (`workers: CI ? 2 : 1`). If e2e suddenly times out
+  everywhere at once, check free memory before debugging the app.
+- Lint is `eslint .` (flat config in `eslint.config.mjs`), not the deprecated
+  `next lint`. It covers the whole repo, not only `app/` and `lib/`, and ignores
+  `ai-brain/` because its virtualenv contains vendored JavaScript.
 
 ## Platform limits to state honestly
 

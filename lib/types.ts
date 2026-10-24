@@ -1,3 +1,4 @@
+import type { RingPlan } from "./ringPlan";
 export const LOCAL_USER_ID = "local-user";
 export type Priority = "low" | "medium" | "high" | "critical";
 export type WakeStrategy = "gentle" | "adaptive" | "aggressive";
@@ -42,6 +43,8 @@ export interface Alarm {
   enabled: boolean;
   lastSnoozeCount: number;
   decision?: AlarmDecision;
+  ringPlan?: RingPlan;
+  snoozedFrom?: string;
   createdAt: string;
   updatedAt: string;
 }

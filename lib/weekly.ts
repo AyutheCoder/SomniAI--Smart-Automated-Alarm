@@ -101,21 +101,21 @@ function buildInsights(daily: DailyPoint[], metrics: BehavioralMetrics, trends: 
   }
   else if (fatigue && fatigue.direction === "improving") {
     out.push({
-      text: `Fatigue dropped ${Math.abs(fatigue.delta)} pts - your recovery is trending the right way.`,
+      text: `Fatigue dropped ${Math.abs(fatigue.delta)} pts week-over-week.`,
       tone: "positive",
       basis: "falling fatigue trend",
     });
   }
   if (productivity && productivity.direction === "improving") {
     out.push({
-      text: `Productivity is up ${Math.abs(productivity.delta)} pts. Steadier wake-ups are paying off.`,
+      text: `Productivity is up ${Math.abs(productivity.delta)} pts week-over-week.`,
       tone: "positive",
       basis: "rising productivity trend",
     });
   }
   else if (productivity && productivity.direction === "declining") {
     out.push({
-      text: `Productivity slipped ${Math.abs(productivity.delta)} pts; it tracks closely with your wake reliability.`,
+      text: `Productivity slipped ${Math.abs(productivity.delta)} pts week-over-week.`,
       tone: "warning",
       basis: "falling productivity trend",
     });
@@ -136,9 +136,9 @@ function buildInsights(daily: DailyPoint[], metrics: BehavioralMetrics, trends: 
   }
   else if (avgDuration !== null && avgDuration >= 7 && avgDuration <= 9) {
     out.push({
-      text: `Solid ${avgDuration.toFixed(1)} h nightly average - right in the healthy band.`,
+      text: `Solid ${avgDuration.toFixed(1)} h nightly average, within the 7-9 h most adults are advised to get.`,
       tone: "positive",
-      basis: "healthy average duration",
+      basis: "average duration in the advised range",
     });
   }
   const scored = daily.filter((d) => d.qualityScore !== null);

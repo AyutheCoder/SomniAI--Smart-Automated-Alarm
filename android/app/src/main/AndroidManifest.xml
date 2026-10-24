@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+
+        <!-- AlarmManager delivers due alarms here. Not exported: only this
+             app's own PendingIntent reaches it. Direct-boot aware so alarms
+             fire after a reboot before the first unlock. -->
+        <receiver
+            android:name=".alarms.AlarmFiredReceiver"
+            android:directBootAware="true"
+            android:exported="false" />
+
+        <!-- Rings a fired alarm: sound on the alarm stream, vibration, wake
+             lock, full-screen notification. systemExempted is the type Android
+             allows for apps holding USE_EXACT_ALARM / SCHEDULE_EXACT_ALARM that
+             "continue alarms in the background" (ANDROID.md, "Ringing"). -->
+        <service
+            android:name=".alarms.RingService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted" />
+
+        <!-- The ringing screen: over the lock screen, screen on, its own task so
+             it doesn't bring the web view with it. Rotating or opening the
+             keyboard keeps a wake check in progress (configChanges). -->
+        <activity
+            android:name=".alarms.RingActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
+             for each action). All are protected broadcasts sent by the
+             system, which reaches a non-exported receiver. -->
+        <receiver
+            android:name=".alarms.RescheduleReceiver"
+            android:directBootAware="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Exact alarms (ANDROID.md, "Exact alarms"). Android 8-11 need nothing.
+         Android 13+: USE_EXACT_ALARM, granted at install, not revocable by the
+         user; Google Play allows it for "an alarm or timer app".
+         Android 12/12L: SCHEDULE_EXACT_ALARM, the user-controlled "Alarms &
+         reminders" access. Capped at 32 so that on 13+ the app holds only
+         USE_EXACT_ALARM. The cap is this project's choice, not a documented
+         recommendation. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+
+    <!-- Reschedule after a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Show that an alarm fired (Android 13+ asks the user). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Ringing (ANDROID.md, "Ringing"). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <!-- Over the lock screen. On Android 14+ granted by default only to alarm
+         and calling apps, after the Play Console declaration (prompt 7.5). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+</manifest>

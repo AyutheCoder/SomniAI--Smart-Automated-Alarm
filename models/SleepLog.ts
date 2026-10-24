@@ -9,7 +9,8 @@ export interface SleepLogDocument {
   alarmResponseMs?: number;
   wakeConfidence?: number;
   qualityScore?: number;
-  source: "manual" | "sensor" | "wearable";
+  /** "simulated" nights never reach a model; the other three are real. */
+  source: "manual" | "sensor" | "wearable" | "simulated";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,7 +26,7 @@ const SleepLogSchema = new Schema<SleepLogDocument>({
   qualityScore: { type: Number },
   source: {
     type: String,
-    enum: ["manual", "sensor", "wearable"],
+    enum: ["manual", "sensor", "wearable", "simulated"],
     default: "manual",
   },
 }, { timestamps: true });
