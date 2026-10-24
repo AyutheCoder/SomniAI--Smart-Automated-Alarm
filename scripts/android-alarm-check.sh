@@ -51,9 +51,13 @@ kill_app() {
     sleep 2
     pid=$(sh_ pidof "$PKG" || true)
     if [ -z "$pid" ]; then return 0; fi
-    KILLED="$KILLED $pid"
+    case " $KILLED " in *" $pid "*) ;; *) KILLED="$KILLED $pid" ;; esac
+    # SIGKILL from the app's own sandbox, as the low-memory killer does. The
+    # API 32 image refuses it ("kill: unknown pid"), so also ask the activity
+    # manager, which kills a backgrounded process the way the system reclaims one.
     # shellcheck disable=SC2086
-    sh_ run-as "$PKG" kill -9 $pid || true
+    sh_ run-as "$PKG" kill -9 $pid 2>/dev/null || true
+    sh_ am kill "$PKG" || true
   done
   sh_ dumpsys activity broadcasts | grep -B2 -A6 "$PKG" | head -40 || true
   fail "the app's process kept coming back (killed:$KILLED)"
