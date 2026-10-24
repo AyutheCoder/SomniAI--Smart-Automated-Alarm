@@ -69,8 +69,14 @@ Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24, emulator audio on.
 The emulator's own System UI showed an "isn't responding" dialog over the ring
 screen (host memory pressure, as before); "Wait" cleared it. It is not SomniAI.
 
-CI emulators run the same on-device tests and alarm check on API 26, 32 and 35
-on every push; see the latest CI run.
+CI emulators run the same on-device tests and alarm check on every push. First
+run, 40076474483 (2026-10-24):
+
+| Android | Alarm check (process killed, then ring and dismiss) | On-device tests |
+| --- | --- | --- |
+| 8.0 (API 26) | Pass: fired 43 ms late, rang in the foreground, gone after dismissal | 5 passed, **1 skipped**: silent + DND, because that image's shell can't set the ringer mode or DND. Not covered on 8.0 by CI |
+| 12L (API 32) | Pass: 141 ms late (after the permission off/on check) | 6/6 |
+| 15 (API 35) | Pass: 137 ms late; service type `0x400` checked | 6/6 |
 
 ### On your phone: checklist
 
