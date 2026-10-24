@@ -41,6 +41,8 @@ dependencies {
     // org.json is a stub that throws in JVM unit tests.
     testImplementation "org.json:json:20240303"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    // On-device tests of the ring service (src/androidTest, scripts/android-instrument.sh).
+    androidTestImplementation "androidx.test:runner:1.7.0"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
 }

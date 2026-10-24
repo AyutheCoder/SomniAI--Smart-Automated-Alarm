@@ -3,7 +3,8 @@
 //
 //   npm run android:doctor   what is installed, what is missing, what to install
 //   npm run android:test     sync, then the JVM unit tests (testDebugUnitTest)
-//   npm run android:build    sync, then the debug APK (assembleDebug)
+//   npm run android:build    sync, then the debug APK and its on-device test APK
+//                            (assembleDebug, assembleDebugAndroidTest)
 //   npm run android:run      install the debug APK on the running emulator or
 //                            phone, and open it
 //
@@ -177,7 +178,7 @@ export function withToolchain(t) {
   };
 }
 
-/** `npx cap sync android`, then a Gradle task. Returns the exit status. */
+/** `npx cap sync android`, then Gradle tasks (one or a list). Returns the exit status. */
 export function gradle(task, t = findToolchain(), stdio = "inherit") {
   const env = withToolchain(t);
   const sync = spawnSync("npx --no-install cap sync android", { cwd: ROOT, env, stdio, shell: true });
@@ -187,11 +188,15 @@ export function gradle(task, t = findToolchain(), stdio = "inherit") {
   // By full path: with NoDefaultCurrentDirectoryInExePath set (it is in some
   // shells), cmd won't run "gradlew.bat" from the current folder by name.
   const wrapper = WIN ? `"${join(ANDROID, "gradlew.bat")}"` : join(ANDROID, "gradlew");
-  const res = spawnSync(wrapper, [task, "--console=plain"], { cwd: ANDROID, env, stdio, shell: WIN });
+  const res = spawnSync(wrapper, [...[task].flat(), "--console=plain"], { cwd: ANDROID, env, stdio, shell: WIN });
   return res.status ?? 1;
 }
 
 export const DEBUG_APK = join(ANDROID, "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+export const TEST_APK = join(ANDROID, "app", "build", "outputs", "apk", "androidTest", "debug", "app-debug-androidTest.apk");
+// Only the app's test APK: the generated cordova-plugins module's own androidTest
+// classpath has a Kotlin duplicate and is not ours to test.
+export const BUILD_TASKS = ["assembleDebug", ":app:assembleDebugAndroidTest"];
 export const UNIT_TEST_RESULTS = join(ANDROID, "app", "build", "test-results", "testDebugUnitTest");
 
 function install(t) {
@@ -241,7 +246,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.exit(status !== 0 ? status : c.total === 0 ? 1 : 0);
   }
   if (command === "build") {
-    process.exit(gradle("assembleDebug", t));
+    process.exit(gradle(BUILD_TASKS, t));
   }
   if (command === "run") {
     process.exit(install(t));

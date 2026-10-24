@@ -42,6 +42,29 @@
             android:directBootAware="true"
             android:exported="false" />
 
+        <!-- Rings a fired alarm: sound on the alarm stream, vibration, wake
+             lock, full-screen notification. systemExempted is the type Android
+             allows for apps holding USE_EXACT_ALARM / SCHEDULE_EXACT_ALARM that
+             "continue alarms in the background" (ANDROID.md, "Ringing"). -->
+        <service
+            android:name=".alarms.RingService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted" />
+
+        <!-- The ringing screen: over the lock screen, screen on, its own task so
+             it doesn't bring the web view with it. -->
+        <activity
+            android:name=".alarms.RingActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:turnScreenOn="true" />
+
         <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
              for each action). All are protected broadcasts sent by the
              system, which reaches a non-exported receiver. -->
@@ -79,4 +102,13 @@
 
     <!-- Show that an alarm fired (Android 13+ asks the user). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Ringing (ANDROID.md, "Ringing"). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <!-- Over the lock screen. On Android 14+ granted by default only to alarm
+         and calling apps, after the Play Console declaration (prompt 7.5). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

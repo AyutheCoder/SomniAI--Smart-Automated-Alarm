@@ -114,5 +114,20 @@ say "$(sed 's/.*SomniAlarm: //' <<<"$FIRED")"
 FIRED_PID=$(awk '{print $3}' <<<"$FIRED")
 for p in $KILLED; do [ "$p" != "$FIRED_PID" ] || fail "fired in pid $p, which was supposedly killed"; done
 say "fired in pid $FIRED_PID; killed before it fired:$KILLED"
+
+# It rings in a foreground service of the alarm type, and stops on dismissal.
+wait_log "ringing device-test" 30 || fail "fired but did not start ringing: $(log | tail -3)"
+say "$(log | grep 'ringing device-test' | sed 's/.*SomniAlarm: //')"
+SERVICES=$(sh_ dumpsys activity services "$PKG")
+grep -q "isForeground=true" <<<"$SERVICES" || fail "ring service is not in the foreground"
+if [ "$SDK" -ge 34 ]; then
+  grep -q "types=0x00000400" <<<"$SERVICES" || fail "ring service is not of type systemExempted (0x400)"
+fi
+say "ring service in the foreground"
+sh_ am broadcast -a app.somniai.alarm.debug.DISMISS $DEBUG >/dev/null
+wait_log "dismissed device-test" 30 || fail "did not stop on dismissal"
+sleep 2
+has "RingService" sh_ dumpsys activity services "$PKG" && fail "ring service still running after dismissal"
+say "dismissed; ring service gone"
 sh_ am broadcast -a app.somniai.alarm.debug.CANCEL $DEBUG >/dev/null
 say "PASS on API $SDK"

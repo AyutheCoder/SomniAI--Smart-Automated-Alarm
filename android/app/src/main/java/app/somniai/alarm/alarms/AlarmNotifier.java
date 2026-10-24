@@ -13,9 +13,9 @@ import java.text.DateFormat;
 import java.util.Date;
 
 /**
- * The visible sign that an alarm fired, until prompt 2.3 makes it ring: a
- * high-priority notification in the alarm category. It says plainly that it
- * is not the ringing alarm yet.
+ * The fallback when Android refuses to start the ring service: a
+ * high-priority notification in the alarm category, which says plainly that
+ * the alarm could not ring.
  */
 final class AlarmNotifier {
 
@@ -43,7 +43,7 @@ final class AlarmNotifier {
             manager.notify(spec.id, 0, new NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle(title)
-                .setContentText("Your alarm went off. Ringing and the wake check come in a later update.")
+                .setContentText("Your alarm went off, but Android didn't let SomniAI ring it.")
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setContentIntent(open)

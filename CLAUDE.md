@@ -31,9 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.3** |
-| Last completed | 2.2 (native `SomniAlarm` plugin: `setAlarmClock`, per-version exact-alarm permission, device-protected storage, reschedule on boot / time / zone / update / permission / app start; 47 new JVM tests incl. DST and midnight; emulator checks in `DEVICE_TESTS.md`, CI alarm check on API 26/32/35; `verify:all` green: vitest 638, pytest 286 / 28 skipped, android 51, apk 4031 KB) |
-| Waiting on the human | Phone checks for 2.1 and 2.2 in `DEVICE_TESTS.md` (only emulators so far). The 2.2 gate's "fires with the app force-stopped" can't be met by any app: force-stop deletes alarms (`ANDROID.md`); tested as process-killed instead, and restore-on-reopen |
+| **Next prompt** | **2.4** |
+| Last completed | 2.3 (`RingService`: systemExempted foreground service, alarm-stream sound with dB ramp and fallbacks, alarm vibration, wake lock, full-screen `RingActivity` over the lock screen, 40 % alarm-volume floor, 20-min cap; lifecycle in pure `RingController`; JVM android 72, on-device `RingServiceTest` 6/6 on API 37, also in CI on 26/32/35; locked + silent + DND emulator run in `DEVICE_TESTS.md`) |
+| Waiting on the human | Phone checks for 2.1, 2.2 and the 2.3 checklist in `DEVICE_TESTS.md` (only emulators so far). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`). Until 2.4, Stop dismisses without the wake check |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Branch for development | `develop` |
 
@@ -128,6 +128,10 @@ routes with **no tests** (0.3).
   (Android Studio 2026.2.1 bundles JDK 25, also too new: download a 21 from
   its Gradle JDK setting); `scripts/android.mjs` finds a usable JDK and
   never uses the 26 for Gradle.
+- **Decline Android Studio's "upgrade Gradle" offer.** On 2026-10-24 it moved
+  the wrapper to Gradle 9.7.1, which breaks the build: AGP 8.13 uses an internal
+  API removed in Gradle 9.6 ("use Gradle 9.5"). The wrapper stays at 8.14.3
+  until AGP is upgraded with it on purpose. `git diff android/gradle` shows it.
 - **Java needs IPv4 on this network.** Java downloads (the Gradle wrapper,
   Maven) time out trying IPv6 first while curl works; `-Djava.net.preferIPv4Stack=true`
   fixes it, and `android/gradle.properties` and `scripts/android.mjs` set it.

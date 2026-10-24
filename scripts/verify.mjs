@@ -22,7 +22,7 @@ import {
   summarizeJunit,
   summarizeVitest,
 } from "./verify-summary.mjs";
-import { DEBUG_APK, UNIT_TEST_RESULTS, findToolchain, gradle } from "./android.mjs";
+import { BUILD_TASKS, DEBUG_APK, TEST_APK, UNIT_TEST_RESULTS, findToolchain, gradle } from "./android.mjs";
 
 const all = process.argv.includes("--all");
 const tmp = mkdtempSync(join(tmpdir(), "somniai-verify-"));
@@ -164,12 +164,13 @@ function androidApk() {
     return { exitCode: null, error };
   }
   rmSync(DEBUG_APK, { force: true });
-  const status = gradle("assembleDebug", t);
-  if (status === 0 && !existsSync(DEBUG_APK)) {
-    return { exitCode: 0, needsCounts: false, error: "assembleDebug exited 0 but produced no APK" };
+  rmSync(TEST_APK, { force: true });
+  const status = gradle(BUILD_TASKS, t);
+  if (status === 0 && !(existsSync(DEBUG_APK) && existsSync(TEST_APK))) {
+    return { exitCode: 0, needsCounts: false, error: "the build exited 0 but produced no APK or no on-device test APK" };
   }
   const size = existsSync(DEBUG_APK) ? `${Math.round(statSync(DEBUG_APK).size / 1024)} KB` : "";
-  return { exitCode: status, needsCounts: false, detail: `debug APK ${size}`.trim() };
+  return { exitCode: status, needsCounts: false, detail: `debug APK ${size}, on-device test APK built`.trim() };
 }
 
 const steps = [

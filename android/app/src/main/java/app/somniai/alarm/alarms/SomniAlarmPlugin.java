@@ -1,7 +1,9 @@
 package app.somniai.alarm.alarms;
 
 import android.Manifest;
+import android.app.NotificationManager;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -109,6 +111,39 @@ public class SomniAlarmPlugin extends Plugin {
             AlarmScheduler.rescheduleAll(getContext(), "exact_alarm_settings", ZoneId.systemDefault());
         }
         call.resolve(withAccess(new JSObject().put("opened", true)));
+    }
+
+    /**
+     * What decides whether a ringing alarm is seen and heard: the full-screen
+     * permission (Android 14+), notifications, the alarm volume and Do Not
+     * Disturb. Read-only; nothing here changes a setting.
+     */
+    @PluginMethod
+    public void ringStatus(PluginCall call) {
+        NotificationManager nm = getContext().getSystemService(NotificationManager.class);
+        AudioManager audio = getContext().getSystemService(AudioManager.class);
+        JSObject out = new JSObject();
+        out.put("fullScreenIntent", Build.VERSION.SDK_INT < 34 ? "not_required" : nm.canUseFullScreenIntent() ? "granted" : "denied");
+        out.put("notifications", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
+        out.put("alarmVolume", audio.getStreamVolume(AudioManager.STREAM_ALARM));
+        out.put("alarmVolumeMax", audio.getStreamMaxVolume(AudioManager.STREAM_ALARM));
+        int filter = nm.getCurrentInterruptionFilter();
+        out.put("doNotDisturb", filter == NotificationManager.INTERRUPTION_FILTER_NONE ? "total_silence"
+            : filter == NotificationManager.INTERRUPTION_FILTER_ALARMS ? "alarms_only"
+            : filter == NotificationManager.INTERRUPTION_FILTER_PRIORITY ? "priority" : "off");
+        call.resolve(out);
+    }
+
+    /** Opens the full-screen setting for this app on Android 14+; otherwise opened is false. */
+    @PluginMethod
+    public void openFullScreenIntentSettings(PluginCall call) {
+        if (Build.VERSION.SDK_INT < 34) {
+            call.resolve(new JSObject().put("opened", false));
+            return;
+        }
+        getActivity().startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+            Uri.parse("package:" + getContext().getPackageName())));
+        call.resolve(new JSObject().put("opened", true));
     }
 
     /** Whether alarm notifications can be shown. Below Android 13 there is no runtime prompt. */

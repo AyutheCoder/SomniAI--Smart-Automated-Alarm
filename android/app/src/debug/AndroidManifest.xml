@@ -11,6 +11,7 @@
             <intent-filter>
                 <action android:name="app.somniai.alarm.debug.SCHEDULE" />
                 <action android:name="app.somniai.alarm.debug.CANCEL" />
+                <action android:name="app.somniai.alarm.debug.DISMISS" />
                 <action android:name="app.somniai.alarm.debug.LIST" />
             </intent-filter>
         </receiver>

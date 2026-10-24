@@ -16,6 +16,7 @@ import java.util.EnumSet;
  *   adb shell am broadcast -a app.somniai.alarm.debug.SCHEDULE -n app.somniai.alarm/.alarms.DebugAlarmReceiver --ei minutes 2
  *   adb shell am broadcast -a app.somniai.alarm.debug.LIST -n app.somniai.alarm/.alarms.DebugAlarmReceiver
  *   adb shell am broadcast -a app.somniai.alarm.debug.CANCEL -n app.somniai.alarm/.alarms.DebugAlarmReceiver
+ *   adb shell am broadcast -a app.somniai.alarm.debug.DISMISS -n app.somniai.alarm/.alarms.DebugAlarmReceiver
  *
  * SCHEDULE sets a one-off alarm "device-test" at the start of the minute
  * {@code minutes} from now (or repeating daily with --ez daily true). Results
@@ -38,6 +39,10 @@ public class DebugAlarmReceiver extends BroadcastReceiver {
                     daily ? null : at.toLocalDate(), true, null);
                 AlarmRecord r = AlarmScheduler.put(context, spec);
                 Log.i(AlarmScheduler.TAG, "debug: set " + ID + " -> " + AlarmCodec.recordToJson(r));
+            }
+            else if (action.endsWith(".DISMISS")) {
+                RingService.dismiss(context);
+                Log.i(AlarmScheduler.TAG, "debug: dismiss sent");
             }
             else if (action.endsWith(".CANCEL")) {
                 Log.i(AlarmScheduler.TAG, "debug: removed " + ID + ": " + AlarmScheduler.remove(context, ID));

@@ -89,6 +89,36 @@ public class AlarmManifestTest {
     }
 
     @Test
+    public void theRingServiceIsAnAlarmForegroundService() throws Exception {
+        Document doc = read("src/main/AndroidManifest.xml");
+        Element s = byName(doc, "service").get(".alarms.RingService");
+        assertNotNull(s);
+        assertEquals("the type Android allows exact-alarm apps for alarms", "systemExempted", s.getAttributeNS(ANDROID, "foregroundServiceType"));
+        assertEquals("false", s.getAttributeNS(ANDROID, "exported"));
+        assertEquals("rings before the first unlock", "true", s.getAttributeNS(ANDROID, "directBootAware"));
+        Map<String, Element> perms = byName(doc, "uses-permission");
+        for (String p : new String[] {
+            "android.permission.FOREGROUND_SERVICE",
+            "android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED",
+            "android.permission.USE_FULL_SCREEN_INTENT",
+            "android.permission.WAKE_LOCK",
+            "android.permission.VIBRATE",
+        }) {
+            assertNotNull(p, perms.get(p));
+        }
+    }
+
+    @Test
+    public void theRingScreenShowsOverTheLockScreen() throws Exception {
+        Element a = byName(read("src/main/AndroidManifest.xml"), "activity").get(".alarms.RingActivity");
+        assertNotNull(a);
+        assertEquals("true", a.getAttributeNS(ANDROID, "showWhenLocked"));
+        assertEquals("true", a.getAttributeNS(ANDROID, "turnScreenOn"));
+        assertEquals("true", a.getAttributeNS(ANDROID, "directBootAware"));
+        assertEquals("reached only through the alarm's notification", "false", a.getAttributeNS(ANDROID, "exported"));
+    }
+
+    @Test
     public void theAdbTestHookIsDebugOnlyAndShellOnly() throws Exception {
         assertNull(byName(read("src/main/AndroidManifest.xml"), "receiver").get(".alarms.DebugAlarmReceiver"));
         Element r = byName(read("src/debug/AndroidManifest.xml"), "receiver").get(".alarms.DebugAlarmReceiver");

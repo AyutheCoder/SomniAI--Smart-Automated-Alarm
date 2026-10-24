@@ -54,3 +54,48 @@ Record date, phone model and Android version for each.
 | Alarm set 2 minutes ahead fires with the screen off and the phone locked | |
 | Alarm set ~5 minutes ahead fires after a reboot, without unlocking the phone | |
 | After force-stop, the alarm is restored as soon as the app is opened again | |
+
+## 2.3 Ringing
+
+Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24, emulator audio on.
+
+| Condition | Result | Evidence |
+| --- | --- | --- |
+| On-device tests (`RingServiceTest`, 6) | Pass, 6/6 | Foreground with the full-screen alarm notification; alarm-stream playback; wake lock held; ramp rises; volume floor raised and restored; silent mode plus DND priority; second alarm joins; dismissal leaves nothing behind |
+| Real alarm, phone **locked with a PIN, screen off, silent mode, DND priority** | Pass | Screen woke (`mWakefulness=Awake`). `RingActivity` was the resumed activity with the keyguard still showing. `MediaPlayer usage=USAGE_ALARM state:started mutedState:none`. Service `isForeground=true types=0x00000400` (systemExempted). Wake lock `SomniAI:ring` acquired at 13:21:00.713, so it rang 0.7 s after the minute |
+| Stop on the ring screen | Pass | Logged `dismissed after 50 s`. Afterwards: no ring service, no alarm-stream player, no ring notification, wake locks `size=0` (released 13:21:51.654), keyguard still showing |
+| `android-alarm-check.sh` with ringing and dismissal | Pass | Fired with the process killed, rang in the foreground, gone after dismissal |
+
+The emulator's own System UI showed an "isn't responding" dialog over the ring
+screen (host memory pressure, as before); "Wait" cleared it. It is not SomniAI.
+
+CI emulators run the same on-device tests and alarm check on API 26, 32 and 35
+on every push; see the latest CI run.
+
+### On your phone: checklist
+
+Install the debug build over USB (`npm run android:build`, then
+`npm run android:run`). Open SomniAI once. On Android 13+, allow notifications
+when asked, or turn them on in Settings > Apps > SomniAI. Set test alarms from a
+computer with the commands in `ANDROID.md`, "Checking alarms on a device"
+(`--ei minutes 2`). After each check, send `LIST` and keep the `SomniAlarm` log
+lines: they record the sound used, the alarm volume, ringer mode, DND and
+full-screen state for every ring.
+
+Record the date, phone model and Android version, and pass or fail for each:
+
+| # | Set up, then wait for the alarm | Pass when |
+| --- | --- | --- |
+| 1 | Screen off, phone locked with your PIN or fingerprint | The screen turns on and the ring screen shows over the lock screen without unlocking. Sound starts quiet and gets louder over about 30 s. The phone vibrates. |
+| 2 | Ringer switched to **silent** | It still rings out loud and vibrates |
+| 3 | **Do Not Disturb** on, as you normally use it | It still rings. If it doesn't, note your DND exceptions: an alarm can't ring when "Alarms" is turned off in DND or in "Total silence" |
+| 4 | Alarm volume turned right down (Settings > Sound > Alarm volume) | It rings at about 40 % volume, and your alarm volume is back where you left it afterwards |
+| 5 | Phone unlocked and in use | A heads-up "Alarm" notification appears and the sound plays. Tapping it opens the ring screen. |
+| 6 | Press **Stop alarm** | Sound and vibration stop at once, the notification disappears, and the phone stays locked |
+| 7 | Don't touch it | It keeps ringing, then stops by itself after 20 minutes. The log says `unanswered`. |
+| 8 | Android 14+ only: Settings > Apps > SomniAI > "Full screen notifications" (name varies) | It shows as allowed. If it isn't, check 1 shows only a heads-up: note that as a fail with this cause. |
+| 9 | Reboot, don't unlock, alarm 5 minutes after boot | Rings over the lock screen before you ever unlock |
+| 10 | Your phone's battery saver on | Rings as in check 1 |
+
+Checks 1–3 and 6 are the ones the 2.3 gate asks for: rings on a locked screen,
+in silent mode and with DND on, and stops cleanly.

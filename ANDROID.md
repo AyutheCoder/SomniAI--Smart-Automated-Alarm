@@ -152,9 +152,8 @@ plugin, `SomniAlarm`. The web app's typed handle on it is `lib/nativeAlarm.ts`.
   - An app update.
   - The exact-alarm permission being granted.
   - Every app start.
-- **When an alarm fires.** For now it posts a notification and records the
-  firing. Ringing it on the alarm stream is prompt 2.3. The web app's alarm list
-  is connected to the plugin in prompt 2.5.
+- **When an alarm fires.** It rings: see "Ringing" below. The web app's alarm
+  list is connected to the plugin in prompt 2.5.
 
 ### Exact alarms: the permission on each Android version
 
@@ -251,3 +250,54 @@ device is connected:
 
 CI runs it on API 26, 32 and 35 emulators. Results on a real phone go in
 `DEVICE_TESTS.md`.
+
+## Ringing (prompt 2.3)
+
+When an alarm fires, `AlarmFiredReceiver` starts `RingService`. Android allows
+this from the background because the alarm was set with `setAlarmClock`
+("Alarms scheduled via this API will be allowed to start a foreground service
+even if the app is in the background", from the SDK Javadoc). The lifecycle is
+`RingController`, a pure state machine tested on the JVM. `RingService` carries
+it out:
+
+| What | How | Source checked 2026-10-24 |
+| --- | --- | --- |
+| Foreground service | Type `systemExempted` (`FOREGROUND_SERVICE_SYSTEM_EXEMPTED`). Started with that type on Android 14+, and with the manifest's type before that. | The service-types page allows it for "Apps holding SCHEDULE_EXACT_ALARM or USE_EXACT_ALARM permission". Android 14's required-types page describes it as "using Foreground Service to continue alarms in the background, including haptics-only alarms". Google Play's foreground-service declaration table doesn't list `systemExempted`; this is re-checked at Play submission (7.5). |
+| Sound | `MediaPlayer` or `AudioTrack` with `USAGE_ALARM`. Sources are tried in order: the phone's alarm sound, then its ringtone, then a tone made in code. The tone needs no file, so it plays before the first unlock, when media files may be unreadable. | On the emulator, AudioService lists the streams the ringer mode affects as system, ring, notification, system-enforced and DTMF. The alarm stream isn't among them. |
+| Volume ramp | Rises evenly in decibels from −30 dB to the target. Ramp length comes from the ring plan's strategy (gentle 60 s, adaptive 30 s, aggressive 10 s). The target is 0.3 + 0.7 × intensity/100, so intensity 0 is still audible. | `RingTuning` |
+| Alarm stream floor | If the alarm volume is below 40 % of its range, it is raised to that while ringing, then put back afterwards unless the user changed it meanwhile. | A choice, not a requirement. An alarm turned right down would otherwise ring inaudibly. |
+| Vibration | A repeating waveform with alarm usage: `VibrationAttributes.USAGE_ALARM` on 13+, `AudioAttributes.USAGE_ALARM` before. | |
+| Wake lock | Partial, `SomniAI:ring`, with a timeout just past the longest ring | |
+| Over the lock screen | A notification in the alarm category, `VISIBILITY_PUBLIC`, on the `ringing` channel (importance HIGH, no channel sound or vibration). Its full-screen intent opens `RingActivity`, which uses `showWhenLocked` and `turnScreenOn` (window flags on 8.0). | `setFullScreenIntent` Javadoc: it needs a channel of importance HIGH or above. While the phone is in use, a heads-up is shown instead. Without `USE_FULL_SCREEN_INTENT` it is "heads up notification even when the screen is locked or turned off", persistent for only 60 s. Google Play: on 14+ the permission is granted by default only to "calling or alarm" apps, after a Play Console declaration (7.5). `ringStatus()` reports it, and `openFullScreenIntentSettings()` opens the setting. |
+| Silent mode | Unaffected: the alarm stream isn't a ringer-mode stream | On-device test, and a locked-emulator run |
+| Do Not Disturb | Priority mode lets alarms through when the "Alarms" exception is on, which is the default. "Alarms only" lets the alarm category through. **Total silence** (`INTERRUPTION_FILTER_NONE`) mutes "all audio streams (except those used for phone calls) and vibrations". No app can ring through it. Each ring records the DND state, the ringer mode and the alarm volume in the log, so a silent ring can be explained afterwards. | `NotificationManager` Javadoc |
+| How long it rings | Up to 20 minutes, then it stops and is logged as `unanswered`. Prompt 2.6's escalation will revisit this. | |
+| Stopping | Stop on the ring screen. Sound, vibration, wake lock, the raised volume, the notification and the service are all released. The occurrence is logged as `dismissed`, and stopping doesn't unlock the phone. | Tests, and the locked-emulator run |
+| Two alarms at once | The second joins the ring already going, and one Stop ends both | Tests |
+| Process killed mid-ring | `START_REDELIVER_INTENT`: Android restarts the service and it rings again rather than falling silent | |
+
+**Until prompt 2.4, Stop dismisses without a wake check,** even when the ring
+plan requires one. No alarm reaches this code from the web app before prompt
+2.5, so nobody can rely on this gap yet. Prompt 2.4 adds the native challenge
+in front of Stop.
+
+### Tests
+
+- **JVM:** `RingControllerTest` and `RingTuningTest`, run by
+  `npm run android:test` and `verify:all`. `RingControllerTest` covers every
+  path: dismiss, unanswered, destroyed mid-ring, a second alarm joining, sound
+  fallback, foreground refused, and ringing again afterwards. It checks that
+  nothing is left held.
+- **On the device:** `RingServiceTest`, in `src/androidTest`. It runs the real
+  service: foreground with the full-screen alarm notification, playing on the
+  alarm stream, the wake lock, the ramp, the volume floor, silent mode plus DND,
+  a second alarm joining, and dismissal leaving nothing behind. Run it with:
+
+  ```bash
+  npm run android:build                    # builds the test APK too
+  bash scripts/android-instrument.sh       # with an emulator or phone connected
+  ```
+
+  CI runs it on API 26, 32 and 35, together with `android-alarm-check.sh`. That
+  script now also checks that the fired alarm rings in a foreground service of
+  type `0x400` and stops when dismissed.

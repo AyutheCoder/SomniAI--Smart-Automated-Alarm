@@ -123,11 +123,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          # Kept relative to apk/: debug/app-debug.apk and the on-device tests'
+          # androidTest/debug/app-debug-androidTest.apk.
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           retention-days: 7
 
   android-emulator:
-    name: Android ${{ matrix.api-level }} (opens; native alarm fires)
+    name: Android ${{ matrix.api-level }} (opens; alarm fires and rings; on-device tests)
     needs: android
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -155,7 +159,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: bash scripts/android-smoke.sh apk/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/app-debug.apk
+          script: bash scripts/android-smoke.sh apk/debug/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/debug/app-debug.apk && bash scripts/android-instrument.sh apk/debug/app-debug.apk apk/androidTest/debug/app-debug-androidTest.apk
       - uses: actions/upload-artifact@v4
         if: always()
         with:

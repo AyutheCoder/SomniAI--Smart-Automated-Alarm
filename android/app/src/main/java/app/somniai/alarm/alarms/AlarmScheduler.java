@@ -83,7 +83,7 @@ public final class AlarmScheduler {
                 AlarmRecord record = apply(context, planned.record);
                 AlarmStore.put(context, record);
                 if (planned.missed != null) {
-                    AlarmStore.log(context, logEntry(record.spec, "missed", planned.missed, null, reason));
+                    AlarmStore.log(context, logEntry(record.spec.id, record.spec.label, "missed", planned.missed, null, "noticed on " + reason));
                 }
                 out.add(record);
             }
@@ -93,26 +93,34 @@ public final class AlarmScheduler {
     }
 
     /**
-     * An alarm was delivered: show it, move it on, and record what happened.
-     * Returns the record it fired for, or null if the delivery was stale.
+     * An alarm was delivered: start it ringing, move it on, and record what
+     * happened. Returns the record it fired for, or null if the delivery was stale.
      */
     static AlarmRecord onFired(Context context, String id, long scheduledFor) {
         Instant now = Instant.now();
+        AlarmRecord current;
         synchronized (AlarmStore.LOCK) {
-            AlarmRecord current = id == null ? null : AlarmStore.get(context, id);
+            current = id == null ? null : AlarmStore.get(context, id);
             if (!AlarmPlanner.shouldRing(current, scheduledFor)) {
                 Log.w(TAG, "dropped a stale delivery for " + id + " scheduled for " + Instant.ofEpochMilli(scheduledFor));
                 return null;
             }
             AlarmRecord next = apply(context, AlarmPlanner.afterFiring(current, now, ZoneId.systemDefault(), canSchedule(context)));
             AlarmStore.put(context, next);
-            boolean shown = AlarmNotifier.show(context, current.spec, scheduledFor);
-            AlarmStore.log(context, logEntry(current.spec, shown ? "fired" : "fired_not_shown", scheduledFor, now.toEpochMilli(), null));
+            AlarmStore.log(context, logEntry(id, current.spec.label, "fired", scheduledFor, now.toEpochMilli(), null));
             Log.i(TAG, "fired " + id + " scheduled for " + Instant.ofEpochMilli(scheduledFor)
-                + ", " + (now.toEpochMilli() - scheduledFor) + " ms late, notification " + (shown ? "shown" : "NOT shown")
-                + "; next " + describe(next));
-            return current;
+                + ", " + (now.toEpochMilli() - scheduledFor) + " ms late; next " + describe(next));
         }
+        // The ring service logs "ringing" and how it ended. If Android refuses to
+        // start it, a notification is the most that can be done, and the log says so.
+        if (!RingService.start(context, current.spec, scheduledFor)) {
+            boolean shown = AlarmNotifier.show(context, current.spec, scheduledFor);
+            synchronized (AlarmStore.LOCK) {
+                AlarmStore.log(context, logEntry(id, current.spec.label, "ring_failed", scheduledFor, System.currentTimeMillis(),
+                    "foreground service refused; notification " + (shown ? "shown" : "NOT shown")));
+            }
+        }
+        return current;
     }
 
     private static boolean canSchedule(Context context) {
@@ -166,15 +174,19 @@ public final class AlarmScheduler {
         return (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
     }
 
-    static JSONObject logEntry(AlarmSpec spec, String outcome, long scheduledFor, Long firedAt, String reason) {
+    /**
+     * One entry in the alarm log: what happened to an occurrence (fired,
+     * ringing, dismissed, unanswered, missed, ...), when, and the detail.
+     */
+    static JSONObject logEntry(String id, String label, String outcome, long scheduledFor, Long at, String detail) {
         try {
             JSONObject o = new JSONObject();
-            o.put("id", spec.id);
-            o.put("label", spec.label);
+            o.put("id", id);
+            o.put("label", label);
             o.put("outcome", outcome);
             o.put("scheduledFor", scheduledFor);
-            o.put("firedAt", firedAt == null ? JSONObject.NULL : firedAt);
-            o.put("reason", reason == null ? JSONObject.NULL : reason);
+            o.put("at", at == null ? JSONObject.NULL : at);
+            o.put("detail", detail == null ? JSONObject.NULL : detail);
             return o;
         }
         catch (JSONException e) {
