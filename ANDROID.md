@@ -272,14 +272,12 @@ it out:
 | Silent mode | Unaffected: the alarm stream isn't a ringer-mode stream | On-device test, and a locked-emulator run |
 | Do Not Disturb | Priority mode lets alarms through when the "Alarms" exception is on, which is the default. "Alarms only" lets the alarm category through. **Total silence** (`INTERRUPTION_FILTER_NONE`) mutes "all audio streams (except those used for phone calls) and vibrations". No app can ring through it. Each ring records the DND state, the ringer mode and the alarm volume in the log, so a silent ring can be explained afterwards. | `NotificationManager` Javadoc |
 | How long it rings | Up to 20 minutes, then it stops and is logged as `unanswered`. Prompt 2.6's escalation will revisit this. | |
-| Stopping | Stop on the ring screen. Sound, vibration, wake lock, the raised volume, the notification and the service are all released. The occurrence is logged as `dismissed`, and stopping doesn't unlock the phone. | Tests, and the locked-emulator run |
+| Stopping | Stop on the ring screen (after the wake check, if the plan has one). Sound, vibration, wake lock, the raised volume, the notification and the service are all released. The occurrence is logged as `dismissed`, and stopping doesn't unlock the phone. | Tests, and the locked-emulator run |
 | Two alarms at once | The second joins the ring already going, and one Stop ends both | Tests |
 | Process killed mid-ring | `START_REDELIVER_INTENT`: Android restarts the service and it rings again rather than falling silent | |
 
-**Until prompt 2.4, Stop dismisses without a wake check,** even when the ring
-plan requires one. No alarm reaches this code from the web app before prompt
-2.5, so nobody can rely on this gap yet. Prompt 2.4 adds the native challenge
-in front of Stop.
+Stop leads to the native wake check whenever the ring plan asks for one: see
+"Wake check and offline sync" below.
 
 ### Tests
 
@@ -301,3 +299,102 @@ in front of Stop.
   CI runs it on API 26, 32 and 35, together with `android-alarm-check.sh`. That
   script now also checks that the fired alarm rings in a foreground service of
   type `0x400` and stops when dismissed.
+
+## Wake check and offline sync (prompt 2.4)
+
+An alarm can be verified and stopped with no network and without the web view,
+and the result reaches the server once the phone is back online.
+
+### The wake check
+
+When the ring plan asks for a check (`challenge.required`), Stop leads to maths
+problems on the ring screen. They are the same as the web's MathChallenge: a × b
+with both from 6 to 13, one problem per method the plan lists. The phone's check
+is always maths; the methods sent to the server say so.
+
+**The gate is the web's.** `WakeConfidence.java` is `lib/wakeConfidence.ts`,
+line for line. The alarm stops only when every problem in the sequence is solved
+**and** the score meets the plan's `minConfidence`, the same rule the overlay
+applies:
+
+- **A wrong answer never stops it.** It brings a new problem and counts as an
+  attempt. An unsolved check is capped at 35, below every threshold.
+- **Solved but too slow** (score under `minConfidence`): the sequence starts
+  again and is scored on its own, as on the web.
+- **Checked twice.** The ring screen gates Stop, and `RingService` checks again.
+  `RingController.passes` refuses any dismissal without a passed check: wrong,
+  missing, too short, too low, or claiming a score while unsolved. A refusal is
+  logged as `dismiss_refused` and the alarm keeps ringing. The adb debug hook
+  can't stop a checked alarm either.
+- **A plan that can't be read** gets a required check at minConfidence 70, the
+  web's default. It never makes an alarm easier to stop.
+
+**Kept in step with the TypeScript.** `WakeConfidenceTest` restates every case
+in `lib/wakeConfidence.test.ts` under the same names. It also checks 3,456 signal
+combinations and 12 sequences in a table that
+`lib/wakeConfidence.parity.test.ts` checks against the TypeScript
+(`android/app/src/test/resources/wake-confidence-cases.json`). If either side
+changes alone, one of those tests fails. To change the model on purpose, change
+both, then regenerate the table with `WRITE_PARITY=1`.
+
+### The offline queue
+
+Stopping a ring queues what the web app would have sent. The calls are the same
+as `lib/ringFlow.ts` `syncCalls`, in the same order: `fire`, then `verify` if
+there was a check, then `dismiss`. An unanswered ring queues only `fire`.
+
+- **Each call carries `at`,** when it happened on the phone. The server routes
+  accept it, up to 7 days old and not in the future, and record history at that
+  time rather than the sync time. The dismiss route looks for the verification
+  near the dismissal's own time, so a morning stopped offline and synced at
+  noon still counts as verified. Covered by `tests/api/alarm-actions.test.ts`,
+  "a ring reported late".
+- **Storage.** The queue is in device-protected storage, written with
+  `commit()` before the ring service lets go.
+- **Sending.** WorkManager's `SyncWorker` runs once there is a network
+  (`NetworkType.CONNECTED`), with exponential backoff while the server can't
+  take it. It is also scheduled at app start and after unlock at boot. It posts
+  to the server the web view loads, with the web view's own session cookie.
+- **When a call is kept or dropped** (`OutboxQueue`):
+  - 2xx: sent.
+  - 5xx, a timeout, no network, 408, 425 or 429: kept, with everything after it,
+    in order.
+  - **401: kept**, because the phone may not be signed in yet.
+  - Any other 4xx: dropped and logged, so a deleted alarm can't jam the queue.
+
+  The queue is saved after every call, so a crash mid-send neither loses one nor
+  sends twice one the server accepted.
+- **Plain HTTP.** Debug builds allow it to the dev server (Capacitor adds
+  `usesCleartextTraffic` only when `server.cleartext` is on). Release builds are
+  HTTPS-only, as in prompt 2.1.
+
+### Tests
+
+| Where | What |
+| --- | --- |
+| JVM | `WakeConfidenceTest` (TypeScript cases, shared table), `WakeCheckTest` (problems, wrong answers, sequences, retry, plan defaults), `SyncCallsTest` (paths, order and fields match the server routes), `OutboxQueueTest` (offline, survives restarts, order, 5xx/401/retryable kept, permanent dropped, saved per call, bounded), `RingControllerTest` (the service's gate: refusals, unsolved-but-high-score, strictest plan, what gets queued). Each gate was checked by breaking it on purpose: the tests caught it, except one case, which got its own test. |
+| On the device | `RingActivityTest`: wrong answers keep it ringing, the right one stops it, and the result is queued. The keyboard opens by itself and never covers Check. `RingServiceTest`: only a passed check stops a checked ring. `OutboxSyncTest`: real HTTP to a server on the phone that is unreachable, then failing, then healthy, so nothing is lost and it arrives in order with its times; not signed in, so it is kept. |
+
+### Found and fixed on the emulator
+
+- **The keyboard covered Check.** Android 15+ draws apps edge to edge, so the
+  window no longer shrinks for the keyboard. The ring screen now pads itself
+  by the keyboard and system-bar insets, scrolls if it has to, and opens the
+  keyboard by itself.
+- **An alarm going off just as another was dismissed crashed the app.** The
+  service stopped itself with `stopSelf()`, which also drops a start already on
+  its way; Android then killed the app for not calling `startForeground`.
+  It now uses `stopSelf(latestStartId)`, and calls `startForeground` on every
+  ring start. The test reproduced the crash 3/3 before the fix.
+
+### Open, for prompt 2.5 (one source of truth)
+
+- **The web outbox drops a 401** (`lib/outbox.ts` retries only 408, 425 and
+  429). A morning's result is lost if the session has expired. The native queue
+  keeps it.
+- **`responseMs` means different things.** The web sends verify's `responseMs`
+  as the time since the ring started. The phone sends the time spent on the
+  problems, which is what the model's 6–45 s brackets describe. The server
+  scores whatever it is given, so the same wake can score differently.
+- **The server ignores `interactions`,** which both clients score with. The
+  server's score can therefore sit a few points under the client's.

@@ -44,13 +44,15 @@ export interface NativeRecord {
  * What happened to an occurrence, newest last. One that fires logs "fired",
  * then "ringing" (with the sound used and the phone's volume, ringer and Do
  * Not Disturb state), then how it ended: "dismissed", "unanswered" (rang the
- * full 20 minutes) or "interrupted" (Android stopped the service). "ring_failed"
+ * full 20 minutes) or "interrupted" (Android stopped the service).
+ * "dismiss_refused" is a stop without a passed wake check, which the service
+ * turns down. "ring_failed"
  * means Android refused to start ringing; "missed" means it never fired.
  */
 export interface NativeLogEntry {
   id: string;
   label: string;
-  outcome: "fired" | "ringing" | "sound_failed" | "dismissed" | "unanswered" | "interrupted" | "ring_failed" | "missed";
+  outcome: "fired" | "ringing" | "sound_failed" | "dismissed" | "dismiss_refused" | "unanswered" | "interrupted" | "ring_failed" | "missed";
   scheduledFor: number;
   /** When it happened, epoch ms; null for a missed occurrence. */
   at: number | null;
@@ -77,6 +79,14 @@ export interface SomniAlarmPlugin {
   }>;
   /** Opens the full-screen setting for this app on Android 14+; otherwise opened is false. */
   openFullScreenIntentSettings(): Promise<{ opened: boolean }>;
+  /**
+   * Ring results waiting for the server: each ring's fire, verify and dismiss
+   * calls with "at", when they happened. They are sent by the phone itself
+   * when a network is available, signed in with the web view's session.
+   */
+  pendingSync(): Promise<{ calls: { id: string; alarmId: string; path: string; body: string; queuedAt: number }[] }>;
+  /** Tries to send them now. "waiting" counts what is still queued. */
+  syncNow(): Promise<{ sent: number; dropped: string[]; waiting: number; lastStatus: number }>;
   notificationStatus(): Promise<{ enabled: boolean }>;
   requestNotifications(): Promise<{ enabled: boolean }>;
 }

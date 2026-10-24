@@ -13,6 +13,7 @@
                 <action android:name="app.somniai.alarm.debug.CANCEL" />
                 <action android:name="app.somniai.alarm.debug.DISMISS" />
                 <action android:name="app.somniai.alarm.debug.LIST" />
+                <action android:name="app.somniai.alarm.debug.SYNC" />
             </intent-filter>
         </receiver>
     </application>

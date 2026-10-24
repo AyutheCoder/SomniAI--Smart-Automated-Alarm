@@ -47,6 +47,10 @@ public class RingControllerTest {
         @Override public void closeRingScreen() { calls.add("closeRingScreen"); screenOpen = false; }
         @Override public void stopService() { calls.add("stopService"); serviceRunning = false; foreground = false; }
         @Override public void record(RingController.Alarm a, String outcome, long at, String detail) { records.add(a.id + " " + outcome); }
+        final List<String> queued = new ArrayList<>();
+        @Override public void queueSync(RingController.Alarm a, long rangAt, String outcome, long endedAt, Verification v) {
+            queued.add(a.id + " " + outcome + " rang " + rangAt + " ended " + endedAt + (v == null ? "" : v.challenged ? " checked" : " unchecked"));
+        }
 
         void assertNothingHeld() {
             assertFalse("wake lock", wakeLock);
@@ -57,8 +61,18 @@ public class RingControllerTest {
         }
     }
 
+    static final WakeCheck.Plan NO_CHECK = new WakeCheck.Plan(false, 1, 0);
+
     static RingController.Alarm alarm(String id) {
-        return new RingController.Alarm(id, "Gym", 1_000);
+        return new RingController.Alarm(id, "Gym", 1_000, NO_CHECK);
+    }
+
+    static RingController.Alarm checked(String id, int count, int min) {
+        return new RingController.Alarm(id, "Gym", 1_000, new WakeCheck.Plan(true, count, min));
+    }
+
+    static Verification passed(int count, int score) {
+        return new Verification(true, true, 1, 8_000, 0, java.util.Collections.nCopies(count, "math"), score, 30_000);
     }
 
     @Test
@@ -86,7 +100,7 @@ public class RingControllerTest {
         Fake fx = new Fake();
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
-        assertTrue(c.dismiss(42_000));
+        assertTrue(c.dismiss(42_000, Verification.none(42_000)));
         assertEquals(State.STOPPED, c.state());
         fx.assertNothingHeld();
         assertFalse(fx.serviceRunning);
@@ -99,11 +113,11 @@ public class RingControllerTest {
     public void dismissIsIdempotentAndHarmlessWhenNothingRings() {
         Fake fx = new Fake();
         RingController c = new RingController(fx);
-        assertFalse("nothing ringing yet", c.dismiss(0));
+        assertFalse("nothing ringing yet", c.dismiss(0, Verification.none(0)));
         assertTrue(fx.records.isEmpty());
         c.start(alarm("a"), TUNING, 0);
-        assertTrue(c.dismiss(1_000));
-        assertFalse(c.dismiss(2_000));
+        assertTrue(c.dismiss(1_000, Verification.none(1_000)));
+        assertFalse(c.dismiss(2_000, Verification.none(2_000)));
         assertEquals("one outcome per ring", List.of("a ringing", "a dismissed"), fx.records);
     }
 
@@ -146,7 +160,7 @@ public class RingControllerTest {
         c.start(alarm("b"), TUNING, 5_500);
         assertEquals("no restart of the sound", soundStarts, fx.calls.stream().filter(s -> s.startsWith("startSound")).count());
         assertTrue(fx.calls.contains("showAlarms"));
-        c.dismiss(9_000);
+        c.dismiss(9_000, Verification.none(9_000));
         assertEquals(List.of("a ringing", "b ringing", "a dismissed", "b dismissed"), fx.records);
         fx.assertNothingHeld();
     }
@@ -168,7 +182,7 @@ public class RingControllerTest {
         Fake fx = new Fake();
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
-        c.dismiss(1_000);
+        c.dismiss(1_000, Verification.none(1_000));
         c.destroyed(1_100);
         assertEquals(List.of("a ringing", "a dismissed"), fx.records);
     }
@@ -207,7 +221,7 @@ public class RingControllerTest {
         assertNull(c.source());
         assertTrue(fx.vibrating);
         assertEquals(State.RINGING, c.state());
-        c.dismiss(1_000);
+        c.dismiss(1_000, Verification.none(1_000));
         fx.assertNothingHeld();
     }
 
@@ -219,7 +233,7 @@ public class RingControllerTest {
         c.start(alarm("a"), TUNING, 0);
         assertTrue(fx.sound);
         assertTrue(fx.vibrating);
-        c.dismiss(1_000);
+        c.dismiss(1_000, Verification.none(1_000));
         fx.assertNothingHeld();
     }
 
@@ -228,13 +242,100 @@ public class RingControllerTest {
         Fake fx = new Fake();
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
-        c.dismiss(1_000);
+        c.dismiss(1_000, Verification.none(1_000));
         c.start(alarm("b"), TUNING, 60_000);
         assertEquals(State.RINGING, c.state());
         assertTrue(fx.sound);
-        c.dismiss(61_000);
+        c.dismiss(61_000, Verification.none(61_000));
         assertEquals(List.of("a ringing", "a dismissed", "b ringing", "b dismissed"), fx.records);
         fx.assertNothingHeld();
+    }
+
+    @Test
+    public void aRingThatNeedsAWakeCheckRefusesEveryDismissalWithoutAPassedOne() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(checked("a", 2, 78), TUNING, 0);
+        Verification unsolved = new Verification(true, false, 0.5, 8_000, 3, List.of("math", "math"), 30, 9_000);
+        for (Verification v : new Verification[] {
+            null,
+            Verification.none(1_000),
+            unsolved,
+            passed(1, 95),   // too few challenges
+            passed(2, 77),   // below minConfidence
+        }) {
+            assertFalse(c.dismiss(10_000, v));
+            assertEquals(State.RINGING, c.state());
+            assertTrue("still ringing", fx.sound && fx.wakeLock);
+        }
+        assertTrue(fx.queued.isEmpty());
+        assertEquals(5, fx.records.stream().filter(r -> r.endsWith("dismiss_refused")).count());
+        assertTrue(c.dismiss(11_000, passed(2, 78)));
+        assertEquals(State.STOPPED, c.state());
+        fx.assertNothingHeld();
+    }
+
+    @Test
+    public void anUnsolvedCheckNeverStopsTheRingWhateverScoreItClaims() {
+        // As the server's "never passes an unsolved challenge, whatever score is claimed".
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(checked("a", 2, 60), TUNING, 0);
+        Verification unsolvedHighScore = new Verification(true, false, 1.0, 3_000, 0, List.of("math", "math"), 99, 9_000);
+        Verification partlyWrongHighScore = new Verification(true, true, 0.5, 3_000, 0, List.of("math", "math"), 99, 9_000);
+        assertFalse(c.dismiss(10_000, unsolvedHighScore));
+        assertFalse(c.dismiss(10_000, partlyWrongHighScore));
+        assertEquals(State.RINGING, c.state());
+        assertTrue(fx.queued.isEmpty());
+    }
+
+    @Test
+    public void theStrictestPlanOfTheAlarmsRingingDecides() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("easy"), TUNING, 0);
+        c.start(checked("hard", 1, 85), TUNING, 1_000);
+        assertFalse(c.dismiss(2_000, Verification.none(2_000)));
+        assertFalse(c.dismiss(2_000, passed(1, 80)));
+        assertTrue(c.dismiss(2_000, passed(1, 85)));
+    }
+
+    @Test
+    public void aDismissalIsQueuedForTheServerWithItsCheck() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 100);
+        Verification passed = new Verification(true, true, 1, 8_000, 0, List.of("math"), 91, 30_000);
+        c.dismiss(31_000, passed);
+        assertEquals(List.of("a dismissed rang 100 ended 31000 checked"), fx.queued);
+    }
+
+    @Test
+    public void eachJoinedAlarmIsQueuedWithWhenItStartedRinging() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.start(alarm("b"), TUNING, 5_000);
+        c.dismiss(9_000, Verification.none(9_000));
+        assertEquals(List.of("a dismissed rang 0 ended 9000 unchecked", "b dismissed rang 5000 ended 9000 unchecked"), fx.queued);
+    }
+
+    @Test
+    public void anUnansweredRingIsQueuedWithoutAVerification() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.tick(RingTuning.MAX_RING_MS);
+        assertEquals(List.of("a unanswered rang 0 ended " + RingTuning.MAX_RING_MS), fx.queued);
+    }
+
+    @Test
+    public void anInterruptedRingIsNotQueuedBecauseItRingsAgain() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.destroyed(1_000);
+        assertTrue(fx.queued.isEmpty());
     }
 
     @Test
@@ -242,7 +343,7 @@ public class RingControllerTest {
         Fake fx = new Fake();
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
-        c.dismiss(1_000);
+        c.dismiss(1_000, Verification.none(1_000));
         int volumes = fx.volumes.size();
         c.tick(1_500);
         c.soundFailed(1_600);

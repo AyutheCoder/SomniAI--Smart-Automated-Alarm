@@ -36,6 +36,8 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Sends ring results queued offline once there is a network (alarms/SyncWorker).
+    implementation "androidx.work:work-runtime:2.10.1"
     testImplementation "junit:junit:$junitVersion"
     // Reads the packaged capacitor.config.json in ShellConfigTest; Android's own
     // org.json is a stub that throws in JVM unit tests.

@@ -53,9 +53,11 @@
             android:foregroundServiceType="systemExempted" />
 
         <!-- The ringing screen: over the lock screen, screen on, its own task so
-             it doesn't bring the web view with it. -->
+             it doesn't bring the web view with it. Rotating or opening the
+             keyboard keeps a wake check in progress (configChanges). -->
         <activity
             android:name=".alarms.RingActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboard|keyboardHidden"
             android:directBootAware="true"
             android:excludeFromRecents="true"
             android:exported="false"
@@ -63,7 +65,8 @@
             android:showWhenLocked="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
-            android:turnScreenOn="true" />
+            android:turnScreenOn="true"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
              for each action). All are protected broadcasts sent by the

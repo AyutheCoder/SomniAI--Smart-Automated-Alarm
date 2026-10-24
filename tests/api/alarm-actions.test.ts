@@ -291,6 +291,61 @@ describe("POST /api/alarms/[id]/dismiss", () => {
   });
 });
 
+/** A phone rang and dismissed an alarm offline, and sends the result hours later (prompt 2.4). */
+describe("a ring reported late", () => {
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  it("records fire, verify and dismiss at the times they happened, and still counts as verified", async () => {
+    const id = await alarmFor(alice, { scheduledTime: new Date(Date.now() - 3 * HOUR) });
+    signInAs(alice);
+    const rang = ago(3 * HOUR);
+    const answered = ago(3 * HOUR - 50_000);
+    const stopped = ago(3 * HOUR - 52_000);
+    expect((await fire(request("POST", `/api/alarms/${id}/fire`, { at: rang }), idParams(id))).status).toBe(200);
+    const v = await read(await verify(request("POST", `/api/alarms/${id}/verify`, {
+      solved: true, correctness: 1, responseMs: 20000, attempts: 1, methods: ["math"], at: answered,
+    }), idParams(id)));
+    expect(v.body.data.passed).toBe(true);
+    const d = await read(await dismiss(request("POST", `/api/alarms/${id}/dismiss`, { responseMs: 52000, at: stopped }), idParams(id)));
+    expect(d.body.data.status).toBe("verified");
+
+    const events = await BehaviorEvent.find({ "meta.alarmId": id }).sort({ at: 1 }).lean<{ type: string; at: Date; meta: { reportedLate?: boolean } }[]>();
+    expect(events.map((e) => [e.type, e.at.toISOString(), e.meta.reportedLate])).toEqual([
+      ["alarm_fire", rang, true],
+      ["verify_pass", answered, true],
+      ["dismiss", stopped, true],
+    ]);
+  });
+
+  it("does not borrow a verification from a different ring", async () => {
+    const id = await alarmFor(alice, { status: "ringing" });
+    signInAs(alice);
+    await verify(request("POST", `/api/alarms/${id}/verify`, { solved: true, correctness: 1, responseMs: 6000, at: ago(5 * HOUR) }), idParams(id));
+    const d = await read(await dismiss(request("POST", `/api/alarms/${id}/dismiss`, { at: ago(2 * HOUR) }), idParams(id)));
+    expect(d.body.data.status).toBe("dismissed");
+  });
+
+  it.each([
+    ["in the future", new Date(Date.now() + HOUR).toISOString()],
+    ["over a week old", new Date(Date.now() - 8 * DAY).toISOString()],
+    ["not a time", "yesterday morning"],
+    ["a number", 1792796760000],
+  ])("rejects a time %s, recording nothing", async (_what, at) => {
+    const id = await alarmFor(alice);
+    signInAs(alice);
+    for (const [handler, path, body] of [
+      [fire, "fire", { at }],
+      [verify, "verify", { solved: true, at }],
+      [dismiss, "dismiss", { at }],
+    ] as const) {
+      const res = await (handler as Handler)(request("POST", `/api/alarms/${id}/${path}`, body), idParams(id));
+      expect(res.status).toBe(422);
+    }
+    expect(await BehaviorEvent.countDocuments()).toBe(0);
+    expect(await statusOf(id)).toBe("scheduled");
+  });
+});
+
 describe("PATCH after snooze", () => {
   it("forgets the pre-snooze time when the user sets a new one", async () => {
     const id = await alarmFor(alice, { repeat: { type: "daily" } });

@@ -91,7 +91,7 @@ public class RingServiceTest {
         assertEquals(NotificationManager.IMPORTANCE_HIGH,
             context.getSystemService(NotificationManager.class).getNotificationChannel(RingService.CHANNEL).getImportance());
 
-        RingService.dismiss(context);
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null && ringNotification() == null && !alarmPlaying());
         assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-basic"));
     }
@@ -143,7 +143,7 @@ public class RingServiceTest {
             assertTrue(RingService.start(context, spec("t-volume"), System.currentTimeMillis()));
             waitFor("ringing", () -> RingService.current != null);
             assertEquals("raised to the floor", floor, audio.getStreamVolume(AudioManager.STREAM_ALARM));
-            RingService.dismiss(context);
+            RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
             waitFor("stopped", () -> RingService.current == null);
             assertEquals("restored", min, audio.getStreamVolume(AudioManager.STREAM_ALARM));
         }
@@ -159,15 +159,88 @@ public class RingServiceTest {
         waitFor("first ringing", () -> RingService.current != null);
         assertTrue(RingService.start(context, spec("t-second"), now));
         waitFor("both ringing", () -> RingService.current != null && RingService.current.ids.size() == 2);
-        RingService.dismiss(context);
+        // Past Android's deadline for startForeground after the second start: the
+        // app used to be killed here (ForegroundServiceDidNotStartInTimeException).
+        Thread.sleep(12_000);
+        assertNotNull("still alive and ringing", RingService.current);
+        assertTrue(alarmPlaying());
+        // The same alarm delivered again (a redelivered intent) must not kill it either.
+        assertTrue(RingService.start(context, spec("t-second"), now));
+        Thread.sleep(12_000);
+        assertNotNull("still alive after a repeat start", RingService.current);
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null && ringNotification() == null);
         assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-first"));
         assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-second"));
     }
 
     @Test
+    public void aRingThatNeedsAWakeCheckStopsOnlyWithAPassedOne() throws Exception {
+        assertTrue(RingService.start(context, spec("t-gate", "{\"required\":true,\"methods\":[\"math\"],\"minConfidence\":60}"), System.currentTimeMillis()));
+        waitFor("ringing", () -> RingService.current != null);
+        assertTrue(RingService.current.check.required);
+
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
+        RingService.dismiss(context, null);
+        RingService.dismiss(context, new Verification(true, false, 0, 3_000, 4, List.of("math"), 99, System.currentTimeMillis()));
+        waitFor("three refusals logged", () -> {
+            try {
+                return outcomesFor("t-gate").stream().filter(o -> o.equals("dismiss_refused")).count() == 3;
+            }
+            catch (Exception e) {
+                return false;
+            }
+        });
+        assertNotNull("still ringing", RingService.current);
+        assertTrue(alarmPlaying());
+
+        // A real check, solved quickly, stops it.
+        WakeCheck check = new WakeCheck(RingService.current.check, new java.util.Random(1), System.currentTimeMillis());
+        String[] ab = check.question().split(" × ");
+        assertEquals(WakeCheck.Step.PASSED, check.submit(String.valueOf(Integer.parseInt(ab[0]) * Integer.parseInt(ab[1])), System.currentTimeMillis() + 3_000));
+        RingService.dismiss(context, check.verification(System.currentTimeMillis()));
+        waitFor("stopped", () -> RingService.current == null && !alarmPlaying());
+        assertEquals("dismissed", outcomesFor("t-gate").get(outcomesFor("t-gate").size() - 1));
+    }
+
+    @Test
+    public void aStoppedRingIsQueuedForTheServer() throws Exception {
+        assertTrue(RingService.start(context, spec("t-queue"), System.currentTimeMillis()));
+        waitFor("ringing", () -> RingService.current != null);
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
+        waitFor("stopped", () -> RingService.current == null);
+        List<String> paths = new ArrayList<>();
+        JSONArray pending = Outbox.queue(context).pending();
+        for (int i = 0; i < pending.length(); i++) {
+            JSONObject e = pending.getJSONObject(i);
+            if (e.getString("alarmId").equals("t-queue") && e.getLong("queuedAt") >= startedAt) {
+                paths.add(e.getString("path"));
+            }
+        }
+        assertEquals(List.of("/api/alarms/t-queue/fire", "/api/alarms/t-queue/dismiss"), paths);
+    }
+
+    /**
+     * Found on the emulator in prompt 2.4: an alarm going off just as another is
+     * dismissed. The stopping service was torn down under the new start, and the
+     * app was killed (ForegroundServiceDidNotStartInTimeException).
+     */
+    @Test
+    public void anAlarmGoingOffJustAsAnotherIsDismissedStillRings() throws Exception {
+        assertTrue(RingService.start(context, spec("t-race-1"), System.currentTimeMillis()));
+        waitFor("first ringing", () -> RingService.current != null);
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
+        assertTrue(RingService.start(context, spec("t-race-2"), System.currentTimeMillis()));
+        waitFor("second ringing", () -> RingService.current != null && RingService.current.ids.contains("t-race-2"));
+        Thread.sleep(12_000);
+        assertNotNull("still alive and ringing", RingService.current);
+        assertTrue(alarmPlaying());
+        assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-race-1"));
+    }
+
+    @Test
     public void dismissWithNothingRingingIsHarmless() throws Exception {
-        RingService.dismiss(context);
+        RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         Thread.sleep(1_000);
         assertEquals(null, RingService.current);
         assertEquals(null, ringNotification());
@@ -175,14 +248,21 @@ public class RingServiceTest {
 
     // --- helpers ---
 
+    /** A ring plan with no wake check, so the lifecycle tests can stop it directly. */
     private AlarmSpec spec(String id) {
-        String plan = "{\"version\":1,\"sound\":{\"intensity\":80,\"strategy\":\"aggressive\"}}";
+        return spec(id, "{\"required\":false,\"methods\":[\"math\"],\"minConfidence\":70}");
+    }
+
+    private AlarmSpec spec(String id, String challenge) {
+        String plan = "{\"version\":1,\"sound\":{\"intensity\":80,\"strategy\":\"aggressive\"},\"challenge\":" + challenge + "}";
         return new AlarmSpec(id, "Test " + id, 7, 0, EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true, plan);
     }
 
+    /** Stops a ring left by a failed test, with a check that passes any plan. */
     private void stopAnyRing() throws Exception {
         if (RingService.current != null) {
-            RingService.dismiss(context);
+            RingService.dismiss(context, new Verification(true, true, 1, 1_000, 0,
+                java.util.Collections.nCopies(10, "math"), 100, System.currentTimeMillis()));
             waitFor("previous ring stopped", () -> RingService.current == null);
         }
     }

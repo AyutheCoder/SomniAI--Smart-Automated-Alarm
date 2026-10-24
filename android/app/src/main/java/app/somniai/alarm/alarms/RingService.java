@@ -48,6 +48,7 @@ public class RingService extends Service implements RingController.Effects {
     private static final String EXTRA_LABEL = "label";
     private static final String EXTRA_AT = "at";
     private static final String EXTRA_PLAN = "plan";
+    private static final String EXTRA_VERIFICATION = "verification";
 
     /**
      * What is ringing now, for the ring screen and the on-device tests. Null
@@ -64,8 +65,10 @@ public class RingService extends Service implements RingController.Effects {
         final float volume;
         final boolean vibrating;
         final boolean wakeLockHeld;
+        /** The wake check that stops this ring. */
+        final WakeCheck.Plan check;
 
-        Snapshot(List<String> ids, String label, long scheduledFor, RingController.Source source, float volume, boolean vibrating, boolean wakeLockHeld) {
+        Snapshot(List<String> ids, String label, long scheduledFor, RingController.Source source, float volume, boolean vibrating, boolean wakeLockHeld, WakeCheck.Plan check) {
             this.ids = ids;
             this.label = label;
             this.scheduledFor = scheduledFor;
@@ -73,6 +76,7 @@ public class RingService extends Service implements RingController.Effects {
             this.volume = volume;
             this.vibrating = vibrating;
             this.wakeLockHeld = wakeLockHeld;
+            this.check = check;
         }
     }
 
@@ -94,10 +98,15 @@ public class RingService extends Service implements RingController.Effects {
         }
     }
 
-    /** Stops whatever is ringing. Does nothing if nothing is. */
-    static void dismiss(Context context) {
+    /**
+     * Asks to stop whatever is ringing, with how the wake check went. The
+     * service refuses (and logs it) unless the check passes the ring's plan.
+     * Does nothing if nothing is ringing.
+     */
+    static void dismiss(Context context, Verification verification) {
         try {
-            context.startService(new Intent(context, RingService.class).setAction(ACTION_DISMISS));
+            context.startService(new Intent(context, RingService.class).setAction(ACTION_DISMISS)
+                .putExtra(EXTRA_VERIFICATION, verification == null ? null : verification.toJson().toString()));
         }
         catch (IllegalStateException e) {
             // The app is in the background, so no ring service is running: nothing to stop.
@@ -107,6 +116,8 @@ public class RingService extends Service implements RingController.Effects {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private RingController controller;
+    /** The id of the most recent start request, for {@link #stopService}. */
+    private int latestStartId;
     private final Runnable tick = () -> {
         controller.tick(System.currentTimeMillis());
         publish();
@@ -129,17 +140,34 @@ public class RingService extends Service implements RingController.Effects {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        latestStartId = startId;
         String action = intent == null ? null : intent.getAction();
         long now = System.currentTimeMillis();
         if (ACTION_RING.equals(action)) {
             RingController.Alarm alarm = new RingController.Alarm(
                 String.valueOf(intent.getStringExtra(EXTRA_ID)),
                 String.valueOf(intent.getStringExtra(EXTRA_LABEL)),
-                intent.getLongExtra(EXTRA_AT, now));
+                intent.getLongExtra(EXTRA_AT, now),
+                WakeCheck.Plan.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)));
             controller.start(alarm, RingTuning.fromPlan(intent.getStringExtra(EXTRA_PLAN)), now);
+            if (controller.state() == RingController.State.RINGING) {
+                List<RingController.Alarm> all = new ArrayList<>();
+                for (RingController.Alarm a : controller.ringing()) {
+                    all.add(a);
+                }
+                goForeground(all);
+            }
         }
         else if (ACTION_DISMISS.equals(action)) {
-            controller.dismiss(now);
+            String v = intent.getStringExtra(EXTRA_VERIFICATION);
+            Verification verification = null;
+            try {
+                verification = v == null ? null : Verification.fromJson(v);
+            }
+            catch (IllegalArgumentException e) {
+                Log.w(AlarmScheduler.TAG, "unreadable verification: " + e.getMessage());
+            }
+            controller.dismiss(now, verification);
         }
         if (controller.state() != RingController.State.RINGING) {
             stopSelf(startId);
@@ -168,7 +196,18 @@ public class RingService extends Service implements RingController.Effects {
     public boolean startForeground(RingController.Alarm first) {
         List<RingController.Alarm> one = new ArrayList<>();
         one.add(first);
-        Notification n = notification(one);
+        return goForeground(one);
+    }
+
+    /**
+     * startForeground with the notification for these alarms. Android requires
+     * it after every startForegroundService call, not only the first: a second
+     * alarm going off while one rings, or a redelivered ring, must call it again
+     * or the app is killed seconds later (ForegroundServiceDidNotStartInTime,
+     * found on the emulator in prompt 2.4).
+     */
+    private boolean goForeground(List<RingController.Alarm> alarms) {
+        Notification n = notification(alarms);
         try {
             if (Build.VERSION.SDK_INT >= 34) {
                 startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED);
@@ -310,7 +349,11 @@ public class RingService extends Service implements RingController.Effects {
         current = null;
         stopForeground(STOP_FOREGROUND_REMOVE);
         getSystemService(NotificationManager.class).cancel(NOTIFICATION_ID);
-        stopSelf();
+        // Not stopSelf(): that stops the service even when another alarm's start
+        // is already on its way, and Android then kills the app for not calling
+        // startForeground for it (found on the emulator in prompt 2.4). With the
+        // latest start id it only stops if nothing newer has arrived.
+        stopSelf(latestStartId);
     }
 
     @Override
@@ -320,6 +363,11 @@ public class RingService extends Service implements RingController.Effects {
             AlarmStore.log(this, AlarmScheduler.logEntry(alarm.id, alarm.label, outcome, alarm.scheduledFor, at, context));
         }
         Log.i(AlarmScheduler.TAG, outcome + " " + alarm.id + ": " + context);
+    }
+
+    @Override
+    public void queueSync(RingController.Alarm alarm, long rangAt, String outcome, long endedAt, Verification verification) {
+        Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification));
     }
 
     // --- Helpers ---
@@ -398,6 +446,6 @@ public class RingService extends Service implements RingController.Effects {
             }
         }
         current = new Snapshot(ids, first == null ? "" : first.label, first == null ? 0 : first.scheduledFor,
-            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld());
+            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld(), controller.check());
     }
 }

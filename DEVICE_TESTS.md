@@ -105,3 +105,48 @@ Record the date, phone model and Android version, and pass or fail for each:
 
 Checks 1–3 and 6 are the ones the 2.3 gate asks for: rings on a locked screen,
 in silent mode and with DND on, and stops cleanly.
+
+## 2.4 Wake check and offline sync
+
+Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24.
+
+| Condition | Result | Evidence |
+| --- | --- | --- |
+| On-device tests (14: ring service, ring screen, sync) | Pass, 14/14 | After the two fixes below. Two emulator ANR dialogs (dialer, System UI) had to be cleared first; they took window focus from the tests |
+| **Airplane mode on**, screen off, alarm with a check (minConfidence 70) | Pass | Rang over the lock screen. A wrong answer gave "Not quite. Here's a new one." and a new problem, and it kept ringing. The right answer stopped it: `dismissed … wake check passed, score 74, 2 wrong answer(s)`. Three calls (fire, verify, dismiss) were queued, and WorkManager's job was waiting on `CONNECTIVITY` |
+| Network back (airplane mode off) | Sync attempted, result kept | WorkManager ran the sync about 13 s after the network returned. No server was running at the dev address, so it timed out (`last status -1`) and kept everything for its retry |
+| Result appears in history | **Not run on the emulator** | Needs a running server, a signed-in account and a real alarm id: phone checklist below. The server side is covered by `tests/api/alarm-actions.test.ts`, "a ring reported late", which records it at the real times and still counts it as verified |
+
+Found by driving it on the emulator, both fixed, each with a test that failed
+before the fix:
+
+- **The keyboard covered the Check button.** Android 15+ draws edge to edge,
+  so the window no longer shrank for the keyboard.
+- **An alarm going off just as another was dismissed crashed the app**
+  (`ForegroundServiceDidNotStartInTimeException`): the race test failed 3/3
+  before the fix and passed 3/3 after.
+
+### On your phone: checklist
+
+You need the debug build installed (2.3 checklist), the dev server running
+where the phone can reach it (`ANDROID.md`, "Running it"), and to be **signed in
+in the SomniAI app** on the phone.
+
+1. In the app, create an alarm (any time; it is only used for its id) and copy
+   its id from the address bar or the API (`/api/alarms`).
+2. From the computer:
+   `adb shell am broadcast -a app.somniai.alarm.debug.SCHEDULE -n app.somniai.alarm/.alarms.DebugAlarmReceiver --ei minutes 2 --es id <that id>`
+3. Turn on **airplane mode** and lock the phone.
+4. When it rings, give one **wrong** answer.
+   **Pass:** a new problem, and it keeps ringing.
+5. Answer correctly.
+   **Pass:** it stops.
+6. Before reconnecting, send
+   `adb shell am broadcast -a app.somniai.alarm.debug.LIST -n app.somniai.alarm/.alarms.DebugAlarmReceiver`
+   and check `adb logcat -s SomniAlarm` says it is waiting to sync 3 calls for
+   that id.
+7. Turn airplane mode off and wait a minute.
+   **Pass:** `sync: sent 3`, and in the app's history the alarm shows as
+   verified at the time you stopped it, not the time it synced.
+
+Record the date, phone model and Android version, and the result of each step.

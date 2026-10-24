@@ -6,7 +6,7 @@ import { getUserId } from "@/lib/session";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { computeWakeConfidence } from "@/lib/wakeConfidence";
-import { isInt, isNum, isStringList } from "@/lib/validate";
+import { isInt, isNum, isOccurredAt, isStringList } from "@/lib/validate";
 
 interface VerifyBody {
   /** The client's own score. Ignored: the server scores from the signals. */
@@ -19,6 +19,8 @@ interface VerifyBody {
   solved?: boolean;
   /** Fraction of challenges solved, when a sequence was presented. */
   correctness?: number;
+  /** When it was answered, if it is being reported later (a phone that was offline). */
+  at?: string;
 }
 
 function invalidSignals(body: VerifyBody): string | null {
@@ -39,6 +41,9 @@ function invalidSignals(body: VerifyBody): string | null {
   }
   if (body.methods !== undefined && !isStringList(body.methods)) {
     return "methods must be a list of challenge names";
+  }
+  if (body.at !== undefined && !isOccurredAt(body.at)) {
+    return "at must be an ISO time within the last 7 days and not in the future";
   }
   return null;
 }
@@ -99,8 +104,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
         solved: body.solved ?? null,
         scoredServerSide,
         threshold,
+        reportedLate: body.at !== undefined,
       },
-      at: new Date(),
+      at: body.at ? new Date(body.at) : new Date(),
     });
     return jsonOk({ confidence, passed, threshold });
   });

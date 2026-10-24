@@ -9,11 +9,13 @@ import { Task } from "@/models/Task";
 import { User } from "@/models/User";
 import { recordFeedback } from "@/lib/rlFeedback";
 import type { FeedbackOutcome, RlContext } from "@/lib/aiClient";
-import { isNum } from "@/lib/validate";
+import { isNum, isOccurredAt } from "@/lib/validate";
 import { nextOccurrence } from "@/lib/recurrence";
 
 interface DismissBody {
   responseMs?: number;
+  /** When it was dismissed, if it is being reported later (a phone that was offline). */
+  at?: string;
   // `verified` and `confidence` used to be read from here, which let a client
   // mark an alarm verified that the server had scored as failed. The verdict
   // now comes only from the verify route's own record.
@@ -44,6 +46,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
       return jsonError("responseMs must be a non-negative number", 422);
     }
+    if (body.at !== undefined && !isOccurredAt(body.at)) {
+      return jsonError("at must be an ISO time within the last 7 days and not in the future", 422);
+    }
+    const dismissedAt = body.at ? new Date(body.at) : new Date();
 
     const existing = await Alarm.findOne({ _id: id, userId });
     if (!existing) {
@@ -52,11 +58,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     // The verify route scores the challenge server-side and records the result;
     // that record, not the client's claim, says whether this ring was verified.
+    // The window is around the dismissal itself, so a ring a phone reports
+    // hours later still finds the verification it made at the time.
     const verdict = await BehaviorEvent.findOne({
       userId,
       type: { $in: ["verify_pass", "verify_fail"] },
       "meta.alarmId": id,
-      at: { $gte: new Date(Date.now() - VERIFY_WINDOW_MS) },
+      at: { $gte: new Date(dismissedAt.getTime() - VERIFY_WINDOW_MS), $lte: new Date(dismissedAt.getTime() + 60_000) },
     }).sort({ at: -1 }).lean<{ type: string; value?: number }>();
     const verified = verdict?.type === "verify_pass";
     const confidence = verdict?.value;
@@ -85,8 +93,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
         verified,
         responseMs: body.responseMs ?? null,
         recurring: Boolean(next),
+        reportedLate: body.at !== undefined,
       },
-      at: new Date(),
+      at: dismissedAt,
     });
     // No verify_pass/verify_fail here: the verify route already recorded the
     // one verdict, and logging it again double-counted every wake.

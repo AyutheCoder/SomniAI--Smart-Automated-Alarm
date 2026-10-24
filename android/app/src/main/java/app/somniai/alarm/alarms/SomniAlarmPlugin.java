@@ -40,6 +40,30 @@ public class SomniAlarmPlugin extends Plugin {
     @Override
     public void load() {
         AlarmScheduler.rescheduleAll(getContext(), "app_start", ZoneId.systemDefault());
+        // Anything queued before the first unlock, or while WorkManager was unavailable.
+        Outbox.scheduleSync(getContext());
+    }
+
+    /** Ring results waiting to be sent to the server, oldest first. */
+    @PluginMethod
+    public void pendingSync(PluginCall call) {
+        JSObject out = new JSObject();
+        out.put("calls", Outbox.queue(getContext()).pending());
+        call.resolve(out);
+    }
+
+    /** Tries to send the queue now, and says what happened. */
+    @PluginMethod
+    public void syncNow(PluginCall call) {
+        new Thread(() -> {
+            OutboxQueue.Flush f = Outbox.flushNow(getContext());
+            JSObject out = new JSObject();
+            out.put("sent", f.sent);
+            out.put("dropped", new JSArray(f.dropped));
+            out.put("waiting", Outbox.queue(getContext()).size());
+            out.put("lastStatus", f.lastStatus);
+            call.resolve(out);
+        }, "somni-sync").start();
     }
 
     @PluginMethod

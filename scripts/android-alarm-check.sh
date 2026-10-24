@@ -92,7 +92,7 @@ if [ "$SDK" -ge 31 ] && [ "$SDK" -le 32 ]; then
   sh_ appops set "$PKG" SCHEDULE_EXACT_ALARM deny
   sleep 3   # turning it off stops the app
   mark
-  sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 5 >/dev/null
+  sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 5 --ez check false >/dev/null
   wait_log '"status":"waiting_for_permission"' 30 || fail "with access off the alarm was not reported waiting: $(log | tail -3)"
   say "access off: alarm saved and reported waiting_for_permission, not scheduled"
   sh_ appops set "$PKG" SCHEDULE_EXACT_ALARM allow
@@ -102,7 +102,7 @@ fi
 
 # Fires with the process killed.
 mark
-sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 2 >/dev/null
+sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $DEBUG --ei minutes 2 --ez check false >/dev/null
 wait_log '"status":"scheduled"' 30 || fail "alarm not scheduled: $(log | tail -3)"
 has "$PKG/.alarms.AlarmFiredReceiver" sh_ dumpsys alarm || fail "AlarmManager has no alarm for the app"
 kill_app

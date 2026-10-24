@@ -47,6 +47,10 @@ public class RescheduleReceiver extends BroadcastReceiver {
             return;
         }
         AlarmScheduler.rescheduleAll(context, action, zoneOf(intent));
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
+            // Unlocked now, so WorkManager is available for anything queued before.
+            Outbox.scheduleSync(context);
+        }
     }
 
     /** The new zone from TIMEZONE_CHANGED itself, in case the process default lags. */

@@ -31,10 +31,11 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.4** |
-| Last completed | 2.3 (`RingService`: systemExempted foreground service, alarm-stream sound with dB ramp and fallbacks, alarm vibration, wake lock, full-screen `RingActivity` over the lock screen, 40 % alarm-volume floor, 20-min cap; lifecycle in pure `RingController`; JVM android 72, on-device `RingServiceTest` 6/6 on API 37, also in CI on 26/32/35; locked + silent + DND emulator run in `DEVICE_TESTS.md`) |
-| Waiting on the human | Phone checks for 2.1, 2.2 and the 2.3 checklist in `DEVICE_TESTS.md` (only emulators so far). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`). Until 2.4, Stop dismisses without the wake check |
+| **Next prompt** | **2.5** |
+| Last completed | 2.4 (native maths wake check on the ring screen, gated as the web: all solved and score >= minConfidence; `WakeConfidence.java` checked against the TS on 3,468 shared cases; `RingService` refuses any dismissal without a passed check; ring results queued on the phone (fire/verify/dismiss with `at`) and sent by WorkManager when online with the web view's cookie; server accepts `at` and finds the verification near the dismissal. Fixed: keyboard covering Check (edge-to-edge), crash when an alarm fires as another is dismissed (`stopSelf(startId)`). JVM android 121, on-device 14/14 on API 37; verify:all green, vitest 645) |
+| Waiting on the human | Phone checks for 2.1–2.4 in `DEVICE_TESTS.md` (only emulators so far; 2.4's "appears in history" needs a server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
+| Open for 2.5 | Web outbox drops 401 (native keeps it); web verify sends ring-elapsed `responseMs`, native sends time on task; server ignores `interactions` (`ANDROID.md`, "Open, for prompt 2.5") |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.
