@@ -172,6 +172,14 @@ Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24.
 | Edit an alarm, lock the phone, it fires at the new time | Pass | Set for 15:47, then edited by an app restart to 15:46. On the restart, the force-stop's lost alarm was first restored from the phone's store (`app_start`, `BOOT_COMPLETED`), then the page's reconcile moved it. It fired at 15:46:00.37 (194 ms late) with the ring screen on top, and **did not fire at 15:47** |
 | The full app with a signed-in account against the real server | **Not run on the emulator** | Too much for this machine's memory alongside the emulator, and the e2e server's sign-in is bound to localhost. Covered in parts: Playwright with the real page and server and a stand-in phone, plus the bridge run above. Phone checklist below |
 
+CI emulators, run 40086641380 (2026-10-24): all jobs green; the 5
+`ReconcileTest` tests pass on API 26, 32 and 35. Skips: API 26 as in 2.4
+(silent + DND, keyboard), and **the keyboard test on API 35 this time** (it
+passed there in the previous run). A system window lay over the ring screen
+where the test touched Stop, so the unconfirmed overlay from 2.4 is
+intermittent and not only on Android 8. The test now names the window in its
+skip message, so the next CI run that hits it says what it is.
+
 ### On your phone: checklist
 
 Debug build installed, the dev server running where the phone reaches it, and

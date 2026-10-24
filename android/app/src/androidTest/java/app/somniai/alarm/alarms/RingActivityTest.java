@@ -196,9 +196,33 @@ public class RingActivityTest {
         }
         catch (SecurityException | IllegalArgumentException e) {
             // SecurityException up to Android 13, IllegalArgumentException later.
-            Assume.assumeTrue("a system window lies over the ring screen here: " + e.getMessage(), false);
+            // Name the window in the way: if it is the alarm's own heads-up, users
+            // would meet it too (DEVICE_TESTS.md, 2.4).
+            Assume.assumeTrue("a system window lies over the ring screen at (" + (int) x + "," + (int) y + "): "
+                + windowsInTheWay() + "; " + e.getMessage(), false);
         }
         instrumentation.waitForIdleSync();
+    }
+
+    /** The focused window and any heads-up or dialog windows, from the window manager. */
+    private String windowsInTheWay() {
+        StringBuilder out = new StringBuilder();
+        try (java.io.InputStream in = new android.os.ParcelFileDescriptor.AutoCloseInputStream(
+                instrumentation.getUiAutomation().executeShellCommand("dumpsys window"))) {
+            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(in));
+            String line;
+            while ((line = r.readLine()) != null) {
+                String t = line.trim();
+                if (t.startsWith("mCurrentFocus=") || t.contains("HeadsUp") || t.contains("Not Responding")
+                        || (t.startsWith("Window #") && t.contains("NotificationShade"))) {
+                    out.append(t.length() > 120 ? t.substring(0, 120) : t).append(" | ");
+                }
+            }
+        }
+        catch (java.io.IOException ignored) {
+            out.append("window list unavailable");
+        }
+        return out.toString();
     }
 
     private void answer(RingActivity screen, long value) {
