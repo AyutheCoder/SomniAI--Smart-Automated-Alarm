@@ -34,13 +34,15 @@ after the scheduled minute the app's receiver ran.
 | App updated (`adb install -r`) | Pass | Rescheduled on `MY_PACKAGE_REPLACED` |
 | App **force-stopped** | Alarm deleted by Android, as documented; restored on next open | AlarmManager removal history `Reason=pi_cancelled`. Opening the app rescheduled it (app start, and `LOCKED_BOOT_COMPLETED`/`BOOT_COMPLETED` on leaving the stopped state). No app can ring while force-stopped; see `ANDROID.md` |
 
-CI emulators (`scripts/android-alarm-check.sh`, each push):
+CI emulators (`scripts/android-alarm-check.sh`, every push). First green run:
+40043717343, 2026-10-24. "Fired in" is a new process; the one that set the
+alarm had been killed.
 
 | Android | What it checks | Result |
 | --- | --- | --- |
-| 8.0 (API 26) | no permission needed; fires with process killed | see the latest CI run |
-| 12L (API 32) | access off: alarm waits; on: rescheduled on `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`; fires with process killed | see the latest CI run |
-| 15 (API 35) | `USE_EXACT_ALARM` granted; fires with process killed | see the latest CI run |
+| 8.0 (API 26) | no permission needed; fires with process killed | Pass, 35 ms late (killed pid 4900, fired in 5435) |
+| 12L (API 32) | access off: alarm saved as `waiting_for_permission`; on: rescheduled on `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`; fires with process killed | Pass, 199 ms late (killed 3828, fired in 7061) |
+| 15 (API 35) | `USE_EXACT_ALARM` granted, `SCHEDULE_EXACT_ALARM` not requested; fires with process killed | Pass, 11 ms late (killed 2781, fired in 3356) |
 
 ### On your phone (not run yet)
 
