@@ -252,6 +252,13 @@ device is connected:
 CI runs it on API 26, 32 and 35 emulators. Results on a real phone go in
 `DEVICE_TESTS.md`.
 
+`bash scripts/device-matrix.sh` runs the whole condition matrix (screen locked,
+silent mode, Do Not Disturb, Battery Saver, low battery, airplane mode, time
+zone change, force-stop, Doze, Restricted battery usage, standby bucket, and
+`reboot` on request). It sets each condition, rings a test alarm under it,
+records the evidence, stops the alarm and puts the condition back.
+`DEVICE_TESTS.md` explains how to run it on a phone and what to do by hand.
+
 ## Ringing (prompt 2.3)
 
 When an alarm fires, `AlarmFiredReceiver` starts `RingService`. Android allows

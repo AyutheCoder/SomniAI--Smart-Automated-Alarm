@@ -55,6 +55,13 @@ public class RingTuningTest {
     }
 
     @Test
+    public void theVolumeIsPutBackOnlyIfTheUserHasNotChangedItSince() {
+        assertEquals("still where the ring left it: back to the user's", 3, RingTuning.restoreTo(7, 3, 7));
+        assertEquals("the user changed it since: theirs stays", -1, RingTuning.restoreTo(5, 3, 7));
+        assertEquals("nothing was raised", -1, RingTuning.restoreTo(7, -1, -1));
+    }
+
+    @Test
     public void thePlayerVolumeIsTheRampTimesTheFactorAndNeverPastFull() {
         RingTuning.Settings s = RingTuning.settings("adaptive", 0);
         assertEquals(0.3 * 1.4, RingTuning.playerVolume(s, s.rampMs, 1.4), 1e-6);

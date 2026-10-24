@@ -144,9 +144,6 @@ public class RingService extends Service implements RingController.Effects {
     private Vibrator vibrator;
     private boolean vibrating;
     private float volume;
-    /** The alarm stream index before it was raised, or -1 if it wasn't. */
-    private int restoreIndex = -1;
-    private int raisedTo = -1;
 
     @Override
     public void onCreate() {
@@ -276,39 +273,13 @@ public class RingService extends Service implements RingController.Effects {
         int now = audio.getStreamVolume(AudioManager.STREAM_ALARM);
         int min = Build.VERSION.SDK_INT >= 28 ? audio.getStreamMinVolume(AudioManager.STREAM_ALARM) : 0;
         int target = RingTuning.streamIndex(now, min, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), volumeFactor);
-        if (target > now) {
-            try {
-                audio.setStreamVolume(AudioManager.STREAM_ALARM, target, 0);
-                // Restored to what the user had before the first raise, not an in-between level.
-                if (restoreIndex < 0) {
-                    restoreIndex = now;
-                }
-                raisedTo = target;
-                Log.i(AlarmScheduler.TAG, "alarm volume raised from " + now + " to " + target + " while ringing");
-            }
-            catch (SecurityException e) {
-                Log.w(AlarmScheduler.TAG, "could not raise the alarm volume: " + e);
-            }
-        }
+        // Remembered on disk before the raise, so a reboot mid-ring can't leave it raised.
+        AlarmVolume.raise(this, target);
     }
 
     @Override
     public void restoreAlarmVolume() {
-        if (restoreIndex < 0) {
-            return;
-        }
-        AudioManager audio = getSystemService(AudioManager.class);
-        // Only put it back if the user hasn't changed it meanwhile.
-        if (audio.getStreamVolume(AudioManager.STREAM_ALARM) == raisedTo) {
-            try {
-                audio.setStreamVolume(AudioManager.STREAM_ALARM, restoreIndex, 0);
-            }
-            catch (SecurityException e) {
-                Log.w(AlarmScheduler.TAG, "could not restore the alarm volume: " + e);
-            }
-        }
-        restoreIndex = -1;
-        raisedTo = -1;
+        AlarmVolume.restore(this);
     }
 
     @Override

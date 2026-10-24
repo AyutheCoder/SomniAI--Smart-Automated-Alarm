@@ -31,8 +31,8 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.7** |
-| Last completed | 2.6 (native 5-stage escalation from the cached plan: volume factor (player and alarm stream), vibration from its level, check opened at the challenge level, backups tried once and reported not_configured, slow pass goes to the top; unmissable = full ladder never slower than standard; every dismissed ring now reports its level (fixes the profile learning only from level-5 mornings); escalate takes `at`. Tests: EscalationLadder parity with TS table + override, controller stage timing; on-device 22/22; emulator ladder run on time) |
+| **Next prompt** | **2.7, finish on the phone**: the matrix ran on the emulator; your phone run is next (`DEVICE_TESTS.md`, "Running it on your phone"), then record its results and fix every failure. 3.1 after that |
+| Last completed | 2.7 on the emulator (`scripts/device-matrix.sh`: 12 conditions, all pass or not applicable on API 37; manufacturer table for Samsung/Xiaomi/Oppo/Realme from dontkillmyapp.com; found and fixed: a reboot or crash mid-ring left the alarm volume raised (`AlarmVolume`); the restricted standby bucket can't apply to exact-alarm apps (AOSP floors them at working set)). 2.6 before that |
 | Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (emulators only so far; 2.4 history and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |

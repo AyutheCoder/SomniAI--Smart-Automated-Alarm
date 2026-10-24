@@ -344,6 +344,37 @@ public class RingServiceTest {
             + "\"challenge\":{\"required\":" + check + ",\"methods\":[\"math\"],\"minConfidence\":60},\"escalation\":" + esc + "}";
     }
 
+    /**
+     * Found on the emulator in prompt 2.7: a reboot during a ring left the
+     * user's alarm volume raised, because only a ring that ended put it back.
+     */
+    @Test
+    public void aVolumeRaiseLeftByARebootMidRingIsPutBackAtTheNextStart() throws Exception {
+        AudioManager audio = context.getSystemService(AudioManager.class);
+        int before = audio.getStreamVolume(AudioManager.STREAM_ALARM);
+        int min = Build.VERSION.SDK_INT >= 28 ? audio.getStreamMinVolume(AudioManager.STREAM_ALARM) : 0;
+        int max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+        try {
+            audio.setStreamVolume(AudioManager.STREAM_ALARM, min, 0);
+            // A ring raised it, then the phone went down before the ring ended.
+            assertTrue(AlarmVolume.raise(context, max));
+            assertEquals(max, audio.getStreamVolume(AudioManager.STREAM_ALARM));
+            // The next boot or app start.
+            AlarmScheduler.rescheduleAll(context, "test", java.time.ZoneId.systemDefault());
+            assertEquals("put back", min, audio.getStreamVolume(AudioManager.STREAM_ALARM));
+
+            // If the user changed it in between, theirs stays.
+            assertTrue(AlarmVolume.raise(context, max));
+            audio.setStreamVolume(AudioManager.STREAM_ALARM, max - 1, 0);
+            AlarmScheduler.rescheduleAll(context, "test", java.time.ZoneId.systemDefault());
+            assertEquals("the user's own change stays", max - 1, audio.getStreamVolume(AudioManager.STREAM_ALARM));
+            assertEquals("and nothing is left to restore", "nothing to restore", AlarmVolume.restore(context));
+        }
+        finally {
+            audio.setStreamVolume(AudioManager.STREAM_ALARM, before, 0);
+        }
+    }
+
     @Test
     public void dismissWithNothingRingingIsHarmless() throws Exception {
         RingService.dismiss(context, Verification.none(System.currentTimeMillis()));

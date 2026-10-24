@@ -102,6 +102,14 @@ final class RingTuning {
         return Math.max(current, floor);
     }
 
+    /**
+     * The alarm stream index to put back after a ring, or -1 to leave it: only
+     * if it is still where the ring raised it, so a change the user made since wins.
+     */
+    static int restoreTo(int current, int original, int raisedTo) {
+        return original >= 0 && current == raisedTo ? original : -1;
+    }
+
     /** Player volume at a level's volume factor: the ramp, made louder, never past full. */
     static float playerVolume(Settings s, long elapsedMs, double volumeFactor) {
         return (float) Math.min(1, volumeAt(s, elapsedMs) * volumeFactor);

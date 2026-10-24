@@ -96,6 +96,8 @@ public final class AlarmScheduler {
 
     /** Schedules every stored alarm again. Idempotent: the same alarm gets the same PendingIntent. */
     public static List<AlarmRecord> rescheduleAll(Context context, String reason, ZoneId zone) {
+        // Boot and app start: a ring that never ended normally may have left the volume raised.
+        AlarmVolume.restoreIfNotRinging(context);
         Instant now = Instant.now();
         boolean allowed = canSchedule(context);
         List<AlarmRecord> out = new ArrayList<>();

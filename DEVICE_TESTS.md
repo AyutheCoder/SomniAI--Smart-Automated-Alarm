@@ -2,11 +2,176 @@
 
 Behaviour that only a device can show, with the date, the device and its
 Android version. Emulator results are labelled as such: they show the code
-works, not that a given phone's battery manager leaves it alone. Prompt 2.7
-turns this into the full condition matrix (silent mode, Do Not Disturb, battery
-saver, manufacturer battery managers and so on).
+works, not that a given phone's battery manager leaves it alone.
+
+The matrix first (prompt 2.7): every condition that can stop an alarm, run on
+the emulator so far and waiting for your phone. Then each prompt's own device
+checks, 2.1 to 2.6.
 
 How to run the alarm checks: `ANDROID.md`, "Checking alarms on a device".
+
+## The device matrix (prompt 2.7)
+
+Every condition that can stop an alarm from ringing, run on a phone. Most of
+it is scripted: `scripts/device-matrix.sh` sets each condition over USB, sets a
+test alarm a minute or two ahead, collects the evidence, stops the alarm and
+puts the condition back. It never sets a PIN, and it restores everything it
+changes. The rest, the manufacturer's battery manager and a real night, are
+done by hand with the steps below.
+
+### Conditions
+
+| # | Condition | How it is run | What "pass" means |
+| --- | --- | --- | --- |
+| 1 | Screen locked | Script (`locked`): screen off before the alarm | The screen turns on, the ring screen shows over the lock screen, and alarm audio plays |
+| 2 | Silent mode | Script (`silent`): ringer set to silent | It rings out loud; the ring log says "ringer silent"; alarm audio is not muted |
+| 3 | Do Not Disturb | Script (`dnd`): priority-only, Android's default exceptions (alarms allowed). Also by hand with your own DND settings | It rings. If your DND blocks alarms, or is set to Total silence, Android mutes every alarm; that's a setting, not a fault |
+| 4 | Battery Saver | Script (`saver`): Battery Saver on, phone reported unplugged | It rings on time |
+| 5 | Rebooted overnight | Script (`reboot`): reboots, alarm 5 minutes later, never unlocked. Then once by hand overnight | It rings before anyone unlocks the phone |
+| 6 | Time zone changed | Script (`timezone`): to another zone and back while an alarm is set | Rescheduled to the same wall-clock time in each zone; rings at the right time |
+| 7 | App force-stopped | Script (`forcestop`): force-stop, then open the app | Android deletes the alarm (it does for every app); opening SomniAI restores it and it rings |
+| 8 | Airplane mode | Script (`airplane`) | It rings and stops; the result waits in the queue until the network is back |
+| 9 | Battery under 15 % | Script (`battery15`): battery reported at 10 %, unplugged. Also once for real | It rings on time |
+| 10 | Manufacturer battery manager | **By hand**, brand by brand (below) | It rings after the phone has been left alone, in the manufacturer's default settings |
+| + | Doze, deep idle | Script (`doze`): forced deep idle, unplugged | It rings on time |
+| + | Battery usage "Restricted" | Script (`restricted`): Android's per-app Restricted battery setting | It rings. Android's documentation says alarms are "restricted" here and doesn't say whether alarm-clock alarms are exempt, so this tests it |
+| + | Standby bucket "restricted" | Script (`bucket`) | It rings. Android allows "one alarm per day" in this bucket; this tests whether that limits alarm-clock alarms |
+
+Rows marked + aren't in the prompt's list. They're Android's own ways of
+restricting an app, which a phone can be in without the user knowing.
+
+### Which conditions need a particular phone
+
+The emulator and stock Android (Pixel, Motorola, Android One) behave like each
+other. Manufacturers add their own battery managers on top, and those are what
+most often stop alarms. The settings named here are quoted from
+dontkillmyapp.com (read 2026-10-24); the menus vary by model and version.
+
+| Brand | What can stop SomniAI's alarm | Conditions to test on that brand |
+| --- | --- | --- |
+| **Samsung** (One UI) | "Put unused apps to sleep" / "Deep sleeping apps": "After 3 days any unused app will not be able to start from background (e.g. alarms will not work anymore)". "Adaptive battery". Samsung may put an app back to sleep after you take it off the list | 10 over **3+ days without opening SomniAI**; 5 and 7 |
+| **Xiaomi** (MIUI / HyperOS) | Autostart off by default ("Background autostart"), Battery saver per app, "MIUI optimization"; apps swiped away can be killed | 5 (reboot, autostart), 10, process killed by swiping away |
+| **Oppo** (ColorOS) | "Allow Auto Start-up", background activity, "Background services are killed every time you turn the screen off" | 1 (screen off), 5, 10 |
+| **Realme** (realme UI) | "Allow auto-launch", "Allow background activity", "Sleep stand-by optimization" at night, App quick freeze; and alarm apps need "Display pop-up windows of applications running in the background" to show the ring screen | 1 (ring screen over the lock screen), 5 (overnight), 10 |
+
+Until prompt 3.1's bedtime pre-flight check exists, the fix on these phones is
+for the user to exempt SomniAI, as follows. Menu names are dontkillmyapp.com's
+and differ between versions.
+
+- **Samsung:**
+  - Device care > Battery > (⋮) > Settings: turn off "Put unused apps to sleep"
+    and "Auto-disable unused apps".
+  - Remove SomniAI from "Sleeping apps" and "Deep sleeping apps", and add it to
+    "Never sleeping apps".
+- **Xiaomi:**
+  - Settings > Apps > SomniAI > App permissions: turn on "Background autostart"
+    (older MIUI: Security app > Permissions > Auto-start).
+  - Settings > Apps > SomniAI > Battery saver: "No restrictions".
+  - Lock SomniAI in recents (drag it down, or press and hold for the padlock).
+- **Oppo / Realme:**
+  - Settings > Battery > Power saving settings > App battery management >
+    SomniAI: turn on "Allow auto-launch", "Allow foreground activity" and
+    "Allow background activity".
+  - Turn off "Sleep stand-by optimization".
+  - **Realme:** Settings > Apps > Special access: allow SomniAI to "Display
+    pop-up windows of applications running in the background", or the ring
+    screen can't open.
+
+### Running it on your phone
+
+1. **Phone ready.**
+   - Settings > About phone: tap "Build number" 7 times to enable Developer
+     options.
+   - Settings > System > Developer options: turn on "USB debugging" (on Xiaomi
+     also "USB debugging (Security settings)").
+   - Connect the USB cable and accept the "Allow USB debugging?" prompt.
+   - `adb devices` (in `%LOCALAPPDATA%\Android\Sdk\platform-tools`) shows the
+     phone as `device`.
+2. **App installed.** `npm run android:build`, then `npm run android:run`.
+   Open SomniAI once, and allow notifications if asked.
+3. **The scripted conditions** (about 35 minutes; leave the phone alone and
+   plugged in):
+   ```bash
+   export MSYS_NO_PATHCONV=1      # Git Bash only
+   bash scripts/device-matrix.sh
+   bash scripts/device-matrix.sh reboot
+   ```
+   The results go to `device-matrix-results.md`, one row per condition with
+   the evidence.
+4. **Manufacturer battery manager** (by hand).
+   - Leave your phone's battery settings for SomniAI **as they come**, without
+     exempting it.
+   - Set an alarm for 2 hours ahead:
+     `adb shell am broadcast -a app.somniai.alarm.debug.SCHEDULE -n app.somniai.alarm/.alarms.DebugAlarmReceiver --ei minutes 120 --ez check false`
+   - Swipe SomniAI away from recents, lock the phone, and don't touch it until
+     the alarm time. Note whether it rings.
+   - On Samsung, also do it once after **3 days without opening SomniAI**.
+5. **One real night.** Set an alarm in the app for the morning, then
+   reboot the phone before you sleep and don't unlock it. Note whether it
+   rang on time.
+6. **Send me the results.** Paste `device-matrix-results.md` and what you saw
+   in steps 4 and 5, with the phone's model and Android version. I'll record
+   them here and fix every failure.
+
+### Results
+
+Emulator, Medium Phone AVD, Android 17 (API 37), 2026-10-24:
+
+| Condition | Result | Fired late by | Evidence |
+| --- | --- | --- | --- |
+| Screen locked (off) | Pass | 219 ms | alarm audio unmuted; ring screen in front |
+| Silent mode | Pass | 148 ms | ringer silent; alarm audio unmuted; ring screen in front |
+| Do Not Disturb (priority, Android's default exceptions) | Pass | 381 ms | ringer silent; DND priority; alarm audio unmuted; ring screen in front |
+| Battery Saver on (unplugged) | Pass | 278 ms | Battery Saver on; alarm audio unmuted; ring screen in front |
+| Battery under 15 % (reported 10 %, unplugged) | Pass | 145 ms | alarm audio unmuted; ring screen in front |
+| Airplane mode | Pass | 223 ms | result queued offline (3 calls); alarm audio unmuted; ring screen in front |
+| Time zone changed (to Europe/London and back) | Pass | 106 ms | rescheduled to the same wall-clock time in London (2026-10-24T19:32:00Z), and back; alarm audio unmuted; ring screen in front |
+| App force-stopped, then opened | Pass (as designed: rings once reopened) | 532 ms | deleted by Android on force-stop, restored on opening; alarm audio unmuted; ring screen in front |
+| Doze (deep idle, forced) | Pass | 316 ms | deep idle; alarm audio unmuted; ring screen in front |
+| Battery usage set to Restricted (Android setting) | Pass | 284 ms | alarm audio unmuted; ring screen in front |
+| Standby bucket restricted | Not applicable: Android kept the app at bucket 20 | 294 ms | bucket requested 45, Android kept 20; alarm audio unmuted; ring screen in front |
+| Rebooted (not unlocked afterwards) | Pass | 2767 ms | booted before the alarm time; alarm audio unmuted |
+
+Full evidence for each row: `device-results/emulator-api37-2026-10-24.md`. The
+emulator's alarm volume reads 7/7 throughout: a shell can only set the
+"default" output's volume on this image, not the speaker's, and an earlier run
+had left the speaker at 7 (the defect fixed below).
+
+**Found and fixed while running the matrix on the emulator:**
+
+- **A reboot or crash mid-ring left the user's alarm volume raised.** The
+  ladder raises the alarm stream and puts it back when the ring ends, but a
+  ring that never ended (the phone rebooted, the process died) never put it
+  back. The original level and the raised one are now kept on the phone
+  (`AlarmVolume`), written before the raise, and put back at the next app
+  start or boot. As before, it is put back only if the user hasn't changed it
+  since. Test: `aVolumeRaiseLeftByARebootMidRingIsPutBackAtTheNextStart`, on
+  the device.
+- **The script itself, three times,** before its results could be trusted:
+  - The emulator's 256 KB log buffer rotated the evidence out right after a
+    boot. That read as "did not ring" for alarms that did ring: the first
+    run's "Screen locked: FAIL" and one reboot run. The script now enlarges the
+    buffer and saves the full log on any failure.
+  - It forced Doze after setting the alarm, and Android won't enter deep idle
+    with an alarm clock that close.
+  - It assumed `adb reboot` takes effect at once; on this emulator the
+    shutdown outlasted the alarm.
+
+**What Android itself does, established here:**
+
+- **The restricted standby bucket can't apply to SomniAI.** Asked for bucket
+  45, Android kept it at 20 (working set). AOSP's
+  `AppStandbyController.getAppMinBucket` returns `STANDBY_BUCKET_WORKING_SET`
+  for apps that `shouldGetExactAlarmBucketElevation`, and `setAppStandbyBucket`
+  clamps every request to that floor, `am set-standby-bucket` included. The
+  "one alarm per day" limit is therefore not reachable for an alarm-clock app
+  on stock Android. A manufacturer's own manager is another matter (row 10).
+- **"Restricted" battery usage did not stop the alarm.** Android's
+  documentation says alarms are "restricted" there and doesn't mention
+  alarm-clock alarms; on Android 17 it rang 284 ms late. Check it on your
+  phone too (row +).
+
+Your phone: **not run yet.**
 
 ## 2.1 Shell opens
 
