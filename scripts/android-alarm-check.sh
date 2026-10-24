@@ -44,13 +44,21 @@ requested() {
 }
 kill_app() {
   sh_ input keyevent KEYCODE_HOME
-  sleep 1
+  # A broadcast still queued for the app (12L sends several around the
+  # permission change) can start it again at once, so retry for a while.
   local pid
-  pid=$(sh_ pidof "$PKG" || true)
-  if [ -n "$pid" ]; then sh_ run-as "$PKG" kill -9 "$pid" || true; fi
-  sleep 1
-  [ -z "$(sh_ pidof "$PKG" || true)" ] || fail "could not kill the app's process"
+  for _ in $(seq 1 10); do
+    sleep 2
+    pid=$(sh_ pidof "$PKG" || true)
+    if [ -z "$pid" ]; then return 0; fi
+    KILLED="$KILLED $pid"
+    # shellcheck disable=SC2086
+    sh_ run-as "$PKG" kill -9 $pid || true
+  done
+  sh_ dumpsys activity broadcasts | grep -B2 -A6 "$PKG" | head -40 || true
+  fail "the app's process kept coming back (killed:$KILLED)"
 }
+KILLED=""
 
 "$ADB" wait-for-device
 SDK=$(sh_ getprop ro.build.version.sdk)
@@ -96,6 +104,11 @@ has "$PKG/.alarms.AlarmFiredReceiver" sh_ dumpsys alarm || fail "AlarmManager ha
 kill_app
 say "alarm set, app process killed; waiting for it to fire"
 wait_log "fired device-test" 200 || fail "alarm did not fire within 200 s"
-say "$(log | grep 'fired device-test' | sed 's/.*SomniAlarm: //')"
+FIRED=$(log | grep 'fired device-test')
+say "$(sed 's/.*SomniAlarm: //' <<<"$FIRED")"
+# logcat's third column is the pid that logged it.
+FIRED_PID=$(awk '{print $3}' <<<"$FIRED")
+for p in $KILLED; do [ "$p" != "$FIRED_PID" ] || fail "fired in pid $p, which was supposedly killed"; done
+say "fired in pid $FIRED_PID; killed before it fired:$KILLED"
 sh_ am broadcast -a app.somniai.alarm.debug.CANCEL $DEBUG >/dev/null
 say "PASS on API $SDK"
