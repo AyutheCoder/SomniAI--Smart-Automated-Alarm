@@ -88,7 +88,22 @@ final class RingTuning {
      * alarm inaudible.
      */
     static int streamIndex(int current, int min, int max) {
-        int floor = Math.max(min, (int) Math.ceil(max * STREAM_FLOOR));
+        return streamIndex(current, min, max, 1);
+    }
+
+    /**
+     * The alarm stream index at an escalation level's volume factor: the floor
+     * at factor 1, rising to the whole range at the top level's 1.8. Never
+     * below what the user set.
+     */
+    static int streamIndex(int current, int min, int max, double volumeFactor) {
+        double share = STREAM_FLOOR + (1 - STREAM_FLOOR) * Math.max(0, Math.min(1, (volumeFactor - 1) / 0.8));
+        int floor = Math.max(min, (int) Math.ceil(max * share - 1e-9));
         return Math.max(current, floor);
+    }
+
+    /** Player volume at a level's volume factor: the ramp, made louder, never past full. */
+    static float playerVolume(Settings s, long elapsedMs, double volumeFactor) {
+        return (float) Math.min(1, volumeAt(s, elapsedMs) * volumeFactor);
     }
 }

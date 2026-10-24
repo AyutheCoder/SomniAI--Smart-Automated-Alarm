@@ -306,6 +306,8 @@ describe("a ring reported late", () => {
       solved: true, correctness: 1, responseMs: 20000, attempts: 1, methods: ["math"], at: answered,
     }), idParams(id)));
     expect(v.body.data.passed).toBe(true);
+    const climbed = ago(3 * HOUR - 51_000);
+    expect((await escalate(request("POST", `/api/alarms/${id}/escalate`, { level: 3, backups: [], at: climbed }), idParams(id))).status).toBe(200);
     const d = await read(await dismiss(request("POST", `/api/alarms/${id}/dismiss`, { responseMs: 52000, at: stopped }), idParams(id)));
     expect(d.body.data.status).toBe("verified");
 
@@ -313,6 +315,7 @@ describe("a ring reported late", () => {
     expect(events.map((e) => [e.type, e.at.toISOString(), e.meta.reportedLate])).toEqual([
       ["alarm_fire", rang, true],
       ["verify_pass", answered, true],
+      ["escalation", climbed, true],
       ["dismiss", stopped, true],
     ]);
   });
@@ -336,6 +339,7 @@ describe("a ring reported late", () => {
     for (const [handler, path, body] of [
       [fire, "fire", { at }],
       [verify, "verify", { solved: true, at }],
+      [escalate, "escalate", { level: 2, at }],
       [dismiss, "dismiss", { at }],
     ] as const) {
       const res = await (handler as Handler)(request("POST", `/api/alarms/${id}/${path}`, body), idParams(id));

@@ -81,7 +81,10 @@ public class RingServiceTest {
         assertTrue("wake lock held", s.wakeLockHeld);
         assertNotNull("a sound source played", s.source);
         Vibrator v = context.getSystemService(Vibrator.class);
-        assertEquals("vibrates when the device can", v != null && v.hasVibrator(), s.vibrating);
+        // Level 1 of the ladder: one buzz, continuous vibration only from level 3.
+        assertFalse("no continuous vibration at level 1", s.vibrating);
+        assertEquals(1, s.level.level);
+        assertNotNull(v);
 
         Notification n = ringNotification();
         assertNotNull("ring notification posted", n);
@@ -170,8 +173,9 @@ public class RingServiceTest {
         assertNotNull("still alive after a repeat start", RingService.current);
         RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null && ringNotification() == null);
-        assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-first"));
-        assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-second"));
+        // Left ringing for 24 s, the ladder climbs meanwhile; what matters here is one ring, one dismissal each.
+        assertEquals(List.of("ringing", "dismissed"), ringAndEnd("t-first"));
+        assertEquals(List.of("ringing", "dismissed"), ringAndEnd("t-second"));
     }
 
     @Test
@@ -217,7 +221,8 @@ public class RingServiceTest {
                 paths.add(e.getString("path"));
             }
         }
-        assertEquals(List.of("/api/alarms/t-queue/fire", "/api/alarms/t-queue/dismiss"), paths);
+        // The level the ring had reached goes too (prompt 2.6).
+        assertEquals(List.of("/api/alarms/t-queue/fire", "/api/alarms/t-queue/escalate", "/api/alarms/t-queue/dismiss"), paths);
     }
 
     /**
@@ -236,6 +241,107 @@ public class RingServiceTest {
         assertNotNull("still alive and ringing", RingService.current);
         assertTrue(alarmPlaying());
         assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-race-1"));
+    }
+
+    @Test
+    public void theLadderClimbsOnTheDevice() throws Exception {
+        AudioManager audio = context.getSystemService(AudioManager.class);
+        int before = audio.getStreamVolume(AudioManager.STREAM_ALARM);
+        int max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+        final int[] challenges = new int[1];
+        android.content.BroadcastReceiver r = new android.content.BroadcastReceiver() {
+            @Override
+            public void onReceive(Context c, android.content.Intent i) {
+                challenges[0]++;
+            }
+        };
+        androidx.core.content.ContextCompat.registerReceiver(context, r, new android.content.IntentFilter(RingService.ACTION_CHALLENGE),
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED);
+        try {
+            long t0 = System.currentTimeMillis();
+            AlarmSpec spec = new AlarmSpec("t-ladder", "Ladder", 7, 0, EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true,
+                fastPlan(false, true, new int[] { 0, 2, 4, 6, 8 }, true));
+            assertTrue(RingService.start(context, spec, t0));
+            waitFor("ringing", () -> RingService.current != null);
+            Vibrator v = context.getSystemService(Vibrator.class);
+            boolean canVibrate = v != null && v.hasVibrator();
+
+            waitFor("level 3", () -> RingService.current != null && RingService.current.level.level >= 3);
+            long atLevel3 = System.currentTimeMillis() - t0;
+            assertTrue("level 3 at about 4 s, was " + atLevel3, atLevel3 >= 3_500 && atLevel3 < 6_500);
+            assertEquals("continuous vibration from level 3", canVibrate, RingService.current.vibrating);
+
+            waitFor("level 4", () -> RingService.current != null && RingService.current.level.level >= 4);
+            waitFor("the ring screen told to open the check", () -> challenges[0] >= 1);
+
+            waitFor("level 5", () -> RingService.current != null && RingService.current.level.level == 5);
+            long atLevel5 = System.currentTimeMillis() - t0;
+            assertTrue("level 5 at about 8 s, was " + atLevel5, atLevel5 >= 7_500 && atLevel5 < 10_500);
+            assertEquals("the top level turns the alarm stream all the way up", max, audio.getStreamVolume(AudioManager.STREAM_ALARM));
+            waitFor("backups recorded", () -> detailOrEmpty("t-ladder", "backups").length() > 0);
+            String backups = lastDetail("t-ladder", "backups");
+            assertTrue(backups, backups.contains("emergencyContact: not_configured"));
+
+            WakeCheck check = new WakeCheck(RingService.current.check, new java.util.Random(4), System.currentTimeMillis());
+            String[] ab = check.question().split(" × ");
+            assertEquals(WakeCheck.Step.PASSED, check.submit(String.valueOf(Integer.parseInt(ab[0]) * Integer.parseInt(ab[1])), System.currentTimeMillis() + 2_000));
+            RingService.dismiss(context, check.verification(System.currentTimeMillis()));
+            waitFor("stopped", () -> RingService.current == null);
+            assertEquals("the volume is put back", before, audio.getStreamVolume(AudioManager.STREAM_ALARM));
+
+            JSONObject escalate = null;
+            JSONArray pending = Outbox.queue(context).pending();
+            for (int i = 0; i < pending.length(); i++) {
+                JSONObject e = pending.getJSONObject(i);
+                if (e.getString("alarmId").equals("t-ladder") && e.getString("path").endsWith("/escalate") && e.getLong("queuedAt") >= startedAt) {
+                    escalate = new JSONObject(e.getString("body"));
+                }
+            }
+            assertNotNull("the level reached is queued for the server", escalate);
+            assertEquals(5, escalate.getInt("level"));
+            assertEquals(3, escalate.getJSONArray("backups").length());
+        }
+        finally {
+            context.unregisterReceiver(r);
+        }
+    }
+
+    @Test
+    public void anUnmissableAlarmGetsTheFullLadderOnTheDevice() throws Exception {
+        // Its personal ladder is slow and has no backups; unmissable, it climbs the
+        // standard aggressive ladder (5, 10, 18, 40 s) with every backup.
+        long t0 = System.currentTimeMillis();
+        AlarmSpec spec = new AlarmSpec("t-unmissable", "Exam", 7, 0, EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true,
+            fastPlan(true, false, new int[] { 0, 300, 600, 900, 1200 }, false));
+        assertTrue(RingService.start(context, spec, t0));
+        waitFor("level 2 at 5 s, not 300 s", () -> RingService.current != null && RingService.current.level.level >= 2, 9_000, true);
+        waitFor("level 5 at 40 s", () -> RingService.current != null && RingService.current.level.level == 5, 50_000, true);
+        long at = System.currentTimeMillis() - t0;
+        assertTrue("about 40 s, was " + at, at >= 39_500 && at < 43_000);
+        waitFor("backups recorded", () -> detailOrEmpty("t-unmissable", "backups").length() > 0);
+        assertTrue(lastDetail("t-unmissable", "backups").contains("secondaryAlarm: not_configured"));
+        String ringing = lastDetail("t-unmissable", "ringing");
+        assertTrue(ringing, ringing.contains("full ladder (unmissable)"));
+    }
+
+    /**
+     * A ring plan with this ladder: levels at the given seconds, the standard
+     * features per level (vibration from 3, challenge from 4, backups at 5).
+     */
+    static String fastPlan(boolean critical, boolean check, int[] at, boolean backupsAtTop) {
+        StringBuilder esc = new StringBuilder("[");
+        String[] labels = { "Normal alarm", "Increased volume", "Continuous vibration", "Wake challenge", "Trying backups" };
+        double[] factors = { 1, 1.4, 1.5, 1.6, 1.8 };
+        for (int i = 0; i < 5; i++) {
+            esc.append(i > 0 ? "," : "").append("{\"level\":").append(i + 1).append(",\"afterSeconds\":").append(at[i])
+                .append(",\"label\":\"").append(labels[i]).append("\",\"volumeFactor\":").append(factors[i])
+                .append(",\"vibrate\":").append(i >= 2).append(",\"requireVerification\":").append(i >= 3)
+                .append(",\"backup\":").append(i == 4 && backupsAtTop ? "[\"secondaryAlarm\",\"smartwatch\",\"emergencyContact\"]" : "[]")
+                .append(",\"stage\":\"").append(i < 2 ? "ramp" : i == 2 ? "vibration" : "challenge").append("\"}");
+        }
+        esc.append("]");
+        return "{\"version\":1,\"critical\":" + critical + ",\"sound\":{\"intensity\":40,\"strategy\":\"aggressive\"},"
+            + "\"challenge\":{\"required\":" + check + ",\"methods\":[\"math\"],\"minConfidence\":60},\"escalation\":" + esc + "}";
     }
 
     @Test
@@ -285,6 +391,13 @@ public class RingServiceTest {
         return null;
     }
 
+    /** The outcomes for an alarm, without the ladder's own entries. */
+    private List<String> ringAndEnd(String id) throws Exception {
+        List<String> out = new ArrayList<>(outcomesFor(id));
+        out.removeIf(o -> o.equals("escalated") || o.equals("backups"));
+        return out;
+    }
+
     private List<String> outcomesFor(String id) throws Exception {
         List<String> out = new ArrayList<>();
         JSONArray log = AlarmStore.readLog(context);
@@ -295,6 +408,15 @@ public class RingServiceTest {
             }
         }
         return out;
+    }
+
+    private String detailOrEmpty(String id, String outcome) {
+        try {
+            return lastDetail(id, outcome);
+        }
+        catch (Exception e) {
+            return "";
+        }
     }
 
     private String lastDetail(String id, String outcome) throws Exception {

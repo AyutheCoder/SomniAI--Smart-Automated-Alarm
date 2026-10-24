@@ -35,7 +35,16 @@ public class RingControllerTest {
         @Override public void showAlarms(Iterable<RingController.Alarm> ringing) { calls.add("showAlarms"); }
         @Override public void acquireWakeLock(long timeoutMs) { calls.add("acquireWakeLock"); wakeLock = true; wakeLockTimeout = timeoutMs; }
         @Override public void releaseWakeLock() { calls.add("releaseWakeLock"); wakeLock = false; }
-        @Override public void raiseAlarmVolume() { calls.add("raiseAlarmVolume"); raised = true; }
+        double factor;
+        int pulses;
+        int challenges;
+        final List<Integer> levels = new ArrayList<>();
+        final List<List<String>> backupsTried = new ArrayList<>();
+        @Override public void raiseAlarmVolume(double f) { calls.add("raiseAlarmVolume"); raised = true; factor = f; }
+        @Override public void pulse() { pulses++; }
+        @Override public void showLevel(EscalationLadder.Level l) { levels.add(l.level); }
+        @Override public void promptChallenge() { challenges++; }
+        @Override public List<Backups.Outcome> tryBackups(List<String> kinds) { backupsTried.add(kinds); return Backups.tryAll(kinds); }
         @Override public void restoreAlarmVolume() { calls.add("restoreAlarmVolume"); raised = false; }
         @Override public boolean startSound(Source s) { calls.add("startSound " + s); sound = playable.contains(s); return sound; }
         @Override public void setVolume(float v) { volumes.add(v); }
@@ -48,8 +57,9 @@ public class RingControllerTest {
         @Override public void stopService() { calls.add("stopService"); serviceRunning = false; foreground = false; }
         @Override public void record(RingController.Alarm a, String outcome, long at, String detail) { records.add(a.id + " " + outcome); }
         final List<String> queued = new ArrayList<>();
-        @Override public void queueSync(RingController.Alarm a, long rangAt, String outcome, long endedAt, Verification v) {
-            queued.add(a.id + " " + outcome + " rang " + rangAt + " ended " + endedAt + (v == null ? "" : v.challenged ? " checked" : " unchecked"));
+        @Override public void queueSync(RingController.Alarm a, long rangAt, String outcome, long endedAt, Verification v, int level, List<Backups.Outcome> b) {
+            queued.add(a.id + " " + outcome + " rang " + rangAt + " ended " + endedAt + (v == null ? "" : v.challenged ? " checked" : " unchecked")
+                + " level " + level + (b.isEmpty() ? "" : " backups " + b.size()));
         }
 
         void assertNothingHeld() {
@@ -64,11 +74,11 @@ public class RingControllerTest {
     static final WakeCheck.Plan NO_CHECK = new WakeCheck.Plan(false, 1, 0);
 
     static RingController.Alarm alarm(String id) {
-        return new RingController.Alarm(id, "Gym", 1_000, NO_CHECK);
+        return new RingController.Alarm(id, "Gym", 1_000, NO_CHECK, EscalationLadder.fromRingPlan(null));
     }
 
     static RingController.Alarm checked(String id, int count, int min) {
-        return new RingController.Alarm(id, "Gym", 1_000, new WakeCheck.Plan(true, count, min));
+        return new RingController.Alarm(id, "Gym", 1_000, new WakeCheck.Plan(true, count, min), EscalationLadder.fromRingPlan(null));
     }
 
     static Verification passed(int count, int score) {
@@ -88,7 +98,9 @@ public class RingControllerTest {
         assertTrue(fx.raised);
         assertTrue(fx.sound);
         assertEquals(Source.ALARM_SOUND, c.source());
-        assertTrue(fx.vibrating);
+        // Level 1 of the ladder doesn't vibrate: one buzz now, continuous from the vibration level.
+        assertFalse(fx.vibrating);
+        assertEquals(1, fx.pulses);
         assertTrue(fx.tickPending);
         assertEquals(List.of("a ringing"), fx.records);
         assertTrue("the wake lock is taken before the sound starts",
@@ -147,7 +159,8 @@ public class RingControllerTest {
         assertEquals(State.STOPPED, c.state());
         fx.assertNothingHeld();
         assertFalse(fx.serviceRunning);
-        assertEquals(List.of("a ringing", "a unanswered"), fx.records);
+        // Its first tick was already past every level: straight to the top, backups tried once.
+        assertEquals(List.of("a ringing", "a backups", "a escalated", "a unanswered"), fx.records);
     }
 
     @Test
@@ -232,7 +245,7 @@ public class RingControllerTest {
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
         assertTrue(fx.sound);
-        assertTrue(fx.vibrating);
+        assertEquals(1, fx.pulses);
         c.dismiss(1_000, Verification.none(1_000));
         fx.assertNothingHeld();
     }
@@ -307,7 +320,7 @@ public class RingControllerTest {
         c.start(alarm("a"), TUNING, 100);
         Verification passed = new Verification(true, true, 1, 8_000, 0, List.of("math"), 91, 30_000);
         c.dismiss(31_000, passed);
-        assertEquals(List.of("a dismissed rang 100 ended 31000 checked"), fx.queued);
+        assertEquals(List.of("a dismissed rang 100 ended 31000 checked level 1"), fx.queued);
     }
 
     @Test
@@ -317,7 +330,7 @@ public class RingControllerTest {
         c.start(alarm("a"), TUNING, 0);
         c.start(alarm("b"), TUNING, 5_000);
         c.dismiss(9_000, Verification.none(9_000));
-        assertEquals(List.of("a dismissed rang 0 ended 9000 unchecked", "b dismissed rang 5000 ended 9000 unchecked"), fx.queued);
+        assertEquals(List.of("a dismissed rang 0 ended 9000 unchecked level 1", "b dismissed rang 5000 ended 9000 unchecked level 1"), fx.queued);
     }
 
     @Test
@@ -326,7 +339,7 @@ public class RingControllerTest {
         RingController c = new RingController(fx);
         c.start(alarm("a"), TUNING, 0);
         c.tick(RingTuning.MAX_RING_MS);
-        assertEquals(List.of("a unanswered rang 0 ended " + RingTuning.MAX_RING_MS), fx.queued);
+        assertEquals(List.of("a unanswered rang 0 ended " + RingTuning.MAX_RING_MS + " level 1"), fx.queued);
     }
 
     @Test
@@ -336,6 +349,175 @@ public class RingControllerTest {
         c.start(alarm("a"), TUNING, 0);
         c.destroyed(1_000);
         assertTrue(fx.queued.isEmpty());
+    }
+
+    // --- the escalation ladder (prompt 2.6) ---
+
+    /** An alarm whose ring plan has this adaptive ladder from the TypeScript table, marked critical or not. */
+    static RingController.Alarm withLadder(String id, String profile, boolean critical, boolean check) throws Exception {
+        org.json.JSONArray cases = new org.json.JSONObject(new String(java.nio.file.Files.readAllBytes(
+            new java.io.File("src/test/resources/escalation-cases.json").toPath()), "UTF-8")).getJSONArray("personalised");
+        org.json.JSONArray ladder = null;
+        for (int i = 0; i < cases.length(); i++) {
+            org.json.JSONObject c = cases.getJSONObject(i);
+            if (c.getString("strategy").equals("adaptive") && c.getString("profile").equals(profile) && !c.getBoolean("critical")) {
+                ladder = c.getJSONArray("plan");
+            }
+        }
+        String plan = new org.json.JSONObject().put("critical", critical).put("escalation", ladder)
+            .put("sound", new org.json.JSONObject().put("strategy", "adaptive").put("intensity", 60)).toString();
+        return new RingController.Alarm(id, "Gym", 1_000, check ? new WakeCheck.Plan(true, 1, 70) : NO_CHECK, EscalationLadder.fromRingPlan(plan));
+    }
+
+    static RingController.Alarm standardChecked(String id) {
+        return new RingController.Alarm(id, "Gym", 1_000, new WakeCheck.Plan(true, 1, 70), EscalationLadder.fromRingPlan(null));
+    }
+
+    /** Ticks every 500 ms from {@code from} up to and including {@code to}. */
+    static void tickTo(RingController c, long from, long to) {
+        for (long t = from; t <= to; t += RingTuning.TICK_MS) {
+            c.tick(t);
+        }
+    }
+
+    @Test
+    public void eachStageArrivesAtItsTimeAndOnlyOnce() {
+        // The standard adaptive ladder: 0, 10, 22, 35, 75 s.
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(standardChecked("a"), TUNING, 0);
+        assertEquals(List.of(1), fx.levels);
+        assertEquals(1.0, fx.factor, 0);
+
+        tickTo(c, 500, 9_500);
+        assertEquals("nothing before 10 s", List.of(1), fx.levels);
+        c.tick(10_000);
+        assertEquals(2, c.level().level);
+        assertEquals("louder: the stream for factor 1.4", 1.4, fx.factor, 0);
+
+        tickTo(c, 10_500, 21_500);
+        assertFalse("no continuous vibration before its level", fx.vibrating);
+        c.tick(22_000);
+        assertEquals(3, c.level().level);
+        assertTrue("continuous vibration from level 3", fx.vibrating);
+        assertEquals(0, fx.challenges);
+
+        tickTo(c, 22_500, 34_500);
+        c.tick(35_000);
+        assertEquals(4, c.level().level);
+        assertEquals("the wake check is put in front of the user", 1, fx.challenges);
+        assertTrue(fx.backupsTried.isEmpty());
+
+        tickTo(c, 35_500, 74_500);
+        assertTrue("no backups before 75 s", fx.backupsTried.isEmpty());
+        c.tick(75_000);
+        assertEquals(5, c.level().level);
+        assertEquals("every channel, once", List.of(EscalationLadder.BACKUP_KINDS), fx.backupsTried);
+        assertTrue(fx.records.contains("a backups"));
+
+        tickTo(c, 75_500, 300_000);
+        assertEquals("never twice", 1, fx.backupsTried.size());
+        assertEquals(List.of(1, 2, 3, 4, 5), fx.levels);
+        assertEquals(4, fx.records.stream().filter(r -> r.equals("a escalated")).count());
+    }
+
+    @Test
+    public void theVolumeRisesWithEachLevel() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        RingTuning.Settings quiet = RingTuning.settings("aggressive", 0);
+        c.start(standardChecked("a"), quiet, 0);
+        tickTo(c, 500, 9_500);
+        float beforeLevel2 = fx.volumes.get(fx.volumes.size() - 1);
+        c.tick(10_000);
+        float atLevel2 = fx.volumes.get(fx.volumes.size() - 1);
+        assertEquals("level 2 is the ramp times 1.4", RingTuning.volumeAt(quiet, 10_000) * 1.4, atLevel2, 1e-4);
+        assertTrue(atLevel2 > beforeLevel2 * 1.3);
+    }
+
+    @Test
+    public void withoutAWakeCheckInThePlanTheChallengeLevelDoesNotPromptOne() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        tickTo(c, 500, 80_000);
+        assertEquals(5, c.level().level);
+        assertEquals(0, fx.challenges);
+        assertEquals(1, fx.backupsTried.size());
+    }
+
+    @Test
+    public void aSlowPassGoesStraightToTheTopAsOnTheWeb() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(standardChecked("a"), TUNING, 0);
+        c.tick(3_000);
+        c.escalateToTop(3_000);
+        assertEquals(5, c.level().level);
+        assertTrue(fx.vibrating);
+        assertEquals(1, fx.backupsTried.size());
+        c.escalateToTop(4_000);
+        assertEquals("not again", 1, fx.backupsTried.size());
+        c.dismiss(5_000, passed(1, 90));
+        assertEquals(List.of("a dismissed rang 0 ended 5000 checked level 5 backups 3"), fx.queued);
+    }
+
+    @Test
+    public void theLevelReachedIsWhatTheServerIsTold() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        tickTo(c, 500, 23_000);
+        c.dismiss(23_000, Verification.none(23_000));
+        assertEquals(List.of("a dismissed rang 0 ended 23000 unchecked level 3"), fx.queued);
+    }
+
+    @Test
+    public void anEasyWakersPersonalLadderHoldsBackupsBackAndClimbsSlower() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(withLadder("a", "easy", false, false), TUNING, 0);
+        tickTo(c, 500, 93_500);
+        assertEquals("level 5 is at 94 s for this sleeper", 4, c.level().level);
+        tickTo(c, 94_000, 200_000);
+        assertEquals(5, c.level().level);
+        assertTrue("held back: no backups", fx.backupsTried.isEmpty());
+    }
+
+    @Test
+    public void anUnmissableAlarmClimbsTheFullLadderWhateverThePersonalPlanHoldsBack() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(withLadder("a", "easy", true, false), TUNING, 0);
+        tickTo(c, 500, 74_500);
+        assertTrue(fx.backupsTried.isEmpty());
+        c.tick(75_000);
+        assertEquals("at the standard 75 s, not the personal 94 s", 5, c.level().level);
+        assertEquals(List.of(EscalationLadder.BACKUP_KINDS), fx.backupsTried);
+    }
+
+    @Test
+    public void anUnmissableAlarmJoiningMakesTheFullLadderApply() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(withLadder("easy", "easy", false, false), TUNING, 0);
+        tickTo(c, 500, 40_000);
+        c.start(withLadder("critical", "easy", true, false), TUNING, 40_000);
+        tickTo(c, 40_500, 75_000);
+        assertEquals(5, c.level().level);
+        assertEquals("the unmissable alarm brings the backups in at 75 s", 1, fx.backupsTried.size());
+    }
+
+    @Test
+    public void aHardWakersLadderClimbsSooner() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(withLadder("a", "hard", false, false), TUNING, 0);
+        c.tick(6_000);
+        assertEquals("10 s x 0.6", 2, c.level().level);
+        tickTo(c, 6_500, 45_000);
+        assertEquals("75 s x 0.6", 5, c.level().level);
+        assertEquals(1, fx.backupsTried.size());
     }
 
     @Test

@@ -40,6 +40,10 @@ public class RingService extends Service implements RingController.Effects {
 
     static final String ACTION_RING = "app.somniai.alarm.RING";
     static final String ACTION_DISMISS = "app.somniai.alarm.DISMISS";
+    /** The wake check was solved but not convincingly: to the top of the ladder. */
+    static final String ACTION_ESCALATE = "app.somniai.alarm.ESCALATE";
+    /** Sent (to this app only) when the ladder reaches the challenge level. */
+    static final String ACTION_CHALLENGE = "app.somniai.alarm.CHALLENGE";
     /** Sent (to this app only) when ringing ends, so the ring screen closes. */
     static final String ACTION_STOPPED = "app.somniai.alarm.RING_STOPPED";
     static final String CHANNEL = "ringing";
@@ -67,8 +71,11 @@ public class RingService extends Service implements RingController.Effects {
         final boolean wakeLockHeld;
         /** The wake check that stops this ring. */
         final WakeCheck.Plan check;
+        /** The escalation level the ring is at. */
+        final EscalationLadder.Level level;
 
-        Snapshot(List<String> ids, String label, long scheduledFor, RingController.Source source, float volume, boolean vibrating, boolean wakeLockHeld, WakeCheck.Plan check) {
+        Snapshot(List<String> ids, String label, long scheduledFor, RingController.Source source, float volume, boolean vibrating, boolean wakeLockHeld,
+                WakeCheck.Plan check, EscalationLadder.Level level) {
             this.ids = ids;
             this.label = label;
             this.scheduledFor = scheduledFor;
@@ -77,6 +84,7 @@ public class RingService extends Service implements RingController.Effects {
             this.vibrating = vibrating;
             this.wakeLockHeld = wakeLockHeld;
             this.check = check;
+            this.level = level;
         }
     }
 
@@ -103,6 +111,15 @@ public class RingService extends Service implements RingController.Effects {
      * service refuses (and logs it) unless the check passes the ring's plan.
      * Does nothing if nothing is ringing.
      */
+    static void escalateToTop(Context context) {
+        try {
+            context.startService(new Intent(context, RingService.class).setAction(ACTION_ESCALATE));
+        }
+        catch (IllegalStateException e) {
+            Log.i(AlarmScheduler.TAG, "escalate with nothing ringing");
+        }
+    }
+
     static void dismiss(Context context, Verification verification) {
         try {
             context.startService(new Intent(context, RingService.class).setAction(ACTION_DISMISS)
@@ -148,7 +165,8 @@ public class RingService extends Service implements RingController.Effects {
                 String.valueOf(intent.getStringExtra(EXTRA_ID)),
                 String.valueOf(intent.getStringExtra(EXTRA_LABEL)),
                 intent.getLongExtra(EXTRA_AT, now),
-                WakeCheck.Plan.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)));
+                WakeCheck.Plan.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)),
+                EscalationLadder.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)));
             controller.start(alarm, RingTuning.fromPlan(intent.getStringExtra(EXTRA_PLAN)), now);
             if (controller.state() == RingController.State.RINGING) {
                 List<RingController.Alarm> all = new ArrayList<>();
@@ -168,6 +186,9 @@ public class RingService extends Service implements RingController.Effects {
                 Log.w(AlarmScheduler.TAG, "unreadable verification: " + e.getMessage());
             }
             controller.dismiss(now, verification);
+        }
+        else if (ACTION_ESCALATE.equals(action)) {
+            controller.escalateToTop(now);
         }
         if (controller.state() != RingController.State.RINGING) {
             stopSelf(startId);
@@ -250,15 +271,18 @@ public class RingService extends Service implements RingController.Effects {
     }
 
     @Override
-    public void raiseAlarmVolume() {
+    public void raiseAlarmVolume(double volumeFactor) {
         AudioManager audio = getSystemService(AudioManager.class);
         int now = audio.getStreamVolume(AudioManager.STREAM_ALARM);
         int min = Build.VERSION.SDK_INT >= 28 ? audio.getStreamMinVolume(AudioManager.STREAM_ALARM) : 0;
-        int target = RingTuning.streamIndex(now, min, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM));
+        int target = RingTuning.streamIndex(now, min, audio.getStreamMaxVolume(AudioManager.STREAM_ALARM), volumeFactor);
         if (target > now) {
             try {
                 audio.setStreamVolume(AudioManager.STREAM_ALARM, target, 0);
-                restoreIndex = now;
+                // Restored to what the user had before the first raise, not an in-between level.
+                if (restoreIndex < 0) {
+                    restoreIndex = now;
+                }
                 raisedTo = target;
                 Log.i(AlarmScheduler.TAG, "alarm volume raised from " + now + " to " + target + " while ringing");
             }
@@ -305,20 +329,46 @@ public class RingService extends Service implements RingController.Effects {
 
     @Override
     public void startVibration() {
+        if (vibrateAsAlarm(VibrationEffect.createWaveform(new long[] { 0, 800, 600 }, 0))) {
+            vibrating = true;
+        }
+    }
+
+    @Override
+    public void pulse() {
+        vibrateAsAlarm(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE));
+    }
+
+    /** Vibrates with alarm usage, so silent mode and Do Not Disturb treat it as an alarm. */
+    private boolean vibrateAsAlarm(VibrationEffect effect) {
         vibrator = Build.VERSION.SDK_INT >= 31
             ? getSystemService(VibratorManager.class).getDefaultVibrator()
             : getSystemService(Vibrator.class);
         if (vibrator == null || !vibrator.hasVibrator()) {
-            return;
+            return false;
         }
-        VibrationEffect effect = VibrationEffect.createWaveform(new long[] { 0, 800, 600 }, 0);
         if (Build.VERSION.SDK_INT >= 33) {
             vibrator.vibrate(effect, VibrationAttributes.createForUsage(VibrationAttributes.USAGE_ALARM));
         }
         else {
             vibrator.vibrate(effect, new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build());
         }
-        vibrating = true;
+        return true;
+    }
+
+    @Override
+    public void showLevel(EscalationLadder.Level level) {
+        Log.i(AlarmScheduler.TAG, "level " + level.level + ": " + level.label);
+    }
+
+    @Override
+    public void promptChallenge() {
+        sendBroadcast(new Intent(ACTION_CHALLENGE).setPackage(getPackageName()));
+    }
+
+    @Override
+    public List<Backups.Outcome> tryBackups(List<String> kinds) {
+        return Backups.tryAll(kinds);
     }
 
     @Override
@@ -366,8 +416,9 @@ public class RingService extends Service implements RingController.Effects {
     }
 
     @Override
-    public void queueSync(RingController.Alarm alarm, long rangAt, String outcome, long endedAt, Verification verification) {
-        Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification));
+    public void queueSync(RingController.Alarm alarm, long rangAt, String outcome, long endedAt, Verification verification,
+            int level, List<Backups.Outcome> backups) {
+        Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification, level, backups));
     }
 
     // --- Helpers ---
@@ -446,6 +497,6 @@ public class RingService extends Service implements RingController.Effects {
             }
         }
         current = new Snapshot(ids, first == null ? "" : first.label, first == null ? 0 : first.scheduledFor,
-            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld(), controller.check());
+            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld(), controller.check(), controller.level());
     }
 }

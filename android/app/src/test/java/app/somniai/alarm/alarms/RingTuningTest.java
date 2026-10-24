@@ -44,6 +44,24 @@ public class RingTuningTest {
     }
 
     @Test
+    public void eachLevelsVolumeFactorRaisesTheStreamTowardsFull() {
+        // Typical alarm stream 1..7: floor 40 % at factor 1, full at the top level's 1.8.
+        assertEquals(3, RingTuning.streamIndex(1, 1, 7, 1.0));
+        assertEquals("1.4: 70 %", 5, RingTuning.streamIndex(1, 1, 7, 1.4));
+        assertEquals(6, RingTuning.streamIndex(1, 1, 7, 1.6));
+        assertEquals("1.8: all of it", 7, RingTuning.streamIndex(1, 1, 7, 1.8));
+        assertEquals("never lowered", 7, RingTuning.streamIndex(7, 1, 7, 1.0));
+        assertEquals("beyond 1.8 is still full", 15, RingTuning.streamIndex(0, 0, 15, 3.0));
+    }
+
+    @Test
+    public void thePlayerVolumeIsTheRampTimesTheFactorAndNeverPastFull() {
+        RingTuning.Settings s = RingTuning.settings("adaptive", 0);
+        assertEquals(0.3 * 1.4, RingTuning.playerVolume(s, s.rampMs, 1.4), 1e-6);
+        assertEquals(1.0, RingTuning.playerVolume(RingTuning.settings("adaptive", 100), s.rampMs, 1.8), 0);
+    }
+
+    @Test
     public void theAlarmStreamIsRaisedToItsFloorOnly() {
         // Typical alarm stream: 1..7.
         assertEquals("turned right down: raised", 3, RingTuning.streamIndex(1, 1, 7));

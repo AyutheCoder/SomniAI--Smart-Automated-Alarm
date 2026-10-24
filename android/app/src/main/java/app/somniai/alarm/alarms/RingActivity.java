@@ -47,6 +47,14 @@ public class RingActivity extends Activity {
         }
     };
 
+    /** The ladder reached its challenge level: open the wake check if it isn't already. */
+    private final BroadcastReceiver challenge = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            openCheckIfDue();
+        }
+    };
+
     private WakeCheck check;
     private TextView progress;
     private TextView question;
@@ -66,6 +74,7 @@ public class RingActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(ringView());
         ContextCompat.registerReceiver(this, stopped, new IntentFilter(RingService.ACTION_STOPPED), ContextCompat.RECEIVER_NOT_EXPORTED);
+        ContextCompat.registerReceiver(this, challenge, new IntentFilter(RingService.ACTION_CHALLENGE), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
@@ -74,12 +83,23 @@ public class RingActivity extends Activity {
         // Opened from an old notification after the ring already ended.
         if (RingService.current == null) {
             finish();
+            return;
+        }
+        // Opened after the ladder already reached its challenge level.
+        openCheckIfDue();
+    }
+
+    private void openCheckIfDue() {
+        RingService.Snapshot now = RingService.current;
+        if (check == null && now != null && now.level != null && now.level.requireVerification && now.check.required) {
+            stopPressed();
         }
     }
 
     @Override
     protected void onDestroy() {
         unregisterReceiver(stopped);
+        unregisterReceiver(challenge);
         super.onDestroy();
     }
 
@@ -110,6 +130,8 @@ public class RingActivity extends Activity {
             case RETRY:
                 showProblem("All right, but slow: " + check.lastScore() + "% awake, " + check.plan().minConfidence
                     + "% needed. Once more.");
+                // As the web does: not convincing, so the alarm goes to the top of its ladder.
+                RingService.escalateToTop(this);
                 break;
             case PASSED:
                 answer.setEnabled(false);

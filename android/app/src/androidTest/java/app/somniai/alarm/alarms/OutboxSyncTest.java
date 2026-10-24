@@ -57,20 +57,20 @@ public class OutboxSyncTest {
     @Test
     public void withTheServerUnreachableNothingIsLostAndItAllArrivesInOrderLater() throws Exception {
         Verification passed = new Verification(true, true, 1, 7_000, 1, List.of("math"), 88, 1_792_996_840_000L);
-        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_792_996_800_000L, "dismissed", 1_792_996_842_000L, passed));
+        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_792_996_800_000L, "dismissed", 1_792_996_842_000L, passed, 4, java.util.List.of()));
 
         // Nothing listening: as with no network, the send fails and everything waits.
         Outbox.baseUrlOverride = "http://127.0.0.1:9";
         OutboxQueue.Flush offline = Outbox.flushNow(context);
         assertTrue(offline.stalled);
         assertEquals(0, offline.sent);
-        assertEquals(3, Outbox.queue(context).size());
+        assertEquals("fire, verify, escalate, dismiss", 4, Outbox.queue(context).size());
 
         // The server comes back but is failing: still kept.
         server = new Stub(503);
         Outbox.baseUrlOverride = server.url();
         assertTrue(Outbox.flushNow(context).stalled);
-        assertEquals(3, Outbox.queue(context).size());
+        assertEquals(4, Outbox.queue(context).size());
 
         // Healthy: sent in order with the times they happened.
         server.answers.add(200);
@@ -79,14 +79,16 @@ public class OutboxSyncTest {
         server.answers.add(200);
         OutboxQueue.Flush back = Outbox.flushNow(context);
         assertFalse(back.stalled);
-        assertEquals(3, back.sent);
+        assertEquals(4, back.sent);
         assertEquals(0, Outbox.queue(context).size());
 
         List<String> got = server.received();
-        assertEquals("the 503 one, then the three", 4, got.size());
+        assertEquals("the 503 one, then the four", 5, got.size());
         assertTrue(got.get(1).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/fire "));
         assertTrue(got.get(2).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/verify "));
-        assertTrue(got.get(3).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/dismiss "));
+        assertTrue(got.get(3).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/escalate "));
+        assertTrue(got.get(4).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/dismiss "));
+        assertEquals(4, new JSONObject(got.get(3).substring(got.get(3).indexOf('{'))).getInt("level"));
         JSONObject verify = new JSONObject(got.get(2).substring(got.get(2).indexOf('{')));
         assertTrue(verify.getBoolean("solved"));
         assertEquals("2026-10-26T06:40:40Z", verify.getString("at"));
@@ -94,7 +96,7 @@ public class OutboxSyncTest {
 
     @Test
     public void notSignedInKeepsItForLater() throws Exception {
-        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_000, "unanswered", 2_000, null));
+        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_000, "unanswered", 2_000, null, 1, java.util.List.of()));
         server = new Stub(401);
         Outbox.baseUrlOverride = server.url();
         assertTrue(Outbox.flushNow(context).stalled);

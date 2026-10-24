@@ -267,12 +267,12 @@ it out:
 | Sound | `MediaPlayer` or `AudioTrack` with `USAGE_ALARM`. Sources are tried in order: the phone's alarm sound, then its ringtone, then a tone made in code. The tone needs no file, so it plays before the first unlock, when media files may be unreadable. | On the emulator, AudioService lists the streams the ringer mode affects as system, ring, notification, system-enforced and DTMF. The alarm stream isn't among them. |
 | Volume ramp | Rises evenly in decibels from −30 dB to the target. Ramp length comes from the ring plan's strategy (gentle 60 s, adaptive 30 s, aggressive 10 s). The target is 0.3 + 0.7 × intensity/100, so intensity 0 is still audible. | `RingTuning` |
 | Alarm stream floor | If the alarm volume is below 40 % of its range, it is raised to that while ringing, then put back afterwards unless the user changed it meanwhile. | A choice, not a requirement. An alarm turned right down would otherwise ring inaudibly. |
-| Vibration | A repeating waveform with alarm usage: `VibrationAttributes.USAGE_ALARM` on 13+, `AudioAttributes.USAGE_ALARM` before. | |
+| Vibration | Alarm usage throughout: `VibrationAttributes.USAGE_ALARM` on 13+, `AudioAttributes.USAGE_ALARM` before. Since 2.6: one buzz when the ring starts, then a repeating waveform from the ladder's vibration level, or at once if no sound will play. | |
 | Wake lock | Partial, `SomniAI:ring`, with a timeout just past the longest ring | |
 | Over the lock screen | A notification in the alarm category, `VISIBILITY_PUBLIC`, on the `ringing` channel (importance HIGH, no channel sound or vibration). Its full-screen intent opens `RingActivity`, which uses `showWhenLocked` and `turnScreenOn` (window flags on 8.0). | `setFullScreenIntent` Javadoc: it needs a channel of importance HIGH or above. While the phone is in use, a heads-up is shown instead. Without `USE_FULL_SCREEN_INTENT` it is "heads up notification even when the screen is locked or turned off", persistent for only 60 s. Google Play: on 14+ the permission is granted by default only to "calling or alarm" apps, after a Play Console declaration (7.5). `ringStatus()` reports it, and `openFullScreenIntentSettings()` opens the setting. |
 | Silent mode | Unaffected: the alarm stream isn't a ringer-mode stream | On-device test, and a locked-emulator run |
 | Do Not Disturb | Priority mode lets alarms through when the "Alarms" exception is on, which is the default. "Alarms only" lets the alarm category through. **Total silence** (`INTERRUPTION_FILTER_NONE`) mutes "all audio streams (except those used for phone calls) and vibrations". No app can ring through it. Each ring records the DND state, the ringer mode and the alarm volume in the log, so a silent ring can be explained afterwards. | `NotificationManager` Javadoc |
-| How long it rings | Up to 20 minutes, then it stops and is logged as `unanswered`. Prompt 2.6's escalation will revisit this. | |
+| How long it rings | Up to 20 minutes, then it stops and is logged as `unanswered`. The ladder (2.6) reaches its top long before that; the cap stays as the end of an unanswered ring. | |
 | Stopping | Stop on the ring screen (after the wake check, if the plan has one). Sound, vibration, wake lock, the raised volume, the notification and the service are all released. The occurrence is logged as `dismissed`, and stopping doesn't unlock the phone. | Tests, and the locked-emulator run |
 | Two alarms at once | The second joins the ring already going, and one Stop ends both | Tests |
 | Process killed mid-ring | `START_REDELIVER_INTENT`: Android restarts the service and it rings again rather than falling silent | |
@@ -465,3 +465,72 @@ next return to the foreground, or the next change made in the app.
 | Vitest, `lib/nativeSync.test.ts` (12) | Create, edit, on/off, delete (the last one too); the same list again isn't sent; bursts folded together; a failure retried; an invalid alarm skipped and reported; snoozed repeating alarms; the version handshake |
 | Playwright, `e2e/native-sync.spec.ts` (3) | The real page and server, with a stand-in phone at Capacitor's bridge: create, off, on, edit and delete all reach the phone; a reload reconciles; a repeat isn't sent twice; a due alarm doesn't also ring in the page; an old app is left alone |
 | Emulator, with a page served at the app's server URL | Capacitor's bridge reaches the plugin from a page loaded from the server: `version` 2, `reconcile` ran. An alarm set for 3 minutes ahead was edited to 2 minutes ahead by a reload. It fired at the edited minute (194 ms late), on the locked screen, and **not** at the old one |
+
+## Escalation ladder (prompt 2.6)
+
+The phone climbs the alarm's five-stage ladder itself, from the ring plan
+cached with the alarm, so escalation works offline and with the app closed.
+`EscalationLadder` (pure) holds the ladder and `RingController` climbs it.
+
+| Level | Standard timing (gentle / adaptive / aggressive) | What the phone does |
+| --- | --- | --- |
+| 1 Normal alarm | 0 s | Ring at the ramp (2.3); one buzz |
+| 2 Increased volume | 20 / 10 / 5 s | Player at the ramp × 1.4; alarm stream raised to 70 % |
+| 3 Continuous vibration | 40 / 22 / 10 s | Volume × 1.5; repeating vibration, alarm usage |
+| 4 Wake challenge | 60 / 35 / 18 s | Volume × 1.6; the ring screen opens the wake check by itself, if the plan has one |
+| 5 Trying backups | 120 / 75 / 40 s | Volume × 1.8, alarm stream full; each backup channel tried once |
+
+- **Which ladder.**
+  - The plan's own ladder: the server personalised it to how this person wakes
+    (`personalizeEscalationPlan`).
+  - The standard ladder for the plan's strategy, if the plan has none or it
+    doesn't make sense: no level at 0 s, levels out of order, unknown fields
+    or backup kinds. The ring log says which ladder was used and why.
+- **Unmissable alarms always get the full ladder** (`critical` in the ring plan):
+  - every level, every backup channel, each level at least as strong as the
+    standard one;
+  - **never later than the standard timing**, whatever the personal plan holds
+    back.
+
+  The web's own critical ladder can climb *slower* than standard for an easy
+  waker, because personalisation stretches the timeline by the pace factor
+  (level 5 at 94 s instead of 75 s, adaptive). The phone caps it at standard.
+  An unmissable alarm going off while another rings brings its full ladder to
+  that ring.
+- **Volume.** The player plays at the ramp × the level's factor, never past
+  full. The alarm stream is raised from the 40 % floor at factor 1 to full at
+  1.8, never below what the user set, and put back afterwards.
+- **A slow pass climbs to the top.** A wake check solved but scoring under
+  `minConfidence` sends the ring straight to the top level, as the web does.
+- **Backups are reported honestly.** No backup channel has a transport on the
+  phone yet (prompt 3.3), so each reports `not_configured` and sends nothing,
+  and the report says so.
+- **Timing.** The ladder is checked every 0.5 s against the time since the
+  ring started, so each level arrives within half a second after its time,
+  never before it.
+
+### What the server learns, and a fix to it
+
+Every stopped ring reports the level it had reached (escalate, with `at`):
+
+- **What it feeds.** That level is what `deriveEscalationProfile` learns the
+  personal ladder from, through `ringPlanServer.ts`.
+- **What was wrong.** Until 2.6, the web sent escalate **only when a ring
+  reached level 5**. The profile therefore saw only the hardest mornings, which
+  pulled it towards "needs level 5": a faster ladder for everyone with three
+  such mornings.
+- **The fix.** Both clients now report every stopped ring's level
+  (`lib/ringFlow.ts`, `SyncCalls.java`). A ring nobody answered reports no wake
+  level, because it isn't one.
+- **`at` on escalate.** The escalate route now accepts `at` like the other
+  ring routes, so a queued escalation is recorded when it happened.
+
+### Tests
+
+| Where | What |
+| --- | --- |
+| JVM, `EscalationLadderTest` | The standard ladder equals `buildEscalationPlan` for every strategy. The 12 non-critical personalised ladders from the TypeScript table (`lib/escalation.parity.test.ts`) are climbed exactly as written. **Unmissable:** all 24 personalised ladders, plus their held-back twins, get every level and backup and are never later than standard. An easy waker's held-back backups stay held back unless unmissable. Stage boundaries to the millisecond. A nonsensical ladder falls back to the standard one |
+| JVM, `RingControllerTest` | Each stage arrives at its time, and only once. Volume rises by level. No check is prompted when the plan has none. A slow pass goes to the top. The level reached is what's queued. An easy waker climbs slower without backups; a hard waker climbs sooner. **An unmissable alarm climbs the full ladder at standard timing**, also when it joins a ring already going |
+| JVM, `RingTuningTest`, `BackupsTest`, `SyncCallsTest` | Stream index and player volume per factor; backups report `not_configured` in the route's shape; escalate is sent with the level and `at` |
+| Vitest and API | Every dismissed ring reports its level; escalate takes `at`; late reports are recorded in order |
+| On the device | `theLadderClimbsOnTheDevice`: levels on time, vibration from level 3, the check prompted, the stream full at the top, backups recorded, volume put back, escalate queued at level 5. `anUnmissableAlarmGetsTheFullLadderOnTheDevice`: a slow personal ladder with no backups reaches the backups at the standard 40 s. `atTheChallengeLevelTheCheckOpensByItself` |

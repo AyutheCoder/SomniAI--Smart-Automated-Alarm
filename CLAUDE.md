@@ -31,9 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.6** |
-| Last completed | 2.5 (server owns alarm definitions, phone owns ring history; the page sends the full server list to native `reconcile` after every load/create/edit/toggle/delete (`lib/nativeSync.ts`), never a failed or cached list; `ReconcilePlan` diffs idempotently; version handshake (API 2); no web ringing inside the app; edit-time and on/off controls added; conflict table in `ANDROID.md`. Tests: ReconcilePlan 14 incl. crash after every step, on-device ReconcileTest 5, vitest 12, Playwright 3; emulator: edited alarm fired at the new time, not the old) |
-| Waiting on the human | Phone checks for 2.1-2.5 in `DEVICE_TESTS.md` (emulators only so far; 2.4 "appears in history" and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| **Next prompt** | **2.7** |
+| Last completed | 2.6 (native 5-stage escalation from the cached plan: volume factor (player and alarm stream), vibration from its level, check opened at the challenge level, backups tried once and reported not_configured, slow pass goes to the top; unmissable = full ladder never slower than standard; every dismissed ring now reports its level (fixes the profile learning only from level-5 mornings); escalate takes `at`. Tests: EscalationLadder parity with TS table + override, controller stage timing; on-device 22/22; emulator ladder run on time) |
+| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (emulators only so far; 2.4 history and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
 | Branch for development | `develop` |

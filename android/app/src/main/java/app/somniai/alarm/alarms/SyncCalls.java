@@ -9,7 +9,7 @@ import org.json.JSONObject;
 
 /**
  * The server calls that record one native ring, in the order they must
- * arrive: the same calls as lib/ringFlow.ts syncCalls (fire, verify, dismiss),
+ * arrive: the same calls as lib/ringFlow.ts syncCalls (fire, verify, escalate, dismiss),
  * each with "at", when it happened on the phone, since they may be sent hours
  * later. Pure; tested in SyncCallsTest.
  */
@@ -32,8 +32,11 @@ final class SyncCalls {
     /**
      * @param outcome "dismissed" or "unanswered"
      * @param verification how it was stopped; null for unanswered
+     * @param level the escalation level the ring had reached when it ended
+     * @param backups what each backup channel did, if the ladder got that far
      */
-    static List<Call> forRing(String alarmId, long rangAt, String outcome, long endedAt, Verification verification) {
+    static List<Call> forRing(String alarmId, long rangAt, String outcome, long endedAt, Verification verification,
+            int level, List<Backups.Outcome> backups) {
         String base = "/api/alarms/" + alarmId;
         List<Call> calls = new ArrayList<>();
         calls.add(new Call(alarmId, base + "/fire", body("at", iso(rangAt))));
@@ -50,6 +53,12 @@ final class SyncCalls {
             put(v, "correctness", verification.correctness);
             calls.add(new Call(alarmId, base + "/verify", v));
         }
+        // The level this wake took, which the server learns the personal ladder
+        // from, and what the backups did (as lib/ringFlow.ts since prompt 2.6).
+        JSONObject e = body("at", iso(endedAt));
+        put(e, "level", level);
+        put(e, "backups", Backups.toJson(backups));
+        calls.add(new Call(alarmId, base + "/escalate", e));
         JSONObject d = body("at", iso(endedAt));
         put(d, "responseMs", Math.max(0, endedAt - rangAt));
         calls.add(new Call(alarmId, base + "/dismiss", d));

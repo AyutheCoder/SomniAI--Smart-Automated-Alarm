@@ -88,15 +88,17 @@ export function syncCalls(alarmId: string, outcome: RingOutcome): OutboxCall[] {
       },
     });
   }
-  if (outcome.escalationLevel >= 5) {
-    calls.push({
-      alarmId,
-      method: "POST",
-      path: `${base}/escalate`,
-      // What each backup channel actually did, not the list it was asked to try.
-      body: { level: outcome.escalationLevel, backups: outcome.backups },
-    });
-  }
+  // Every dismissed ring reports the level it had reached: that is how hard this
+  // wake was, which is what the personal ladder is learnt from
+  // (ringPlanServer.ts reads these). It used to be sent only from level 5, so
+  // the profile only ever saw the hardest mornings.
+  calls.push({
+    alarmId,
+    method: "POST",
+    path: `${base}/escalate`,
+    // What each backup channel actually did, not the list it was asked to try.
+    body: { level: outcome.escalationLevel, backups: outcome.backups },
+  });
   // The server decides "verified" from its own verify record.
   calls.push({ alarmId, method: "POST", path: `${base}/dismiss`, body: { responseMs: outcome.responseMs } });
   return calls;

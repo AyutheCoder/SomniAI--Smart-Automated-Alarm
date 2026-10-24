@@ -93,7 +93,7 @@ Record the date, phone model and Android version, and pass or fail for each:
 | # | Set up, then wait for the alarm | Pass when |
 | --- | --- | --- |
 | 1 | Screen off, phone locked with your PIN or fingerprint | The screen turns on and the ring screen shows over the lock screen without unlocking. Sound starts quiet and gets louder over about 30 s. The phone vibrates. |
-| 2 | Ringer switched to **silent** | It still rings out loud and vibrates |
+| 2 | Ringer switched to **silent** | It still rings out loud, and vibrates from the ladder's vibration level (since 2.6) |
 | 3 | **Do Not Disturb** on, as you normally use it | It still rings. If it doesn't, note your DND exceptions: an alarm can't ring when "Alarms" is turned off in DND or in "Total silence" |
 | 4 | Alarm volume turned right down (Settings > Sound > Alarm volume) | It rings at about 40 % volume, and your alarm volume is back where you left it afterwards |
 | 5 | Phone unlocked and in use | A heads-up "Alarm" notification appears and the sound plays. Tapping it opens the ring screen. |
@@ -202,3 +202,32 @@ version, and pass or fail for each:
 | 5 | Add an alarm 3 minutes ahead and swipe the app away from recents | It rings (the phone, not the page, rings it) |
 | 6 | With the app open and an alarm due | It rings once, natively. The page never shows its own ringing screen on top |
 | 7 | Delete an alarm on a computer (signed in to the same account), then open the app on the phone | It's gone from the phone: set a test alarm for that minute and it doesn't ring |
+
+## 2.6 Escalation ladder
+
+Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24.
+
+| Condition | Result | Evidence |
+| --- | --- | --- |
+| On-device tests (22, including the 3 ladder tests) | Pass, 22/22 | |
+| **A real alarm left ringing**, screen off, standard adaptive ladder (10, 22, 35, 75 s) | Pass | Fired 17:14:00.217. Levels logged at +10.4, +22.4, +35.5 and +75.2 s, each within one 0.5 s tick after its time. At level 5 the alarm stream went 6 → 7 of 7 and all three backups reported `not_configured`. The check was already open when I came to stop it, opened by the challenge level. Stopped after 109 s at level 5 with score 78; the stream was put back to 6 |
+| Sound start | About 1.2 s after the alarm fired, on this emulator | The player prepares the alarm sound before the first level is logged; the phone will show the real figure |
+
+### On your phone: checklist
+
+Set a test alarm 2 minutes ahead (`ANDROID.md`, "Checking alarms on a device";
+it has a wake check and the standard adaptive ladder), lock the phone, and
+**don't touch it** until step 6. Note the time it starts ringing.
+
+| # | At about | Pass when |
+| --- | --- | --- |
+| 1 | 0 s | It rings quietly at first, with one buzz |
+| 2 | 10 s | Clearly louder |
+| 3 | 22 s | It starts vibrating continuously |
+| 4 | 35 s | The ring screen shows the maths problem without you pressing Stop |
+| 5 | 75 s | Louder still, at full alarm volume |
+| 6 | then | Solve it: it stops. Your alarm volume is back to where it was |
+
+For an unmissable alarm, set one linked to a task marked critical or
+must-not-miss in the app. Once 2.5 has put it on the phone, it reaches level 5
+by the standard time even if your personal ladder is slower.

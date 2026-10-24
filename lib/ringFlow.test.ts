@@ -56,9 +56,10 @@ describe("what the server is told afterwards", () => {
     expect(calls.find((c) => c.path.endsWith("/dismiss"))?.body).toMatchObject({ responseMs: 9000 });
   });
 
-  it("no verify for an alarm without a challenge, no escalate below the backup level", () => {
-    const calls = syncCalls("a1", { ...OUTCOME, challenged: false, escalationLevel: 3 });
-    expect(calls.map((c) => c.path)).toEqual(["/api/alarms/a1/fire", "/api/alarms/a1/dismiss"]);
+  it("no verify for an alarm without a challenge; the level reached is reported at every level", () => {
+    const calls = syncCalls("a1", { ...OUTCOME, challenged: false, escalationLevel: 2, backups: [] });
+    expect(calls.map((c) => c.path)).toEqual(["/api/alarms/a1/fire", "/api/alarms/a1/escalate", "/api/alarms/a1/dismiss"]);
+    expect(calls[1].body).toEqual({ level: 2, backups: [] });
   });
 
   it("a snooze sends the time the device set, not one the server would work out later", () => {
@@ -123,7 +124,7 @@ describe("the outbox, with the server or database down", () => {
     const box = new Outbox(memoryStore(), "k");
     box.enqueue(syncCalls("gone", { ...OUTCOME, challenged: false, escalationLevel: 1 }));
     const result = await box.flush(reply(404));
-    expect(result).toMatchObject({ dropped: 2, stalled: false });
+    expect(result).toMatchObject({ dropped: 3, stalled: false });
     expect(box.pending()).toEqual([]);
   });
 

@@ -39,7 +39,7 @@ public class OutboxQueueTest {
 
     static List<SyncCalls.Call> ring(String id) {
         Verification v = new Verification(true, true, 1, 5_000, 0, List.of("math"), 90, 2_000);
-        return SyncCalls.forRing(id, 1_000, "dismissed", 3_000, v);
+        return SyncCalls.forRing(id, 1_000, "dismissed", 3_000, v, 2, List.of());
     }
 
     @Test
@@ -49,7 +49,7 @@ public class OutboxQueueTest {
         OutboxQueue.Flush f = new OutboxQueue(mem).flush(new Server().answer(OFFLINE));
         assertTrue(f.stalled);
         assertEquals(0, f.sent);
-        assertEquals(3, new OutboxQueue(mem).size());
+        assertEquals(4, new OutboxQueue(mem).size());
     }
 
     @Test
@@ -60,10 +60,10 @@ public class OutboxQueueTest {
         Server server = new Server();
         OutboxQueue.Flush f = new OutboxQueue(mem).flush(server);
         assertFalse(f.stalled);
-        assertEquals(6, f.sent);
+        assertEquals(8, f.sent);
         assertEquals(List.of(
-            "/api/alarms/a/fire", "/api/alarms/a/verify", "/api/alarms/a/dismiss",
-            "/api/alarms/b/fire", "/api/alarms/b/verify", "/api/alarms/b/dismiss"), server.received);
+            "/api/alarms/a/fire", "/api/alarms/a/verify", "/api/alarms/a/escalate", "/api/alarms/a/dismiss",
+            "/api/alarms/b/fire", "/api/alarms/b/verify", "/api/alarms/b/escalate", "/api/alarms/b/dismiss"), server.received);
         assertEquals(0, new OutboxQueue(mem).size());
     }
 
@@ -77,10 +77,10 @@ public class OutboxQueueTest {
         assertTrue(f.stalled);
         assertEquals(1, f.sent);
         assertEquals(503, f.lastStatus);
-        assertEquals("verify isn't skipped to send dismiss before it", 2, q.size());
+        assertEquals("verify isn't skipped to send dismiss before it", 3, q.size());
         Server later = new Server();
         q.flush(later);
-        assertEquals(List.of("/api/alarms/a/verify", "/api/alarms/a/dismiss"), later.received);
+        assertEquals(List.of("/api/alarms/a/verify", "/api/alarms/a/escalate", "/api/alarms/a/dismiss"), later.received);
     }
 
     @Test
@@ -89,7 +89,7 @@ public class OutboxQueueTest {
         OutboxQueue q = new OutboxQueue(mem);
         q.enqueue(ring("a"), 0);
         assertTrue(q.flush(new Server().answer(401)).stalled);
-        assertEquals(3, q.size());
+        assertEquals(4, q.size());
     }
 
     @Test
@@ -99,7 +99,7 @@ public class OutboxQueueTest {
             OutboxQueue q = new OutboxQueue(mem);
             q.enqueue(ring("a"), 0);
             assertTrue(String.valueOf(status), q.flush(new Server().answer(status)).stalled);
-            assertEquals(3, q.size());
+            assertEquals(4, q.size());
         }
     }
 
@@ -109,11 +109,11 @@ public class OutboxQueueTest {
         OutboxQueue q = new OutboxQueue(mem);
         q.enqueue(ring("deleted"), 0);
         q.enqueue(ring("b"), 1);
-        Server server = new Server().answer(404, 404, 404);
+        Server server = new Server().answer(404, 404, 404, 404);
         OutboxQueue.Flush f = q.flush(server);
         assertFalse(f.stalled);
-        assertEquals(3, f.dropped.size());
-        assertEquals(3, f.sent);
+        assertEquals(4, f.dropped.size());
+        assertEquals(4, f.sent);
         assertEquals(0, q.size());
     }
 
@@ -124,7 +124,7 @@ public class OutboxQueueTest {
         q.enqueue(ring("a"), 0);
         int before = mem.writes;
         q.flush(new Server());
-        assertEquals("one save per call sent", before + 3, mem.writes);
+        assertEquals("one save per call sent", before + 4, mem.writes);
     }
 
     @Test
@@ -134,7 +134,7 @@ public class OutboxQueueTest {
         OutboxQueue q = new OutboxQueue(mem);
         assertEquals(0, q.size());
         q.enqueue(ring("a"), 0);
-        assertEquals(3, q.size());
+        assertEquals(4, q.size());
     }
 
     @Test

@@ -86,15 +86,16 @@ public class RingActivityTest {
         waitFor("stopped", () -> RingService.current == null);
         assertEquals("dismissed", lastOutcome("t-screen"));
 
-        // Queued for the server: fire, verify (solved, 5 wrong answers), dismiss.
+        // Queued for the server: fire, verify (solved, 5 wrong answers), escalate (the level reached), dismiss.
         List<JSONObject> calls = queued("t-screen");
-        assertEquals(3, calls.size());
+        assertEquals(4, calls.size());
         assertTrue(calls.get(0).getString("path").endsWith("/fire"));
         assertTrue(calls.get(1).getString("path").endsWith("/verify"));
         JSONObject verify = new JSONObject(calls.get(1).getString("body"));
         assertTrue(verify.getBoolean("solved"));
         assertEquals(5, verify.getInt("attempts"));
-        assertTrue(calls.get(2).getString("path").endsWith("/dismiss"));
+        assertTrue(calls.get(2).getString("path").endsWith("/escalate"));
+        assertTrue(calls.get(3).getString("path").endsWith("/dismiss"));
     }
 
     /**
@@ -125,6 +126,21 @@ public class RingActivityTest {
             gap[0] = keyboardTop - (at[1] + check.getHeight());
         });
         assertTrue("Check ends " + (-gap[0]) + " px under the keyboard", gap[0] >= 0);
+    }
+
+    @Test
+    public void atTheChallengeLevelTheCheckOpensByItself() throws Exception {
+        String plan = RingServiceTest.fastPlan(false, true, new int[] { 0, 1, 2, 3, 30 }, false);
+        AlarmSpec spec = new AlarmSpec("t-auto", "Auto check", 7, 0, EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true, plan);
+        assertTrue(RingService.start(context, spec, System.currentTimeMillis()));
+        waitFor("ringing", () -> RingService.current != null);
+        context.startActivity(new Intent(context, RingActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        waitFor("ring screen open", () -> ringScreen() != null);
+        RingActivity screen = ringScreen();
+        // Nobody presses Stop: at 3 s the ladder reaches the challenge level.
+        waitFor("the check opened by itself", () -> findText(screen, "Solve to stop the alarm") != null);
+        assertNotNull(RingService.current);
+        assertEquals(4, RingService.current.level.level);
     }
 
     @Test

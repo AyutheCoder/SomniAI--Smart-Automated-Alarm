@@ -104,17 +104,18 @@ describe("with the database down at ring time", () => {
     }));
     const whileDown = await outbox.flush(toServer);
     expect(whileDown).toMatchObject({ sent: 0, stalled: true });
-    expect(outbox.pending().map((e) => e.path.split("/").pop())).toEqual(["fire", "verify", "dismiss"]);
+    expect(outbox.pending().map((e) => e.path.split("/").pop())).toEqual(["fire", "verify", "escalate", "dismiss"]);
 
     await databaseBack();
     const afterwards = await outbox.flush(toServer);
-    expect(afterwards).toMatchObject({ sent: 3, stalled: false });
+    expect(afterwards).toMatchObject({ sent: 4, stalled: false });
     expect(outbox.pending()).toEqual([]);
     expect(afterwards.alarms.get(record._id)).toMatchObject({ status: "verified", enabled: false });
     expect(await Alarm.findById(record._id).lean()).toMatchObject({ status: "verified" });
     const types = (await BehaviorEvent.find({ "meta.alarmId": record._id }).sort({ at: 1 }).lean<{ type: string }[]>())
       .map((e) => e.type);
-    expect(types).toEqual(["alarm_fire", "verify_pass", "dismiss"]);
+    // The level the wake took (2) is recorded too: the personal ladder learns from it.
+    expect(types).toEqual(["alarm_fire", "verify_pass", "escalation", "dismiss"]);
   });
 
   it("a snooze arms the alarm again on the device, and the server later agrees on the time", async () => {
