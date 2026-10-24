@@ -126,6 +126,14 @@ before the fix:
   (`ForegroundServiceDidNotStartInTimeException`): the race test failed 3/3
   before the fix and passed 3/3 after.
 
+CI emulators, run 40082801841 (2026-10-24):
+
+| Android | Alarm check | On-device tests (14) |
+| --- | --- | --- |
+| 8.0 (API 26) | Pass | 12 passed, **2 skipped**: silent + DND (the image's shell can't set them), and the keyboard check, because "a system window lies over the ring screen" where the test touched Stop. **Not confirmed what that window is.** Most likely the alarm's own heads-up notification, which old Android can lay over the app. On an Android 8 or 9 phone, check whether anything covers Stop when the alarm rings (checklist step 8) |
+| 12L (API 32) | Pass | 14/14 |
+| 15 (API 35) | Pass | 14/14 |
+
 ### On your phone: checklist
 
 You need the debug build installed (2.3 checklist), the dev server running
@@ -148,5 +156,7 @@ in the SomniAI app** on the phone.
 7. Turn airplane mode off and wait a minute.
    **Pass:** `sync: sent 3`, and in the app's history the alarm shows as
    verified at the time you stopped it, not the time it synced.
+8. Android 8 or 9 phones only: when it rings with the phone unlocked, check
+   that nothing (such as the alarm's notification) covers Stop or Check.
 
 Record the date, phone model and Android version, and the result of each step.
