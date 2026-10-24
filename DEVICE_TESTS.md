@@ -178,7 +178,14 @@ CI emulators, run 40086641380 (2026-10-24): all jobs green; the 5
 passed there in the previous run). A system window lay over the ring screen
 where the test touched Stop, so the unconfirmed overlay from 2.4 is
 intermittent and not only on Android 8. The test now names the window in its
-skip message, so the next CI run that hits it says what it is.
+skip message.
+
+**Identified** in the next run, 40087235278: on API 26 the window in the way was
+`Application Error: com.android.systemui`, the emulator's own System UI crash
+dialog, not the alarm's heads-up. API 32 and 35 passed 19/19 in that run. So the
+"unconfirmed overlay" noted in 2.4 is the emulator's System UI misbehaving, as
+seen locally all along, not something users would meet. Checklist item 8 in
+2.4 stays as a cheap check on a real Android 8 or 9 phone.
 
 ### On your phone: checklist
 
