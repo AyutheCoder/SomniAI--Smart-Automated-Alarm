@@ -61,6 +61,23 @@ export interface NativeLogEntry {
 
 export interface SomniAlarmPlugin {
   /** Saves and schedules (or reschedules) an alarm. Rejects with code INVALID, saving nothing, if it is malformed or already past. */
+  /** What this native code offers: 2 adds reconcile. Missing on builds before 2.5. */
+  version(): Promise<{ api: number }>;
+  /**
+   * Makes the phone's schedule match the server's full list (lib/nativeSync.ts
+   * calls it). Idempotent. Rejects with INVALID, changing nothing, for a
+   * malformed alarm, a non-server id or an id listed twice.
+   */
+  reconcile(options: { alarms: NativeAlarm[] }): Promise<{
+    put: string[];
+    removed: string[];
+    unchanged: string[];
+    /** One-offs that already rang on the phone; the server hears through the outbox. */
+    keptHistory: string[];
+    /** One-offs whose time had passed: not scheduled. */
+    past: string[];
+    exactAlarm: ExactAlarmAccess;
+  }>;
   schedule(options: { alarm: NativeAlarm }): Promise<NativeRecord & { exactAlarm: ExactAlarmAccess }>;
   cancel(options: { id: string }): Promise<{ id: string; removed: boolean }>;
   list(): Promise<{ alarms: NativeRecord[]; log: NativeLogEntry[]; exactAlarm: ExactAlarmAccess }>;
@@ -105,8 +122,12 @@ function localDate(d: Date): string {
  * The native form of a web alarm, read in this device's time zone. A custom
  * repeat with no days rings once, as nextOccurrence treats it.
  */
-export function toNativeAlarm(alarm: Pick<Alarm, "_id" | "label" | "scheduledTime" | "repeat" | "enabled" | "ringPlan">): NativeAlarm {
-  const at = new Date(alarm.scheduledTime);
+export function toNativeAlarm(alarm: Pick<Alarm, "_id" | "label" | "scheduledTime" | "repeat" | "enabled" | "ringPlan" | "snoozedFrom">): NativeAlarm {
+  const repeating = alarm.repeat !== undefined && alarm.repeat.type !== "none";
+  // A repeating alarm snoozed in a browser has the snooze as its scheduledTime;
+  // its own time is snoozedFrom. The phone keeps the alarm's own time (it has
+  // no snooze of its own yet), rather than moving every later morning.
+  const at = new Date(repeating && alarm.snoozedFrom ? alarm.snoozedFrom : alarm.scheduledTime);
   if (Number.isNaN(at.getTime())) {
     throw new Error(`alarm ${alarm._id} has no valid time`);
   }

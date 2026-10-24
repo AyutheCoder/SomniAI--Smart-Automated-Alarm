@@ -99,7 +99,7 @@ describe("with the database down at ring time", () => {
     // What happened waits in the outbox; sending now fails and loses nothing.
     const outbox = new Outbox(memoryStore(), "outbox");
     outbox.enqueue(syncCalls(record._id, {
-      snoozed: false, responseMs: 6000, challenged: plan.challenge.required, methods: ["math"],
+      snoozed: false, responseMs: 6000, timeOnTaskMs: 5000, challenged: plan.challenge.required, methods: ["math"],
       attempts: 0, solved: true, correctness: 1, escalationLevel: 2, backups: [],
     }));
     const whileDown = await outbox.flush(toServer);
@@ -127,7 +127,7 @@ describe("with the database down at ring time", () => {
 
     const outbox = new Outbox(memoryStore(), "outbox");
     outbox.enqueue(syncCalls(record._id, {
-      snoozed: true, snoozedUntil: snoozed.scheduledTime, responseMs: 3000, challenged: true,
+      snoozed: true, snoozedUntil: snoozed.scheduledTime, responseMs: 3000, timeOnTaskMs: 0, challenged: true,
       methods: [], attempts: 0, solved: false, correctness: 0, escalationLevel: 1, backups: [],
     }));
     expect((await outbox.flush(toServer)).stalled).toBe(true);

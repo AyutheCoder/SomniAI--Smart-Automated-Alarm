@@ -17,9 +17,10 @@
   <main>
     <h1>Can't reach SomniAI right now</h1>
     <p>The app needs a connection to load. Check your internet and try again.</p>
-    <!-- True once the native alarm (DEVELOPMENT_PLAN prompts 2.2-2.4) ships; until then
-         alarms ring only in the web app. Keep this sentence honest as that changes. -->
-    <p>Native alarms are not in this build yet: until they are, alarms only ring while SomniAI is open.</p>
+    <!-- True since prompt 2.5: alarms the app has set are on the phone's native
+         schedule, which rings and verifies without a connection. Keep this
+         sentence honest if that changes. -->
+    <p>Alarms you have already set still ring on this phone, and you can stop them, without a connection. Changing them needs one.</p>
     <button onclick="location.reload()">Try again</button>
   </main>
 </body>

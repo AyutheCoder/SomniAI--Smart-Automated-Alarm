@@ -160,3 +160,30 @@ in the SomniAI app** on the phone.
    that nothing (such as the alarm's notification) covers Stop or Check.
 
 Record the date, phone model and Android version, and the result of each step.
+
+## 2.5 One source of truth
+
+Emulator: Medium Phone AVD, Android 17 (API 37), 2026-10-24.
+
+| Condition | Result | Evidence |
+| --- | --- | --- |
+| On-device tests (19, including the 5 `ReconcileTest`) | Pass, 19/19 | The keyboard test first skipped behind an emulator System UI ANR dialog; passed once that was cleared |
+| The page in the app reaches the plugin | Pass | A page served at the app's server URL saw `native=true`, `version {api: 2}`, and its `reconcile` put the alarm |
+| Edit an alarm, lock the phone, it fires at the new time | Pass | Set for 15:47, then edited by an app restart to 15:46. On the restart, the force-stop's lost alarm was first restored from the phone's store (`app_start`, `BOOT_COMPLETED`), then the page's reconcile moved it. It fired at 15:46:00.37 (194 ms late) with the ring screen on top, and **did not fire at 15:47** |
+| The full app with a signed-in account against the real server | **Not run on the emulator** | Too much for this machine's memory alongside the emulator, and the e2e server's sign-in is bound to localhost. Covered in parts: Playwright with the real page and server and a stand-in phone, plus the bridge run above. Phone checklist below |
+
+### On your phone: checklist
+
+Debug build installed, the dev server running where the phone reaches it, and
+signed in to the app on the phone. Record the date, phone model and Android
+version, and pass or fail for each:
+
+| # | Do | Pass when |
+| --- | --- | --- |
+| 1 | Open the app | Under "Adaptive Alarms" it says "Alarms ring from this phone, even with the app closed." |
+| 2 | Add an alarm 3 minutes ahead, then use **Edit** to move it to 2 minutes ahead. Lock the phone | It rings at the new time, not the old one (the gate) |
+| 3 | Add an alarm 2 minutes ahead, then turn it **Off**. Lock the phone | It doesn't ring |
+| 4 | Add an alarm 2 minutes ahead and **delete** it. Lock the phone | It doesn't ring |
+| 5 | Add an alarm 3 minutes ahead and swipe the app away from recents | It rings (the phone, not the page, rings it) |
+| 6 | With the app open and an alarm due | It rings once, natively. The page never shows its own ringing screen on top |
+| 7 | Delete an alarm on a computer (signed in to the same account), then open the app on the phone | It's gone from the phone: set a test alarm for that minute and it doesn't ring |

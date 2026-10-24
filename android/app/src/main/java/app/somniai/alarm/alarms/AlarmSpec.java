@@ -49,4 +49,17 @@ public final class AlarmSpec {
     public AlarmSpec withEnabled(boolean value) {
         return new AlarmSpec(id, label, hour, minute, days, date, value, ringPlanJson);
     }
+
+    /** Whether the two describe the same alarm: everything the web app sets. */
+    public boolean sameDefinition(AlarmSpec o) {
+        return o != null
+            && id.equals(o.id)
+            && label.equals(o.label)
+            && hour == o.hour
+            && minute == o.minute
+            && days.equals(o.days)
+            && java.util.Objects.equals(date, o.date)
+            && enabled == o.enabled
+            && java.util.Objects.equals(ringPlanJson, o.ringPlanJson);
+    }
 }

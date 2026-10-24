@@ -19,6 +19,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -82,6 +84,62 @@ public class SomniAlarmPlugin extends Plugin {
             return;
         }
         call.resolve(withAccess(json(record)));
+    }
+
+    /**
+     * What this native code offers, for the web app's check before it relies on
+     * it (lib/nativeSync.ts). Raised when the plugin gains something the web app
+     * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5).
+     */
+    static final int API = 2;
+
+    @PluginMethod
+    public void version(PluginCall call) {
+        call.resolve(new JSObject().put("api", API));
+    }
+
+    /**
+     * Makes the phone's schedule match the server's full list of alarms
+     * (ReconcilePlan has the rules). Idempotent: unchanged alarms are not
+     * touched. Rejects with INVALID, changing nothing, for a malformed alarm,
+     * a non-server id, or an id listed twice.
+     */
+    @PluginMethod
+    public void reconcile(PluginCall call) {
+        JSArray alarms = call.getArray("alarms");
+        if (alarms == null) {
+            call.reject("alarms is required", "INVALID");
+            return;
+        }
+        List<AlarmSpec> desired = new ArrayList<>();
+        try {
+            for (int i = 0; i < alarms.length(); i++) {
+                desired.add(AlarmCodec.specFromJson(alarms.getJSONObject(i)));
+            }
+        }
+        catch (JSONException | IllegalArgumentException e) {
+            call.reject("alarm " + desired.size() + ": " + e.getMessage(), "INVALID");
+            return;
+        }
+        ReconcilePlan plan;
+        try {
+            plan = AlarmScheduler.reconcile(getContext(), desired);
+        }
+        catch (IllegalArgumentException e) {
+            call.reject(e.getMessage(), "INVALID");
+            return;
+        }
+        List<String> put = new ArrayList<>();
+        for (AlarmSpec spec : plan.put) {
+            put.add(spec.id);
+        }
+        JSObject out = new JSObject();
+        out.put("put", new JSArray(put));
+        out.put("removed", new JSArray(plan.remove));
+        out.put("unchanged", new JSArray(plan.unchanged));
+        out.put("keptHistory", new JSArray(plan.keptHistory));
+        out.put("past", new JSArray(plan.past));
+        call.resolve(withAccess(out));
     }
 
     @PluginMethod

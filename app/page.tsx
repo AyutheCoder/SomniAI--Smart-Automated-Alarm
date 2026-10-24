@@ -9,6 +9,7 @@ import { Outbox, browserStore } from "@/lib/outbox";
 import { loadAlarmCache, mergeWithLocal, saveAlarmCache } from "@/lib/alarmCache";
 import { dismissLocally, snoozeLocally, syncCalls } from "@/lib/ringFlow";
 import { resolveRingPlan } from "@/lib/ringPlan";
+import { connectNative, type NativeConnection, type NativeSyncStatus } from "@/lib/nativeSync";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
@@ -88,6 +89,28 @@ export default function Home() {
     setTasks(update);
   }, []);
 
+  // In the Android app the phone rings alarms natively; this page keeps the
+  // phone's schedule in step with the server (lib/nativeSync.ts) and does not
+  // ring them itself, so nothing rings twice.
+  const [native, setNative] = useState<NativeConnection | null>(null);
+  const [nativeStatus, setNativeStatus] = useState<NativeSyncStatus>({ state: "idle" });
+  const nativeSync = native && "sync" in native ? native.sync : null;
+  // True only while the alarm list is the server's own: a list that failed to
+  // load, or the offline cache, must never be sent to the phone, which would
+  // remove the alarms missing from it.
+  const serverLoaded = useRef(false);
+  useEffect(() => {
+    let live = true;
+    void connectNative(setNativeStatus).then((c) => {
+      if (live) {
+        setNative(c);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
   const loadData = useCallback(async () => {
     // Wait for the session: the device's own copy of the alarms is per user.
     if (!userId) {
@@ -115,12 +138,14 @@ export default function Home() {
           throw new Error(aJson.error ?? "alarms unavailable");
         }
         setAlarms(mergeWithLocal(aJson.data.items, loadAlarmCache(store, userId), outbox?.pendingAlarmIds() ?? new Set()));
+        serverLoaded.current = true;
         setOffline(false);
         return;
       }
     } catch {
       // The server or its database can't be reached: ring from what this
       // device last knew rather than from nothing.
+      serverLoaded.current = false;
       const cached = loadAlarmCache(store, userId);
       if (cached) {
         setAlarms(cached);
@@ -134,6 +159,29 @@ export default function Home() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Every list the server gave this page goes to the phone: load, create, edit,
+  // toggle and delete all end in a new list. Unchanged lists aren't sent again.
+  useEffect(() => {
+    if (nativeSync && serverLoaded.current && !offline && !loading) {
+      void nativeSync.sync(alarms);
+    }
+  }, [nativeSync, alarms, offline, loading]);
+
+  // Back in the app: load again, so alarms set elsewhere (another device, the
+  // server's own scheduling) reach the phone without waiting for a restart.
+  useEffect(() => {
+    if (!nativeSync) {
+      return;
+    }
+    const visible = () => {
+      if (document.visibilityState === "visible") {
+        void loadData();
+      }
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => document.removeEventListener("visibilitychange", visible);
+  }, [nativeSync, loadData]);
 
   useEffect(() => {
     if (userId && !loading) {
@@ -204,6 +252,10 @@ export default function Home() {
   }, [outbox, flushOutbox, editAlarms]);
 
   useEffect(() => {
+    // The phone rings them; ringing here as well would ring twice.
+    if (nativeSync) {
+      return;
+    }
     const interval = setInterval(() => {
       const now = Date.now();
       for (const alarm of alarms) {
@@ -229,7 +281,7 @@ export default function Home() {
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [alarms, fireAlarm, markMissed]);
+  }, [alarms, fireAlarm, markMissed, nativeSync]);
 
   async function createTask(e: React.FormEvent) {
     e.preventDefault();
@@ -300,6 +352,35 @@ export default function Home() {
     }
   }
 
+  /** Changes an alarm on the server, then here; the phone follows from the new list. */
+  async function updateAlarm(id: string, patch: Record<string, unknown>) {
+    const res = await fetch(`/api/alarms/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const json = await res.json();
+    if (json.ok) {
+      editAlarms((prev) => prev.map((a) => (a._id === id ? json.data : a)).sort((a, b) => new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime()));
+    }
+    return Boolean(json.ok);
+  }
+
+  function toggleAlarm(alarm: Alarm) {
+    // Turning one back on arms it again, whatever its last ring left it as.
+    return updateAlarm(alarm._id, alarm.enabled ? { enabled: false } : { enabled: true, status: "scheduled" });
+  }
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTime, setEditTime] = useState("");
+
+  async function saveAlarmTime(e: React.FormEvent, alarm: Alarm) {
+    e.preventDefault();
+    if (await updateAlarm(alarm._id, { scheduledTime: new Date(editTime).toISOString(), status: "scheduled" })) {
+      setEditingId(null);
+    }
+  }
+
   async function deleteAlarm(id: string) {
     const res = await fetch(`/api/alarms/${id}`, { method: "DELETE" });
     const json = await res.json();
@@ -329,6 +410,7 @@ export default function Home() {
       snoozed: result.snoozed,
       snoozedUntil: result.snoozed ? local.scheduledTime : undefined,
       responseMs: result.responseMs,
+      timeOnTaskMs: result.timeOnTaskMs,
       // An alarm with no challenge has nothing to verify.
       challenged: resolveRingPlan(alarm).challenge.required,
       methods: result.methods,
@@ -430,6 +512,7 @@ export default function Home() {
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
             <AlarmClock className="h-5 w-5 text-indigo-300" /> Adaptive Alarms
           </h2>
+          <NativeNotice native={native} status={nativeStatus} onRetry={() => void nativeSync?.sync(alarms)} />
 
           <form onSubmit={createAlarm} className="mb-5 space-y-3">
             <input value={alarmLabel} onChange={(e) => setAlarmLabel(e.target.value)} placeholder="Alarm label (e.g. Wake up for exam)"
@@ -503,10 +586,27 @@ text-white transition hover:bg-indigo-400">
           </span>
         </p>
       </div>
-      <button onClick={() => deleteAlarm(alarm._id)} className="text-slate-500 transition hover:text-rose-400" aria-label="Delete alarm">
-        <Trash2 className="h-4 w-4" />
-      </button>
+      <div className="flex items-center gap-3">
+        <button onClick={() => void toggleAlarm(alarm)} aria-pressed={alarm.enabled} aria-label={`${alarm.enabled ? "Turn off" : "Turn on"} ${alarm.label}`}
+          className={`rounded-full px-2 py-0.5 text-xs font-semibold transition ${alarm.enabled ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-700 text-slate-400"}`}>
+          {alarm.enabled ? "On" : "Off"}
+        </button>
+        <button onClick={() => {
+          setEditingId(editingId === alarm._id ? null : alarm._id);
+          setEditTime(toLocalInputValue(new Date(alarm.scheduledTime)));
+        }} className="text-xs text-slate-400 transition hover:text-indigo-300" aria-label={`Edit time of ${alarm.label}`}>
+          Edit
+        </button>
+        <button onClick={() => deleteAlarm(alarm._id)} className="text-slate-500 transition hover:text-rose-400" aria-label="Delete alarm">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
     </div>
+    {editingId === alarm._id && (<form onSubmit={(e) => void saveAlarmTime(e, alarm)} className="mt-2 flex gap-2">
+      <input type="datetime-local" value={editTime} onChange={(e) => setEditTime(e.target.value)} aria-label="New time"
+        className="flex-1 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-1.5 text-sm text-white outline-none focus:border-indigo-400" />
+      <button type="submit" className="rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-indigo-400">Save</button>
+    </form>)}
     {alarm.decision?.rationale && (<details className="mt-2 text-xs">
       <summary className="cursor-pointer text-violet-300 transition hover:text-violet-200">
         Why this alarm?
@@ -602,5 +702,29 @@ function StatCard({ label, value }: {
       <p className="text-2xl font-bold text-white">{value}</p>
       <p className="text-xs text-slate-400">{label}</p>
     </div>
+  );
+}
+
+/** Where alarms ring from, in the app, and whether the phone has the latest list. */
+function NativeNotice({ native, status, onRetry }: { native: NativeConnection | null; status: NativeSyncStatus; onRetry: () => void }) {
+  if (!native || ("reason" in native && native.reason === "browser")) {
+    return null;
+  }
+  if ("reason" in native) {
+    return <p role="status" className="mb-4 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{native.reason} Until then, alarms ring only while this screen is open.</p>;
+  }
+  if (status.state === "failed") {
+    return (
+      <p role="alert" className="mb-4 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+        Couldn&apos;t update the alarms on this phone: {status.error}{" "}
+        <button onClick={onRetry} className="underline">Try again</button>
+      </p>
+    );
+  }
+  return (
+    <p role="status" className="mb-4 text-xs text-slate-400">
+      {status.state === "synced" ? "Alarms ring from this phone, even with the app closed." : "Updating the alarms on this phone…"}
+      {status.state === "synced" && status.skipped.length > 0 ? ` ${status.skipped.length} without a valid time weren't set.` : ""}
+    </p>
   );
 }

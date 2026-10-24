@@ -1,6 +1,7 @@
 package app.somniai.alarm.alarms;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -62,6 +63,19 @@ public class AlarmCodecTest {
         assertNull(back.lastFiredAt);
         assertEquals(true, new JSONObject(back.spec.ringPlanJson).getBoolean("critical"));
         assertEquals(EnumSet.range(DayOfWeek.MONDAY, DayOfWeek.FRIDAY), back.spec.days);
+    }
+
+    @Test
+    public void theSameRingPlanReadsTheSameWhateverItsKeyOrder() throws Exception {
+        AlarmSpec one = AlarmCodec.specFromJson(input("{\"id\":\"x\",\"hour\":7,\"minute\":0,\"days\":[1],"
+            + "\"ringPlan\":{\"version\":1,\"challenge\":{\"required\":true,\"minConfidence\":70},\"sound\":{\"intensity\":60}}}"));
+        AlarmSpec two = AlarmCodec.specFromJson(input("{\"id\":\"x\",\"hour\":7,\"minute\":0,\"days\":[1],"
+            + "\"ringPlan\":{\"sound\":{\"intensity\":60.0},\"challenge\":{\"minConfidence\":70,\"required\":true},\"version\":1}}"));
+        assertEquals(one.ringPlanJson, two.ringPlanJson);
+        assertTrue(one.sameDefinition(two));
+        AlarmSpec changed = AlarmCodec.specFromJson(input("{\"id\":\"x\",\"hour\":7,\"minute\":0,\"days\":[1],"
+            + "\"ringPlan\":{\"version\":1,\"challenge\":{\"required\":true,\"minConfidence\":78},\"sound\":{\"intensity\":60}}}"));
+        assertFalse(one.sameDefinition(changed));
     }
 
     @Test

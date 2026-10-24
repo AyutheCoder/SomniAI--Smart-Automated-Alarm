@@ -31,11 +31,11 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.5** |
-| Last completed | 2.4 (native maths wake check on the ring screen, gated as the web: all solved and score >= minConfidence; `WakeConfidence.java` checked against the TS on 3,468 shared cases; `RingService` refuses any dismissal without a passed check; ring results queued on the phone (fire/verify/dismiss with `at`) and sent by WorkManager when online with the web view's cookie; server accepts `at` and finds the verification near the dismissal. Fixed: keyboard covering Check (edge-to-edge), crash when an alarm fires as another is dismissed (`stopSelf(startId)`). JVM android 121, on-device 14/14 on API 37; verify:all green, vitest 645) |
-| Waiting on the human | Phone checks for 2.1–2.4 in `DEVICE_TESTS.md` (only emulators so far; 2.4's "appears in history" needs a server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| **Next prompt** | **2.6** |
+| Last completed | 2.5 (server owns alarm definitions, phone owns ring history; the page sends the full server list to native `reconcile` after every load/create/edit/toggle/delete (`lib/nativeSync.ts`), never a failed or cached list; `ReconcilePlan` diffs idempotently; version handshake (API 2); no web ringing inside the app; edit-time and on/off controls added; conflict table in `ANDROID.md`. Tests: ReconcilePlan 14 incl. crash after every step, on-device ReconcileTest 5, vitest 12, Playwright 3; emulator: edited alarm fired at the new time, not the old) |
+| Waiting on the human | Phone checks for 2.1-2.5 in `DEVICE_TESTS.md` (emulators only so far; 2.4 "appears in history" and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
-| Open for 2.5 | Web outbox drops 401 (native keeps it); web verify sends ring-elapsed `responseMs`, native sends time on task; server ignores `interactions` (`ANDROID.md`, "Open, for prompt 2.5") |
+| Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.

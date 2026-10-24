@@ -59,6 +59,28 @@ public final class AlarmScheduler {
         }
     }
 
+    /**
+     * Makes the phone's schedule match the server's full list
+     * ({@link ReconcilePlan} has the rules). Each step is saved as it is made;
+     * if the app dies part way, the next reconcile finds what is left and
+     * finishes it.
+     */
+    public static ReconcilePlan reconcile(Context context, List<AlarmSpec> desired) {
+        synchronized (AlarmStore.LOCK) {
+            ReconcilePlan plan = ReconcilePlan.diff(AlarmStore.all(context), desired, Instant.now(), ZoneId.systemDefault());
+            for (String id : plan.remove) {
+                cancel(context, id);
+                AlarmStore.remove(context, id);
+            }
+            for (AlarmSpec spec : plan.put) {
+                put(context, spec);
+            }
+            Log.i(TAG, "reconciled with the server: put " + plan.put.size() + ", removed " + plan.remove
+                + ", unchanged " + plan.unchanged.size() + ", kept history " + plan.keptHistory + ", past " + plan.past);
+            return plan;
+        }
+    }
+
     public static boolean remove(Context context, String id) {
         synchronized (AlarmStore.LOCK) {
             cancel(context, id);

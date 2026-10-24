@@ -124,8 +124,9 @@ for release. It does not bundle the app's pages into the APK.
   screen. It must say truthfully whether alarms still ring. It currently says
   native alarms are not in this build yet; update that when 2.2–2.4 ship.
 - **Native and web can drift apart.** The site can update while an older APK is
-  installed, so from 2.5 the web code must check the native plugin's version
-  before using it.
+  installed, so the web code checks the plugin's `version()` before using it
+  (`lib/nativeSync.ts`, prompt 2.5). An older app is left alone, and the page
+  says so and keeps ringing alarms itself.
 
 ### When to revisit
 
@@ -387,14 +388,80 @@ there was a check, then `dismiss`. An unanswered ring queues only `fire`.
   It now uses `stopSelf(latestStartId)`, and calls `startForeground` on every
   ring start. The test reproduced the crash 3/3 before the fix.
 
-### Open, for prompt 2.5 (one source of truth)
+### Open, for prompt 2.5 (one source of truth): resolved there except the last
 
-- **The web outbox drops a 401** (`lib/outbox.ts` retries only 408, 425 and
-  429). A morning's result is lost if the session has expired. The native queue
-  keeps it.
-- **`responseMs` means different things.** The web sends verify's `responseMs`
-  as the time since the ring started. The phone sends the time spent on the
-  problems, which is what the model's 6–45 s brackets describe. The server
-  scores whatever it is given, so the same wake can score differently.
-- **The server ignores `interactions`,** which both clients score with. The
-  server's score can therefore sit a few points under the client's.
+- **Fixed in 2.5.** The web outbox now keeps a 401 instead of dropping it, as
+  the native queue does (`lib/outbox.ts`; tested in `lib/ringFlow.test.ts`).
+- **Fixed in 2.5.** Verify's `responseMs` is now the time on the challenges
+  from both clients (`timeOnTaskMs` on the web), so the same wake scores the
+  same from either. Dismiss still reports the whole ring.
+- **Still open.** The server ignores `interactions`, which both clients score
+  with, so the server's score can sit a few points under the client's. It is a
+  trust choice about an unverifiable client signal, for the security review
+  (7.1).
+
+## Keeping the phone and the server in step (prompt 2.5)
+
+### Who owns what
+
+- **The server owns the alarm definitions:** which alarms exist, and each one's
+  label, time, repeat days, on/off state and ring plan. They change only
+  through the app's pages and the server's own scheduling.
+- **The phone owns what already rang:** whether an occurrence rang, was
+  dismissed or was missed. It reports that through the outbox (prompt 2.4).
+
+### How they stay in step
+
+1. **After every list the page gets from the server,** the page sends the
+   whole list to the plugin's `reconcile` (`lib/nativeSync.ts`). That covers the
+   first load, create, edit time, turn on or off, delete, the wake planner's
+   alarms, and a reload when the app comes back to the foreground.
+2. **The phone diffs that list against its own schedule** (`ReconcilePlan`):
+   - adds what's new;
+   - replaces what differs;
+   - removes server alarms that are gone;
+   - leaves everything else alone.
+3. **It is idempotent.** An identical list isn't sent again, and on the phone an
+   unchanged alarm isn't touched, so its AlarmManager entry stays as it was.
+   Rapid changes are folded into one follow-up with the latest list.
+4. **On every app start the phone reconciles twice over.** The plugin's
+   `load()` re-sets AlarmManager from the phone's own store, which restores
+   anything a crash or force-stop lost. Then the page sends the server's list.
+5. **Inside the app, the page doesn't ring alarms itself;** the phone does.
+   This stops anything ringing twice. In a browser, the page rings as before.
+6. **Version handshake.** The page first checks the plugin's `version()`
+   (`REQUIRED_NATIVE_API = 2`). An app built before 2.5 has no `version()`, so
+   it is left alone: the page says to update it, and keeps ringing alarms only
+   while it is open.
+
+### When the two disagree
+
+| Situation | What happens | Why |
+| --- | --- | --- |
+| On the server, not on the phone | Added | The server owns the definitions |
+| On the phone, not on the server (deleted elsewhere, or while the app was closed) | Removed at the next reconcile | Same |
+| Both have it, set differently | The server's version replaces the phone's | Same |
+| A one-off already rang or was missed on the phone, and the server still has it on (its dismissal is still in the outbox) | Kept as rung; not armed again | The phone owns what already rang. The server learns from the outbox |
+| A one-off whose time has passed, which the phone never had | Not scheduled; reported as `past` | The past can't ring |
+| An alarm moved to a time already past | Its old copy is removed | It mustn't ring at the old time |
+| An alarm is deleted or edited while it is ringing | The ring carries on and is stopped as usual. The change applies from then on, and the ring's result for a deleted alarm is dropped by the server (404) | Interrupting a ringing alarm is worse than finishing it |
+| The alarm list failed to load, or is the offline cache | **Nothing is sent** | A partial list would remove every alarm missing from it |
+| A list naming an alarm twice, or an id the server didn't issue | Refused, nothing changed, the error shown | A list like that is a bug to surface, not to guess at |
+| The debug hook's alarms (ids that aren't the server's 24-hex ObjectIds) | Left alone | The server didn't make them |
+| A repeating alarm snoozed in a browser | The phone keeps the alarm's own time (`snoozedFrom`), not the snooze | The phone has no snooze yet; moving every later morning would be wrong |
+| The phone was offline when the alarm changed | The phone keeps its last list; the change arrives at the next load | The page can't load offline |
+| The plugin call fails | The page shows "Couldn't update the alarms on this phone" with Try again; the next change or app start retries | It's never reported as done when it wasn't |
+
+**Server-side alarms reach the phone at the next load.** Alarms the server
+creates by itself (autonomous scheduling) arrive at the next app start, the
+next return to the foreground, or the next change made in the app.
+
+### Tests
+
+| Where | What |
+| --- | --- |
+| JVM, `ReconcilePlanTest` (14) | Create; edit, with every field the web sets counted; disable; delete; an empty list; the same list twice; debug alarms left alone; duplicates refused; a one-off's history kept; a past one-off not scheduled; **a crash after each of the 5 steps of a reconcile**, where the next reconcile finds exactly the steps left and converges. Plus `AlarmCodecTest`: the same ring plan reads the same whatever its key order |
+| On the device, `ReconcileTest` (5) | The real store and AlarmManager, checked through `getNextAlarmClock()`: create, edit, disable, delete; the same list twice; a crash with the store ahead of AlarmManager, then an app start; debug alarms; a bad list changes nothing |
+| Vitest, `lib/nativeSync.test.ts` (12) | Create, edit, on/off, delete (the last one too); the same list again isn't sent; bursts folded together; a failure retried; an invalid alarm skipped and reported; snoozed repeating alarms; the version handshake |
+| Playwright, `e2e/native-sync.spec.ts` (3) | The real page and server, with a stand-in phone at Capacitor's bridge: create, off, on, edit and delete all reach the phone; a reload reconciles; a repeat isn't sent twice; a due alarm doesn't also ring in the page; an old app is left alone |
+| Emulator, with a page served at the app's server URL | Capacitor's bridge reaches the plugin from a page loaded from the server: `version` 2, `reconcile` ran. An alarm set for 3 minutes ahead was edited to 2 minutes ahead by a reload. It fired at the edited minute (194 ms late), on the locked screen, and **not** at the old one |

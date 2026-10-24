@@ -64,7 +64,7 @@ public final class AlarmCodec {
         }
         boolean enabled = o.optBoolean("enabled", true);
         JSONObject ringPlan = o.optJSONObject("ringPlan");
-        return new AlarmSpec(id, label, hour, minute, days, date, enabled, ringPlan == null ? null : ringPlan.toString());
+        return new AlarmSpec(id, label, hour, minute, days, date, enabled, ringPlan == null ? null : canonical(ringPlan));
     }
 
     public static JSONObject specToJson(AlarmSpec a) {
@@ -113,6 +113,63 @@ public final class AlarmCodec {
         }
         catch (JSONException e) {
             throw new IllegalArgumentException("stored alarm is unreadable: " + e.getMessage());
+        }
+    }
+
+    /**
+     * JSON with object keys sorted, so the same ring plan always reads the same
+     * whatever order its keys arrived in, and an unchanged plan is seen as
+     * unchanged when the web app sends it again.
+     */
+    static String canonical(Object value) {
+        StringBuilder sb = new StringBuilder();
+        writeCanonical(value, sb);
+        return sb.toString();
+    }
+
+    private static void writeCanonical(Object value, StringBuilder sb) {
+        if (value instanceof JSONObject) {
+            JSONObject o = (JSONObject) value;
+            java.util.List<String> keys = new java.util.ArrayList<>();
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                keys.add(it.next());
+            }
+            java.util.Collections.sort(keys);
+            sb.append('{');
+            for (int i = 0; i < keys.size(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append(JSONObject.quote(keys.get(i))).append(':');
+                writeCanonical(o.opt(keys.get(i)), sb);
+            }
+            sb.append('}');
+        }
+        else if (value instanceof JSONArray) {
+            JSONArray a = (JSONArray) value;
+            sb.append('[');
+            for (int i = 0; i < a.length(); i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                writeCanonical(a.opt(i), sb);
+            }
+            sb.append(']');
+        }
+        else if (value instanceof String) {
+            sb.append(JSONObject.quote((String) value));
+        }
+        else if (value == null || value == JSONObject.NULL) {
+            sb.append("null");
+        }
+        else if (value instanceof Number) {
+            double d = ((Number) value).doubleValue();
+            // 70 and 70.0 are the same number; write whole numbers without a fraction.
+            sb.append(d == Math.rint(d) && Math.abs(d) < 1e15 ? String.valueOf((long) d) : String.valueOf(d));
+        }
+        else {
+            sb.append(value);
         }
     }
 

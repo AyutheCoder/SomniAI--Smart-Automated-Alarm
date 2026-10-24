@@ -41,7 +41,14 @@ export interface RingOutcome {
   snoozed: boolean;
   /** When snoozed: the time the alarm was set to ring again, from snoozeLocally. */
   snoozedUntil?: string;
+  /** From the start of the ring to its end: what dismiss and snooze report. */
   responseMs: number;
+  /**
+   * Time spent on the challenges, which is what the wake model's speed
+   * brackets (6 to 45 s) describe and what verify reports. The phone reports
+   * the same (Verification.java), so a wake scores the same from either.
+   */
+  timeOnTaskMs: number;
   challenged: boolean;
   methods: string[];
   attempts: number;
@@ -73,7 +80,7 @@ export function syncCalls(alarmId: string, outcome: RingOutcome): OutboxCall[] {
       // The server scores from these; it does not take a client score.
       body: {
         methods: outcome.methods,
-        responseMs: outcome.responseMs,
+        responseMs: outcome.timeOnTaskMs,
         attempts: outcome.attempts,
         motion: outcome.motion,
         solved: outcome.solved,

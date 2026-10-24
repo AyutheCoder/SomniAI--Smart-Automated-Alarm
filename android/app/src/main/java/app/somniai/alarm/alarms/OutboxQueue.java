@@ -16,8 +16,8 @@ import org.json.JSONObject;
  *   <li>5xx, 408, 425, 429, a timeout or no network: kept, with everything
  *       after it, for the next attempt.</li>
  *   <li>401: kept too. The phone may not be signed in yet, or the session
- *       expired; signing in again must not lose a morning's result. (The web
- *       outbox drops a 401; noted for prompt 2.5.)</li>
+ *       expired; signing in again must not lose a morning's result. The web
+ *       outbox (lib/outbox.ts) does the same since prompt 2.5.</li>
  *   <li>Any other 4xx: the server will never accept it (bad id, deleted
  *       alarm); dropped and reported, so the queue can't jam behind it.</li>
  * </ul>

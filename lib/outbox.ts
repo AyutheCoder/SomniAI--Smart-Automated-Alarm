@@ -4,8 +4,8 @@
 // only after the ring is over. If the server or its database is down, the
 // calls stay queued, in order, survive a reload, and are retried until they
 // are accepted. A call the server rejects as invalid (4xx) is dropped, since
-// sending it again cannot succeed; a 5xx, a timeout or a network failure keeps
-// it and everything after it for the next attempt.
+// sending it again cannot succeed; a 5xx, a timeout, a network failure or a 401
+// keeps it and everything after it for the next attempt.
 
 export interface OutboxCall {
   alarmId: string;
@@ -35,8 +35,12 @@ export interface FlushResult {
   alarms: Map<string, Record<string, unknown>>;
 }
 
-/** Retrying can't fix these; anything else 4xx is a permanent rejection. */
-const RETRYABLE_4XX = new Set([408, 425, 429]);
+/**
+ * Retrying can fix these; any other 4xx is a permanent rejection. 401 is here
+ * because signing in again must not lose a morning's result (the native queue,
+ * OutboxQueue.java, does the same; it used to be dropped here).
+ */
+const RETRYABLE_4XX = new Set([401, 408, 425, 429]);
 
 export class Outbox {
   /** Kept in memory too, so the queue still works where storage is blocked. */

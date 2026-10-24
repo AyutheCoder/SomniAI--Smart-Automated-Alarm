@@ -39,7 +39,7 @@ describe("ring outcomes take effect on the device, with no server", () => {
 });
 
 const OUTCOME: RingOutcome = {
-  snoozed: false, responseMs: 9000, challenged: true, methods: ["math"], attempts: 1,
+  snoozed: false, responseMs: 9000, timeOnTaskMs: 4000, challenged: true, methods: ["math"], attempts: 1,
   solved: true, correctness: 1, escalationLevel: 5, backups: [{ kind: "smartwatch", status: "not_configured" }],
 };
 
@@ -48,6 +48,12 @@ describe("what the server is told afterwards", () => {
     expect(syncCalls("a1", OUTCOME).map((c) => c.path)).toEqual([
       "/api/alarms/a1/fire", "/api/alarms/a1/verify", "/api/alarms/a1/escalate", "/api/alarms/a1/dismiss",
     ]);
+  });
+
+  it("verify reports the time on the challenges; dismiss the whole ring, as the phone does", () => {
+    const calls = syncCalls("a1", OUTCOME);
+    expect(calls.find((c) => c.path.endsWith("/verify"))?.body).toMatchObject({ responseMs: 4000 });
+    expect(calls.find((c) => c.path.endsWith("/dismiss"))?.body).toMatchObject({ responseMs: 9000 });
   });
 
   it("no verify for an alarm without a challenge, no escalate below the backup level", () => {
@@ -87,6 +93,14 @@ describe("the outbox, with the server or database down", () => {
     expect(up).toMatchObject({ sent: 4, stalled: false });
     expect(up.alarms.get("a1")).toEqual({ _id: "a1", status: "verified" });
     expect(box.pending()).toEqual([]);
+  });
+
+  it("keeps a call the server turns away as not signed in, rather than lose it", async () => {
+    const box = new Outbox(memoryStore(), "k");
+    box.enqueue(syncCalls("a1", OUTCOME));
+    const result = await box.flush(reply(401));
+    expect(result).toMatchObject({ sent: 0, dropped: 0, stalled: true });
+    expect(box.pending()).toHaveLength(4);
   });
 
   it("treats a network failure like an outage: nothing lost", async () => {

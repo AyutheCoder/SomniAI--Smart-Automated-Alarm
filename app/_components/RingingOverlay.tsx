@@ -38,7 +38,10 @@ export interface ResolveResult {
   confidence: number;
   snoozed: boolean;
   verified: boolean;
+  /** From the start of the ring to its end. */
   responseMs: number;
+  /** Time spent on the challenges themselves (lib/ringFlow.ts, timeOnTaskMs). */
+  timeOnTaskMs: number;
   methods: ChallengeType[];
   attempts: number;
   motion?: number;
@@ -168,6 +171,7 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
       snoozed: result.snoozed,
       verified: result.verified,
       responseMs: elapsed,
+      timeOnTaskMs: result.collected.reduce((s, r) => s + r.responseMs, 0),
       methods,
       attempts: totalAttempts,
       motion,
