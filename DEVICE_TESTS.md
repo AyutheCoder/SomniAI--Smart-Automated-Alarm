@@ -503,6 +503,14 @@ touches nothing.
 | Exact alarms turned off | not applicable | Android 13+ grants USE_EXACT_ALARM; there's nothing to turn off | N/A |
 | Bedtime notification | | battery at 10 %: "Before bed: 1 thing could stop your 4:10 am alarm", opening the check; with everything passing: none | Pass |
 
+CI, the same script on emulators, 2026-10-28 (run 40592750553): every case
+passes or doesn't apply. API 32 is the only one where exact alarms can be
+turned off: detected, and "Allow" opened "Alarms & reminders". On API 26 the
+volume was detected but its fix couldn't be tapped: the emulator's System UI
+crash dialog covered the screen (as in 2.4), so that case is recorded as
+skipped, naming the window; that image's shell also can't set Do Not Disturb.
+Each emulator's results are in its CI artifact (`preflight-results.md`).
+
 Full evidence: `device-results/poco-m8-preflight-2026-10-28.md`. Before the
 test, the check on this phone as it was: everything passed except the alarm
 volume (1 of 15 on the speaker) and Xiaomi's settings (not yet confirmed).
@@ -533,7 +541,7 @@ volume (1 of 15 on the speaker) and Xiaomi's settings (not yet confirmed).
 - The shell's volume command sets the "default" output, not the speaker the
   alarm plays on (as on the emulator in 2.7), so the volume is now set and read
   through the app. One early run raised this phone's speaker alarm volume from
-  1 to 11 and couldn't put it back; it was left at 11.
+  1 to 11 and couldn't put it back; the tester chose to keep it at 11.
 - The notification list puts `user=` between the package and the id, and
   doesn't name what a tap opens; the script reads the pending intents for that.
 
