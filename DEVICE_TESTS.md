@@ -196,7 +196,7 @@ script reports the battery unplugged:
 | Rebooted (not unlocked afterwards) | Pass | 336 ms | rescheduled at LOCKED_BOOT_COMPLETED, before any unlock, and again at BOOT_COMPLETED; ring screen in front, over the lock screen. HyperOS's Autostart (off by default) did not block either |
 | **By hand:** swiped away from recents, then "clear all" | Pass | 415 ms | HyperOS killed the process (`Killing … SwipeUpClean`) but did not force-stop it: the alarm stayed in AlarmManager, and Android started the app again to deliver it. The phone was in use (another app in front), so Android showed the alarm as a heads-up notification, which popped up by itself; tapping it opened the ring screen and "Stop alarm" stopped it |
 | **By hand:** nobody answers | Pass | 24 ms | rang through all five levels, stopped itself at the 20-minute cap, and was recorded as "unanswered", queued for the server |
-| **By hand:** a real night, unplugged, maths wake check, 9:00 (2026-10-25) | Pass | not read yet | The tester's account: it rang at 9:00 after the night unplugged; the ring screen came up by itself with the sum (7 × 11); one correct answer stopped it. The app's own record of that ring (exact time, levels) is still on the phone, which wasn't connected when this was written |
+| **By hand:** a real night, unplugged, maths wake check, 9:00 (2026-10-25) | Pass | 44 ms | The app's ring log: louder at 10 s, vibrating at 22 s, the check opened by itself at 35 s; "dismissed after 72 s at level 4; wake check passed, score 84, 0 wrong answer(s)". The tester: the ring screen came up by itself with the sum (7 × 11), and one correct answer stopped it |
 
 Full evidence: `device-results/poco-m8-hyperos3-2026-10-24.md`.
 
@@ -231,8 +231,11 @@ itself.
 was one sum from 6 × 6 to 13 × 13, and a single quick correct answer cleared
 the test alarm's minConfidence of 70. Changed after 2.7 at the tester's
 request: three sums in a row, each a × b + c × d (2 to 9 times 3 to 12), with
-speed judged per sum (`ANDROID.md`, "The wake check"). Not yet tried on the
-phone.
+speed judged per sum (`ANDROID.md`, "The wake check"). On the same phone,
+2026-10-28: the check opened by itself at 35 s, the three sums took 33 s with
+no wrong answers, score 96, and the queued verify call carried `steps: 3`. The
+tester: the sum fits on one line, Check stays above the keyboard, and the
+difficulty is right.
 
 **What HyperOS itself does, established here:**
 
