@@ -91,6 +91,29 @@ public class WakeCheckTest {
         assertTrue(v.score >= 70);
     }
 
+    /**
+     * Found by the on-device test: the ring screen hands the result to the
+     * service as JSON, which dropped the sum count, so the server judged three
+     * sums as one slow answer.
+     */
+    @Test
+    public void theSumCountSurvivesTheHandOverToTheService() throws Exception {
+        WakeCheck c = new WakeCheck(Plan.DEFAULT, new Random(6), 0);
+        c.submit(right(c), 10_000);
+        c.submit(right(c), 20_000);
+        c.submit(right(c), 30_000);
+        Verification back = Verification.fromJson(c.verification(30_000).toJson().toString());
+        assertEquals(3, back.steps);
+        assertEquals(30_000, back.responseMs);
+        org.json.JSONObject verify = SyncCalls.forRing("a1", 0, "dismissed", 31_000, back, 4, List.of()).get(1).body;
+        assertEquals(3, verify.getInt("steps"));
+
+        // A result queued by the previous version has no count: one answer per challenge, as it was.
+        Verification old = Verification.fromJson("{\"challenged\":true,\"solved\":true,\"correctness\":1,\"responseMs\":9000,"
+            + "\"attempts\":0,\"methods\":[\"math\",\"math\"],\"score\":88,\"at\":5}");
+        assertEquals(2, old.steps);
+    }
+
     @Test
     public void aWrongAnswerDoesntUndoTheSumsAlreadySolved() {
         WakeCheck c = new WakeCheck(Plan.DEFAULT, new Random(4), 0);

@@ -174,7 +174,9 @@ public class RingActivity extends Activity {
         LinearLayout root = column();
         root.addView(text("Solve to stop the alarm", 22, Typeface.BOLD));
         progress = text("", 16, Typeface.NORMAL);
-        question = text("", 48, Typeface.BOLD);
+        // "9 × 12 + 9 × 12 = ?" on one line on a phone: at 48 sp it wrapped and
+        // pushed Check under the keyboard.
+        question = text("", 28, Typeface.BOLD);
         question.setPadding(0, dp(24), 0, dp(16));
         question.setContentDescription("Problem");
         answer = new EditText(this);

@@ -56,6 +56,8 @@ final class Verification {
             o.put("solved", solved);
             o.put("correctness", correctness);
             o.put("responseMs", responseMs);
+            // Kept through the hand-over to the service: lost, the server judged three sums as one slow answer.
+            o.put("steps", steps);
             o.put("attempts", attempts);
             o.put("methods", new JSONArray(methods));
             o.put("score", score);
@@ -76,7 +78,7 @@ final class Verification {
                 methods.add(m.getString(i));
             }
             return new Verification(o.getBoolean("challenged"), o.getBoolean("solved"), o.getDouble("correctness"),
-                o.getLong("responseMs"), o.getInt("attempts"), methods, o.getInt("score"), o.getLong("at"));
+                o.getLong("responseMs"), o.optInt("steps", methods.size()), o.getInt("attempts"), methods, o.getInt("score"), o.getLong("at"));
         }
         catch (JSONException e) {
             throw new IllegalArgumentException("unreadable verification: " + e.getMessage());

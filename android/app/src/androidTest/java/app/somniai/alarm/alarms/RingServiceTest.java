@@ -200,8 +200,7 @@ public class RingServiceTest {
 
         // A real check, solved quickly, stops it.
         WakeCheck check = new WakeCheck(RingService.current.check, new java.util.Random(1), System.currentTimeMillis());
-        String[] ab = check.question().split(" × ");
-        assertEquals(WakeCheck.Step.PASSED, check.submit(String.valueOf(Integer.parseInt(ab[0]) * Integer.parseInt(ab[1])), System.currentTimeMillis() + 3_000));
+        assertEquals(WakeCheck.Step.PASSED, solveAll(check, System.currentTimeMillis() + 3_000));
         RingService.dismiss(context, check.verification(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null && !alarmPlaying());
         assertEquals("dismissed", outcomesFor("t-gate").get(outcomesFor("t-gate").size() - 1));
@@ -283,8 +282,7 @@ public class RingServiceTest {
             assertTrue(backups, backups.contains("emergencyContact: not_configured"));
 
             WakeCheck check = new WakeCheck(RingService.current.check, new java.util.Random(4), System.currentTimeMillis());
-            String[] ab = check.question().split(" × ");
-            assertEquals(WakeCheck.Step.PASSED, check.submit(String.valueOf(Integer.parseInt(ab[0]) * Integer.parseInt(ab[1])), System.currentTimeMillis() + 2_000));
+            assertEquals(WakeCheck.Step.PASSED, solveAll(check, System.currentTimeMillis() + 2_000));
             RingService.dismiss(context, check.verification(System.currentTimeMillis()));
             waitFor("stopped", () -> RingService.current == null);
             assertEquals("the volume is put back", before, audio.getStreamVolume(AudioManager.STREAM_ALARM));
@@ -386,6 +384,20 @@ public class RingServiceTest {
     // --- helpers ---
 
     /** A ring plan with no wake check, so the lifecycle tests can stop it directly. */
+    /** Answers every sum in the check correctly, a second apart; returns the last step. */
+    static WakeCheck.Step solveAll(WakeCheck check, long from) {
+        WakeCheck.Step step = null;
+        for (int i = 0; i < check.sums(); i++) {
+            int total = 0;
+            for (String product : check.question().split(" [+] ")) {
+                String[] ab = product.split(" × ");
+                total += Integer.parseInt(ab[0]) * Integer.parseInt(ab[1]);
+            }
+            step = check.submit(String.valueOf(total), from + i * 1_000L);
+        }
+        return step;
+    }
+
     private AlarmSpec spec(String id) {
         return spec(id, "{\"required\":false,\"methods\":[\"math\"],\"minConfidence\":70}");
     }
