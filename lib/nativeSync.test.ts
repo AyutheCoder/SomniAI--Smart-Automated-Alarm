@@ -184,5 +184,6 @@ describe("connectNative", () => {
   it("an older plugin version is refused, the current one accepted", async () => {
     expect(await connectNative(undefined, plugin(async () => ({ api: REQUIRED_NATIVE_API - 1 })), () => true)).toMatchObject({ reason: expect.any(String) });
     expect(await connectNative(undefined, plugin(async () => ({ api: REQUIRED_NATIVE_API })), () => true)).toHaveProperty("sync");
+    expect(await connectNative(undefined, plugin(async () => ({ api: 3 })), () => true)).toMatchObject({ api: 3 });
   });
 });

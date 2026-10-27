@@ -31,9 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **3.1** |
-| Last completed | 2.7 (device matrix: emulator API 37 and a POCO M8 5G on HyperOS 3.0 / Android 16, SomniAI not exempted: every condition rang, including reboot before unlock, swiped away + clear all, and a real night unplugged with the maths check; the phone exposed three test-tool faults, fixed: HyperOS's log pruning deleted the evidence (the script now copies the app's log as it is written), a given-up alarm kept ringing into the next condition, and the debug receiver wasn't direct-boot aware. Found on the emulator and fixed: a reboot mid-ring left the alarm volume raised (`AlarmVolume`)) |
-| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| **Next prompt** | **3.2** |
+| Last completed | 3.1 (bedtime check, native: `Preflight` decides 8 checks (exact alarms, notifications, full screen, battery optimisation per brand, the brand's own manager as "check yourself" with per-brand steps for Xiaomi/Realme/Oppo/Vivo/Samsung/OnePlus, alarm volume at its lowest, Do Not Disturb incl. priority blocking alarms, battery <25 % unplugged), `PreflightSchedule` runs it 30 min before the planned (or default 8 h) bedtime and notifies only on failures; `PreflightActivity` lists all with one-tap fixes; plugin API 3. 21 new JVM tests; `scripts/preflight-device.sh` on the POCO: every failure detected and its fix worked, bedtime notification posted; added to CI on API 26/32/35). 2.7 and the three-sum wake check before that |
+| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 need the dev server and a signed-in phone), and 3.1's by-hand checklist (Do Not Disturb blocking alarms, a real bedtime notification, other brands' screens). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
 | Wake check (after 2.7, tester's request) | Three sums in a row, each a × b + c × d (2-9 times 3-12), the same on web and phone (`lib/mathChallenge.ts`, `MathChallenge.java`). Speed is now judged per answer (`steps`), on both clients and the server: this also raised the scores of existing multi-challenge sequences, which had been judged as one slow answer. On the phone 2026-10-28: three sums in 33 s, score 96, `steps: 3` queued; the tester says the difficulty is right |
@@ -100,7 +100,7 @@ routes with **no tests** (0.3).
 | `tests/api/` | Route integration tests, in-memory MongoDB, session stubbed in `setup.ts` |
 | `lib/` | Core logic: `scheduler.ts`, `escalation.ts`, `wakeConfidence.ts` (gated scoring), `backupAdapters.ts` (currently fake), `context/` (calendar/wearable simulated), `sensors/` (silent simulated fallbacks) |
 | `lib/ringPlan.ts` | What an alarm needs to ring, fixed at creation (`ringPlanServer.ts` computes it). Ring time reads only this; outcomes go through `lib/outbox.ts` afterwards |
-| `android/app/src/main/java/app/somniai/alarm/alarms/` | Native alarms: `NextTrigger` / `AlarmPlanner` (pure, JVM-tested), `AlarmScheduler` (AlarmManager), receivers, `SomniAlarmPlugin`. Web handle: `lib/nativeAlarm.ts` |
+| `android/app/src/main/java/app/somniai/alarm/alarms/` | Native alarms: `NextTrigger` / `AlarmPlanner` (pure, JVM-tested), `AlarmScheduler` (AlarmManager), receivers, `SomniAlarmPlugin`, the bedtime check (`Preflight*`). Web handle: `lib/nativeAlarm.ts` |
 | `DEVICE_TESTS.md` | Device-only results, emulator and phone, with dates and versions |
 | `models/` | Mongoose models |
 | `ai-brain/` | FastAPI service: `wake_plan.py` (the paper's method), `semantic.py`, `predict.py` |

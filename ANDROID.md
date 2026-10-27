@@ -549,3 +549,59 @@ Every stopped ring reports the level it had reached (escalate, with `at`):
 | JVM, `RingTuningTest`, `BackupsTest`, `SyncCallsTest` | Stream index and player volume per factor; backups report `not_configured` in the route's shape; escalate is sent with the level and `at` |
 | Vitest and API | Every dismissed ring reports its level; escalate takes `at`; late reports are recorded in order |
 | On the device | `theLadderClimbsOnTheDevice`: levels on time, vibration from level 3, the check prompted, the stream full at the top, backups recorded, volume put back, escalate queued at level 5. `anUnmissableAlarmGetsTheFullLadderOnTheDevice`: a slow personal ladder with no backups reaches the backups at the standard 40 s. `atTheChallengeLevelTheCheckOpensByItself` |
+
+## The bedtime check (prompt 3.1)
+
+Before bed, the phone checks everything that can silently stop tomorrow's
+alarm. Everything is native (`Preflight*.java`), so it works with the app
+closed, before the first unlock and offline; the web app only passes on the
+planned bedtime and links to it.
+
+### What is checked
+
+`Preflight.java` decides; `PreflightProbe.java` reads the phone. Each check is
+PASS, FAIL, UNVERIFIED (the phone can't read it: shown as "check yourself",
+never as passing) or CONFIRMED (the user said they did it: shown as their word).
+
+| Check | Fails when | Fix (one tap) |
+| --- | --- | --- |
+| Alarms & reminders | Android 12/12L with exact alarms turned off; or refused with no setting | Opens the setting (12/12L) |
+| Notifications | Off: the ring screen and Stop can't show | Opens SomniAI's notification settings |
+| Alarm screen over the lock screen | Android 14+ with the full-screen permission off | Opens that permission |
+| Battery optimisation | Optimised **on a brand with its own battery manager** (Xiaomi, Realme, Oppo, Vivo, Samsung, OnePlus). Elsewhere it passes: Android delivers alarm-clock alarms through Doze, as the 2.7 matrix showed | Opens the battery-optimisation list. Not the direct "ignore optimisations" request: that needs REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, which Google Play restricts |
+| The brand's own settings | Always UNVERIFIED on those brands until the user confirms: no public API reads autostart or the brand's manager. The steps per brand are dontkillmyapp.com's | Tries the brand's known autostart/battery screens (not public APIs: each tried in turn), else SomniAI's app info; "I've done these" records the user's word |
+| Alarm volume | At the lowest Android reports to apps (0 on some phones; many stop the alarm stream at 1, and some report 3 to apps) | Raises the alarm stream to 70 %, with the volume panel shown |
+| Do Not Disturb | Total silence on; or priority mode that blocks alarms, now or when a schedule turns it on (UNVERIFIED if the policy can't be read) | Opens the Do Not Disturb (Modes) settings |
+| Battery | Below 25 % and not charging | None to tap: the screen says plug in |
+
+### When it runs
+
+`PreflightSchedule.java`: half an hour before bedtime. Bedtime is the wake
+plan's, if the user asked the app for a bedtime reminder and it falls in the
+night before the alarm (`setBedtime` from the page); otherwise eight hours
+before the next alarm. An alarm set later than that (at bedtime) is checked a
+minute after it is set. Once per alarm, never within an hour of it.
+`PreflightReceiver.update` is called whenever the alarms change, and never
+throws, so it can't get in the way of setting an alarm. The check is an exact
+alarm while idle, not an alarm clock, so it doesn't show as the next alarm.
+
+If anything needs attention, one notification ("Before bed: 2 things could stop
+your 7:00 alarm") opens the check; if everything passes, nothing is posted. The
+check screen (`PreflightActivity`) lists every check, re-checks when the user
+comes back from a fix, and opens each fix in its own task so Back returns to it.
+
+### The web app
+
+Plugin API 3 adds `preflight()` (the verdicts), `openPreflight()` and
+`setBedtime()`. The alarm list shows "Tonight's alarm check: …" with a link to
+the screen (`app/page.tsx`, `lib/nativePreflight.ts`); saving a bedtime
+reminder in the wake plan passes the bedtime to the phone.
+
+### Tests
+
+| Where | What |
+| --- | --- |
+| JVM, `PreflightTest` | Every check, every branch: exact-alarm states, notifications, full screen, battery optimisation per brand, the manufacturer check never passing unread, every brand's steps, the volume minimum, each Do Not Disturb mode with and without alarms allowed, battery level and charging, brand detection |
+| JVM, `PreflightScheduleTest` | Planned and default bedtime, another night's plan ignored, an alarm set at bedtime, not within the hour, once per alarm, never in the past |
+| Vitest | Passing the bedtime to the phone, an app without the check, the page's summary line |
+| Device, `scripts/preflight-device.sh` | Each setting made to fail, detected, its fix tapped on the screen, put back; the bedtime notification posted (and not, when all pass). On the phone in `DEVICE_TESTS.md`; in CI on API 26, 32 and 35 |

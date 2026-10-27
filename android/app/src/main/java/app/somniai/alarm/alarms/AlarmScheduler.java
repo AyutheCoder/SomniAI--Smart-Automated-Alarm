@@ -55,6 +55,7 @@ public final class AlarmScheduler {
             AlarmRecord start = new AlarmRecord(spec, AlarmRecord.Status.DISABLED, null, existing == null ? null : existing.lastFiredAt);
             AlarmRecord record = apply(context, AlarmPlanner.plan(start, now, zone, canSchedule(context)).record);
             AlarmStore.put(context, record);
+            PreflightReceiver.update(context);
             return record;
         }
     }
@@ -77,6 +78,7 @@ public final class AlarmScheduler {
             }
             Log.i(TAG, "reconciled with the server: put " + plan.put.size() + ", removed " + plan.remove
                 + ", unchanged " + plan.unchanged.size() + ", kept history " + plan.keptHistory + ", past " + plan.past);
+            PreflightReceiver.update(context);
             return plan;
         }
     }
@@ -84,7 +86,9 @@ public final class AlarmScheduler {
     public static boolean remove(Context context, String id) {
         synchronized (AlarmStore.LOCK) {
             cancel(context, id);
-            return AlarmStore.remove(context, id);
+            boolean removed = AlarmStore.remove(context, id);
+            PreflightReceiver.update(context);
+            return removed;
         }
     }
 
@@ -113,6 +117,7 @@ public final class AlarmScheduler {
             }
         }
         Log.i(TAG, "rescheduled " + out.size() + " alarm(s) after " + reason + " in " + zone + ": " + summary(out));
+        PreflightReceiver.update(context);
         return out;
     }
 
@@ -135,6 +140,8 @@ public final class AlarmScheduler {
             Log.i(TAG, "fired " + id + " scheduled for " + Instant.ofEpochMilli(scheduledFor)
                 + ", " + (now.toEpochMilli() - scheduledFor) + " ms late; next " + describe(next));
         }
+        // On to the next alarm's bedtime check.
+        PreflightReceiver.update(context);
         // The ring service logs "ringing" and how it ended. If Android refuses to
         // start it, a notification is the most that can be done, and the log says so.
         if (!RingService.start(context, current.spec, scheduledFor)) {

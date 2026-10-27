@@ -10,6 +10,8 @@ import { loadAlarmCache, mergeWithLocal, saveAlarmCache } from "@/lib/alarmCache
 import { dismissLocally, snoozeLocally, syncCalls } from "@/lib/ringFlow";
 import { resolveRingPlan } from "@/lib/ringPlan";
 import { connectNative, type NativeConnection, type NativeSyncStatus } from "@/lib/nativeSync";
+import { SomniAlarm } from "@/lib/nativeAlarm";
+import { hasPreflight, preflightLine } from "@/lib/nativePreflight";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
@@ -723,9 +725,44 @@ function NativeNotice({ native, status, onRetry }: { native: NativeConnection | 
     );
   }
   return (
-    <p role="status" className="mb-4 text-xs text-slate-400">
-      {status.state === "synced" ? "Alarms ring from this phone, even with the app closed." : "Updating the alarms on this phone…"}
-      {status.state === "synced" && status.skipped.length > 0 ? ` ${status.skipped.length} without a valid time weren't set.` : ""}
+    <>
+      <p role="status" className="mb-4 text-xs text-slate-400">
+        {status.state === "synced" ? "Alarms ring from this phone, even with the app closed." : "Updating the alarms on this phone…"}
+        {status.state === "synced" && status.skipped.length > 0 ? ` ${status.skipped.length} without a valid time weren't set.` : ""}
+      </p>
+      {hasPreflight(native) && <NativePreflight />}
+    </>
+  );
+}
+
+/**
+ * The phone's bedtime check in one line, re-read whenever the app comes back
+ * into view (after fixing a setting, say). The list and its fixes are native.
+ */
+function NativePreflight() {
+  const [attention, setAttention] = useState<number | null>(null);
+  useEffect(() => {
+    const read = () => {
+      SomniAlarm.preflight().then((r) => setAttention(r.attention), () => setAttention(null));
+    };
+    read();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        read();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+  if (attention === null) {
+    return null;
+  }
+  return (
+    <p role="status" aria-label="Alarm check" className={`mb-4 rounded-lg px-3 py-2 text-xs ${attention === 0 ? "bg-emerald-500/10 text-emerald-200" : "bg-amber-500/10 text-amber-200"}`}>
+      {preflightLine(attention)}{" "}
+      <button onClick={() => void SomniAlarm.openPreflight()} className="underline">
+        {attention === 0 ? "See the checks" : "Check and fix"}
+      </button>
     </p>
   );
 }

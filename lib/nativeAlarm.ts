@@ -106,6 +106,20 @@ export interface SomniAlarmPlugin {
   syncNow(): Promise<{ sent: number; dropped: string[]; waiting: number; lastStatus: number }>;
   notificationStatus(): Promise<{ enabled: boolean }>;
   requestNotifications(): Promise<{ enabled: boolean }>;
+  /** API 3: every bedtime check now (Preflight.java). Read-only. */
+  preflight(): Promise<{ checks: PreflightCheck[]; attention: number }>;
+  /** API 3: opens the native "Tonight's alarm check" screen, with a fix for each failure. */
+  openPreflight(): Promise<void>;
+  /** API 3: the wake plan's bedtime (ISO), or null to clear it; the check runs half an hour before. */
+  setBedtime(options: { at: string | null }): Promise<{ bedtime: string | null }>;
+}
+
+export interface PreflightCheck {
+  id: string;
+  /** unverified: the phone can't read it; confirmed: the user said it's done. */
+  status: "pass" | "fail" | "unverified" | "confirmed";
+  title: string;
+  detail: string;
 }
 
 export const SomniAlarm = registerPlugin<SomniAlarmPlugin>("SomniAlarm");

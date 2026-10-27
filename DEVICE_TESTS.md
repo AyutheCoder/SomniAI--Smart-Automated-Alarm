@@ -4,9 +4,9 @@ Behaviour that only a device can show, with the date, the device and its
 Android version. Emulator results are labelled as such: they show the code
 works, not that a given phone's battery manager leaves it alone.
 
-The matrix first (prompt 2.7): every condition that can stop an alarm, run on
-the emulator so far and waiting for your phone. Then each prompt's own device
-checks, 2.1 to 2.6.
+The matrix first (prompt 2.7): every condition that can stop an alarm, on the
+emulator and a phone. Then each prompt's own device checks, 2.1 to 2.6, and the
+bedtime check (3.1).
 
 How to run the alarm checks: `ANDROID.md`, "Checking alarms on a device".
 
@@ -473,3 +473,79 @@ it has a wake check and the standard adaptive ladder), lock the phone, and
 For an unmissable alarm, set one linked to a task marked critical or
 must-not-miss in the app. Once 2.5 has put it on the phone, it reaches level 5
 by the standard time even if your personal ladder is slower.
+
+## 3.1 Bedtime check
+
+Before bed, the phone checks everything that can silently stop tomorrow's
+alarm and, if anything needs fixing, posts one notification that opens
+"Tonight's alarm check": a pass/fail list with a fix on each failure
+(`ANDROID.md`, "The bedtime check"). The decisions are JVM-tested
+(`PreflightTest`, `PreflightScheduleTest`); this section is what only a phone
+shows: that each failing setting is detected, and that its fix works.
+
+`bash scripts/preflight-device.sh` does it for every setting an adb shell can
+change: make it fail, check the verdict, tap the fix on the check screen, see
+what the fix did, put the setting back. CI runs it on the API 26, 32 and 35
+emulators. It only ever taps the check screen: if anything else is in front, it
+touches nothing.
+
+### Phone, POCO M8 5G (Xiaomi), HyperOS 3.0, Android 16 (API 36), 2026-10-28
+
+| Setting made to fail | Detected | The fix | Result |
+| --- | --- | --- | --- |
+| Alarm volume at its lowest | fail | "Turn up" raised it from 3 to 11 of 15; the check then passed | Pass |
+| Do Not Disturb, total silence | fail | "Open settings" opened Android 16's Modes screen | Pass |
+| Battery at 10 %, unplugged | fail | none to tap: plugged in (or at 30 %) it passed | Pass |
+| Notifications off | fail | "Turn on" opened SomniAI's notification settings | Pass |
+| Full-screen alarm not allowed | fail | "Allow" opened the full-screen permission page | Pass |
+| Battery optimisation on | fail (a Xiaomi) | "Open settings" opened the battery-usage list | Pass |
+| Xiaomi's own settings | check yourself | "Open settings" opened HyperOS's Autostart manager; "I've done these" turns it into "done, you said" and back | Pass |
+| Exact alarms turned off | not applicable | Android 13+ grants USE_EXACT_ALARM; there's nothing to turn off | N/A |
+| Bedtime notification | | battery at 10 %: "Before bed: 1 thing could stop your 4:10 am alarm", opening the check; with everything passing: none | Pass |
+
+Full evidence: `device-results/poco-m8-preflight-2026-10-28.md`. Before the
+test, the check on this phone as it was: everything passed except the alarm
+volume (1 of 15 on the speaker) and Xiaomi's settings (not yet confirmed).
+
+**Found on the phone and fixed:**
+
+- **The alarm volume can't reach zero here.** This POCO's alarm slider stops
+  at 1 of 15, and Android tells apps the minimum is 3. "Above zero" would never
+  fail, so the check fails at the lowest volume Android reports, and says the
+  actual number ("Turned right down (1 of 15)").
+- **A fix's settings page opened in its own task**, so coming back could land
+  somewhere other than the check. Fixes now open in the check's task: Back
+  returns to the check, which checks again.
+
+**Faults in the test script, fixed before these results:**
+
+- It set the full-screen permission at the package level; Android reads the
+  app-wide (uid) mode. SomniAI's reading was right all along.
+- It couldn't open the check screen once the app was in the background (a
+  revoked permission restarts it): Android blocks a background app from opening
+  a screen. A debug-only, DUMP-guarded alias now lets `am start` open it.
+- Once, the screen hadn't come up in time and it **tapped the home screen,
+  which opened another app**. It now touches nothing unless the check screen
+  is in front, and a fix that wasn't tapped can't count as a pass (one run had
+  reported Pass that way).
+- `top | grep -q` under `pipefail` read as "not in front" (grep closing the
+  pipe early), the 2.2 lesson again.
+- The shell's volume command sets the "default" output, not the speaker the
+  alarm plays on (as on the emulator in 2.7), so the volume is now set and read
+  through the app. One early run raised this phone's speaker alarm volume from
+  1 to 11 and couldn't put it back; it was left at 11.
+- The notification list puts `user=` between the package and the id, and
+  doesn't name what a tap opens; the script reads the pending intents for that.
+
+### On your phone by hand: checklist
+
+What a shell can't change, or needs a particular phone:
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Settings > Do Not Disturb (Modes on Android 15+): under what can interrupt, turn **Alarms** off. Open the check (in the app: "Tonight's alarm check", or the notification) | "Do Not Disturb: FIX THIS" (or "CHECK YOURSELF" if Android won't let SomniAI read the setting); "Open settings" lands where Alarms can be turned back on; after that it passes |
+| 2 | Set an alarm for tomorrow morning in the app, leave one check failing (Xiaomi's settings unconfirmed is enough), and use the phone as usual | About 8 h 30 min before the alarm (or 30 minutes before the bedtime you planned in the app), "Before bed: … could stop your … alarm" arrives; tapping it opens the check |
+| 3 | The same with everything passing | No notification |
+| 4 | On a Samsung, Oppo, Realme, Vivo or OnePlus phone: open the check and tap the manufacturer's "Open settings" | It opens that brand's autostart or battery screen, or SomniAI's own app info if this version has none of the known ones; note which |
+| 5 | On an Android 12 or 12L phone: turn off Settings > Apps > Special app access > Alarms & reminders for SomniAI | "Alarms & reminders: FIX THIS", "Allow" opens that page (CI covers this on the API 32 emulator) |
+| 6 | Signed in, with the dev server: the app's alarm list | "Tonight's alarm check: all clear" (or how many things), and "Check and fix" opens the check |

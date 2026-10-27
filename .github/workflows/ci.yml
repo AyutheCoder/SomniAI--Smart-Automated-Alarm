@@ -131,7 +131,7 @@ jobs:
           retention-days: 7
 
   android-emulator:
-    name: Android ${{ matrix.api-level }} (opens; alarm fires and rings; on-device tests)
+    name: Android ${{ matrix.api-level }} (opens; alarm fires and rings; on-device tests; bedtime check)
     needs: android
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -159,11 +159,14 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: bash scripts/android-smoke.sh apk/debug/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/debug/app-debug.apk && bash scripts/android-instrument.sh apk/debug/app-debug.apk apk/androidTest/debug/app-debug-androidTest.apk
+          # The bedtime check last: it needs the app installed, and changes (then restores) settings.
+          script: bash scripts/android-smoke.sh apk/debug/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/debug/app-debug.apk && bash scripts/android-instrument.sh apk/debug/app-debug.apk apk/androidTest/debug/app-debug-androidTest.apk && adb install -r apk/debug/app-debug.apk && OUT=preflight-results.md bash scripts/preflight-device.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-smoke-screenshot-api${{ matrix.api-level }}
-          path: android-smoke.png
+          path: |
+            android-smoke.png
+            preflight-results.md
           retention-days: 7
           if-no-files-found: ignore

@@ -68,6 +68,20 @@
             android:turnScreenOn="true"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- The bedtime check (prompt 3.1): runs before the next alarm and
+             notifies only if something could stop it; the screen lists every
+             check with its fix. Not exported: only this app's own
+             PendingIntents and the plugin open them. -->
+        <receiver
+            android:name=".alarms.PreflightReceiver"
+            android:directBootAware="true"
+            android:exported="false" />
+        <activity
+            android:name=".alarms.PreflightActivity"
+            android:exported="false"
+            android:label="Tonight's alarm check"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
              for each action). All are protected broadcasts sent by the
              system, which reaches a non-exported receiver. -->

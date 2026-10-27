@@ -89,13 +89,59 @@ public class SomniAlarmPlugin extends Plugin {
     /**
      * What this native code offers, for the web app's check before it relies on
      * it (lib/nativeSync.ts). Raised when the plugin gains something the web app
-     * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5).
+     * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
+     * bedtime check (3.1).
      */
-    static final int API = 2;
+    static final int API = 3;
 
     @PluginMethod
     public void version(PluginCall call) {
         call.resolve(new JSObject().put("api", API));
+    }
+
+    /** Every bedtime check now, as the check screen shows them. Read-only. */
+    @PluginMethod
+    public void preflight(PluginCall call) {
+        List<Preflight.Check> checks = Preflight.run(PreflightProbe.read(getContext()));
+        JSArray out = new JSArray();
+        for (Preflight.Check c : checks) {
+            JSObject o = new JSObject();
+            o.put("id", c.id);
+            o.put("status", c.status.name().toLowerCase());
+            o.put("title", c.title);
+            o.put("detail", c.detail);
+            out.put(o);
+        }
+        call.resolve(new JSObject().put("checks", out).put("attention", Preflight.attention(checks)));
+    }
+
+    /** Opens "Tonight's alarm check", where each failing setting has its fix. */
+    @PluginMethod
+    public void openPreflight(PluginCall call) {
+        getActivity().startActivity(new Intent(getContext(), PreflightActivity.class));
+        call.resolve();
+    }
+
+    /**
+     * The planned bedtime from the wake plan (ISO time), or null to clear it.
+     * The bedtime check runs half an hour before it (PreflightSchedule).
+     */
+    @PluginMethod
+    public void setBedtime(PluginCall call) {
+        String at = call.getString("at");
+        Long ms = null;
+        if (at != null) {
+            try {
+                ms = java.time.Instant.parse(at).toEpochMilli();
+            }
+            catch (java.time.format.DateTimeParseException e) {
+                call.reject("at must be an ISO time", "INVALID");
+                return;
+            }
+        }
+        PreflightProbe.setBedtime(getContext(), ms);
+        PreflightReceiver.update(getContext());
+        call.resolve(new JSObject().put("bedtime", at));
     }
 
     /**

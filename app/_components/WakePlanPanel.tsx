@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlarmClock, ArrowRight, BellRing, CalendarClock, Loader2, ShieldAlert, Target } from "lucide-react";
 import type { WakePlan } from "@/lib/aiClient";
 import { bedtimeBefore, clockTime, loadReminder, nextWakeAt, saveReminder, type BedtimeReminder } from "@/lib/bedtime";
+import { shareBedtime } from "@/lib/nativePreflight";
 import { browserStore } from "@/lib/outbox";
 import { MODEL_CAVEAT, REGULARITY_LABEL, type ConfidenceText } from "@/lib/predictionCopy";
 import PredictionOrigin from "./PredictionOrigin";
@@ -136,6 +137,11 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
     saveReminder(browserStore(), userId, next);
     setReminder(next);
     window.dispatchEvent(new Event(REMINDER_CHANGED));
+    // In the app, the phone checks its alarm settings half an hour before.
+    if (await shareBedtime(next.at) === "shared") {
+      setNotice(`Your phone will check its alarm settings at ${clockTime(new Date(bedtime.getTime() - 30 * 60_000))}, half an hour before bed, and tell you if anything needs fixing.`);
+      return;
+    }
     let permission: NotificationPermission | "unsupported" = "unsupported";
     if (typeof Notification !== "undefined") {
       permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
@@ -150,6 +156,7 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
       saveReminder(browserStore(), userId, null);
       window.dispatchEvent(new Event(REMINDER_CHANGED));
     }
+    void shareBedtime(null);
     setReminder(null);
     setNotice("");
   }

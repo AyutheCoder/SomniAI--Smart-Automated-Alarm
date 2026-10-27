@@ -83,7 +83,8 @@ export class NativeSync {
   }
 }
 
-export type NativeConnection = { sync: NativeSync } | { reason: string };
+/** What the plugin offers decides the extras shown (3 adds the bedtime check). */
+export type NativeConnection = { sync: NativeSync; api: number } | { reason: string };
 
 /**
  * The phone's native schedule, if this page runs in the app and the app is new
@@ -107,5 +108,5 @@ export async function connectNative(
   if (typeof api !== "number" || api < REQUIRED_NATIVE_API) {
     return { reason: `This app's alarm code is version ${api}; ${REQUIRED_NATIVE_API} is needed. Update it.` };
   }
-  return { sync: new NativeSync(plugin, onStatus) };
+  return { sync: new NativeSync(plugin, onStatus), api };
 }

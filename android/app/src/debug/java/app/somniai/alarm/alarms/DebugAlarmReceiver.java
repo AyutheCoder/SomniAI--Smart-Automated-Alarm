@@ -26,7 +26,9 @@ import java.util.EnumSet;
  * otherwise. SCHEDULE and CANCEL take --es id ID (default "device-test"): give
  * a real alarm id from the web app and the ring's result is accepted by the
  * server when it syncs. LIST also shows the results waiting to sync; SYNC
- * tries to send them now. Results go to logcat under the tag SomniAlarm.
+ * tries to send them now. PREFLIGHT logs the bedtime check and opens its
+ * screen (--ez open false to only log). Results go to logcat under the tag
+ * SomniAlarm.
  */
 public class DebugAlarmReceiver extends BroadcastReceiver {
 
@@ -62,6 +64,34 @@ public class DebugAlarmReceiver extends BroadcastReceiver {
                 }
                 Log.i(AlarmScheduler.TAG, "debug: log " + AlarmStore.readLog(context) + " exact alarms " + AlarmScheduler.access(context));
                 Log.i(AlarmScheduler.TAG, "debug: waiting to sync " + Outbox.queue(context).size() + ": " + Outbox.queue(context).pending());
+            }
+            else if (action.endsWith(".PREFLIGHT")) {
+                // The bedtime check now: each verdict logged and returned to adb
+                // ("Broadcast completed: ... data=..."), and the screen opened.
+                StringBuilder verdicts = new StringBuilder();
+                for (Preflight.Check c : Preflight.run(PreflightProbe.read(context))) {
+                    Log.i(AlarmScheduler.TAG, "debug: preflight " + c.id + " " + c.status.name().toLowerCase() + ": " + c.detail);
+                    verdicts.append(c.id).append('=').append(c.status.name().toLowerCase()).append(' ');
+                }
+                setResultData(verdicts.toString().trim());
+                if (intent.getBooleanExtra("clear", false)) {
+                    // The bedtime notification, so a test can see whether a new one comes.
+                    context.getSystemService(android.app.NotificationManager.class).cancel(PreflightReceiver.NOTIFICATION_ID);
+                }
+                if (intent.getBooleanExtra("open", true)) {
+                    context.startActivity(new Intent(context, PreflightActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                }
+            }
+            else if (action.endsWith(".VOLUME")) {
+                // The alarm stream as the app sets it (the speaker's, unlike adb's
+                // shell, which sets the "default" output's); --ei index N sets it.
+                android.media.AudioManager audio = context.getSystemService(android.media.AudioManager.class);
+                int s = android.media.AudioManager.STREAM_ALARM;
+                if (intent.hasExtra("index")) {
+                    audio.setStreamVolume(s, intent.getIntExtra("index", 0), 0);
+                }
+                int min = android.os.Build.VERSION.SDK_INT >= 28 ? audio.getStreamMinVolume(s) : 0;
+                setResultData("volume=" + audio.getStreamVolume(s) + " min=" + min + " max=" + audio.getStreamMaxVolume(s));
             }
             else if (action.endsWith(".SYNC")) {
                 PendingResult done = goAsync();

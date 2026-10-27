@@ -18,7 +18,17 @@
                 <action android:name="app.somniai.alarm.debug.DISMISS" />
                 <action android:name="app.somniai.alarm.debug.LIST" />
                 <action android:name="app.somniai.alarm.debug.SYNC" />
+                <action android:name="app.somniai.alarm.debug.PREFLIGHT" />
+                <action android:name="app.somniai.alarm.debug.VOLUME" />
             </intent-filter>
         </receiver>
+        <!-- The bedtime check screen, for adb's `am start` (scripts/preflight-device.sh):
+             a receiver can't open it while the app is in the background, which
+             is where revoking a permission leaves it. Guarded by DUMP too. -->
+        <activity-alias
+            android:name=".alarms.DebugPreflightScreen"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".alarms.PreflightActivity" />
     </application>
 </manifest>
