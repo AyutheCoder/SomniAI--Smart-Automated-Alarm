@@ -31,11 +31,12 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **2.7, finish on the phone**: the matrix ran on the emulator; your phone run is next (`DEVICE_TESTS.md`, "Running it on your phone"), then record its results and fix every failure. 3.1 after that |
-| Last completed | 2.7 on the emulator (`scripts/device-matrix.sh`: 12 conditions, all pass or not applicable on API 37; manufacturer table for Samsung/Xiaomi/Oppo/Realme from dontkillmyapp.com; found and fixed: a reboot or crash mid-ring left the alarm volume raised (`AlarmVolume`); the restricted standby bucket can't apply to exact-alarm apps (AOSP floors them at working set)). 2.6 before that |
-| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (emulators only so far; 2.4 history and 2.5 need the dev server and a signed-in phone). The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| **Next prompt** | **3.1** |
+| Last completed | 2.7 (device matrix: emulator API 37 and a POCO M8 5G on HyperOS 3.0 / Android 16, SomniAI not exempted: every condition rang, including reboot before unlock, swiped away + clear all, and a real night unplugged with the maths check; the phone exposed three test-tool faults, fixed: HyperOS's log pruning deleted the evidence (the script now copies the app's log as it is written), a given-up alarm kept ringing into the next condition, and the debug receiver wasn't direct-boot aware. Found on the emulator and fixed: a reboot mid-ring left the alarm volume raised (`AlarmVolume`)) |
+| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 need the dev server and a signed-in phone). The app's own record of the 2.7 night ring (2026-10-25 09:00, id `night-test`) is still on the phone: read it when it's next connected. The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
+| Open (wake check) | Tester on 2026-10-25: "the question is very easy". One sum from 6x6 to 13x13, and one quick correct answer clears minConfidence 70. Harder sums, more of them, or a higher bar is a product decision no prompt covers yet |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.

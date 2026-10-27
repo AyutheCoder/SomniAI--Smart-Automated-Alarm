@@ -28,9 +28,24 @@ say() { echo "matrix: $*"; }
 # boot, the system's own logging rotated the marks and the app's lines out
 # before they were read, which read as "did not ring" for alarms that did.
 big_log() { "$ADB" logcat -G 16M >/dev/null 2>&1 || true; }
+# A bigger buffer was not enough on a Xiaomi phone (HyperOS 3): it logs about
+# 1 MB a minute, and logd prunes the busiest sources' oldest lines first, which
+# took the marks (adb's shell logs every command) and the app's lines within
+# minutes, so an alarm that rang read as "did not ring". The app's lines are
+# therefore copied to this computer as they are written, and read from there.
+STREAM="${STREAM:-${OUT%.md}.somnialarm.log}"
+STREAM_PID=""
+follow_log() { # (re)start the copy; after a reboot the old one has ended. $1 "all": from the boot on
+  [ -n "$STREAM_PID" ] && kill "$STREAM_PID" 2>/dev/null
+  local from=(-T 1); [ "${1:-}" = all ] && from=()
+  "$ADB" logcat "${from[@]}" -s 'SomniAlarm:*' >> "$STREAM" 2>/dev/null &
+  STREAM_PID=$!
+  sleep 2
+}
+trap '[ -n "$STREAM_PID" ] && kill "$STREAM_PID" 2>/dev/null' EXIT
 MARK=0
-mark() { MARK=$((MARK + 1)); sh_ log -t SomniAlarm "matrix mark $MARK" >/dev/null; }
-log() { "$ADB" logcat -d -s SomniAlarm:* | tr -d '\r' | sed -n "/matrix mark $MARK\$/,\$p"; }
+mark() { MARK=$((MARK + 1)); sh_ log -t SomniAlarm "matrix mark $MARK" >/dev/null; sleep 1; }
+log() { tr -d '\r' < "$STREAM" | sed -n "/matrix mark $MARK\$/,\$p"; }
 has() { local out; out=$("${@:2}"); grep -q -- "$1" <<<"$out"; }
 wait_log() { # pattern seconds
   for _ in $(seq 1 $(($2 / 3))); do
@@ -43,6 +58,9 @@ wait_log() { # pattern seconds
 # Sets an alarm for the start of the minute $2 minutes from now.
 schedule() { sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $HOOK --es id "$1" --ei minutes "${2:-2}" --ez check false >/dev/null; }
 dismiss() { sh_ am broadcast -a app.somniai.alarm.debug.DISMISS $HOOK >/dev/null; }
+# Stops the ring and waits until the app says so: a stop that never arrived
+# (held back until unlock, after a reboot) left the alarm ringing unseen.
+stop_ring() { dismiss; wait_log "dismissed $1" 30; }
 cancel() { sh_ am broadcast -a app.somniai.alarm.debug.CANCEL $HOOK --es id "$1" >/dev/null; }
 scheduled_for() { log | grep -m1 "debug: set $1" | grep -o '"hour":[0-9]*,"minute":[0-9]*' | sed 's/"hour":\([0-9]*\),"minute":\([0-9]*\)/\1 \2/' | awk '{printf "%02d:%02d", $1, $2}'; }
 
@@ -53,8 +71,15 @@ evidence() {
   ringing=$(log | grep -m1 "ringing $id" | sed 's/.*ringing [^:]*: //')
   playing=$(sh_ dumpsys audio | grep "usage=USAGE_ALARM" | grep "state:started" | grep -o "mutedState:[a-z_]*" | head -1)
   awake=$(sh_ dumpsys power | grep -m1 -o "mWakefulness=[A-Za-z]*")
-  top=$(sh_ dumpsys activity activities | grep -m1 "topResumedActivity" | grep -o "RingActivity" || true)
-  echo "fired: ${fired:-NO}; ringing: ${ringing:-NO}; alarm audio: ${playing:-not playing}; ${awake}; ring screen: ${top:-not in front}"
+  # What is in front, by name: "not in front" alone didn't say what covered it.
+  top=$(sh_ dumpsys activity activities | grep -m1 "topResumedActivity" | grep -o "[A-Za-z0-9_.]*/[A-Za-z0-9_.]*" | head -1)
+  local keyguard; keyguard=$(sh_ dumpsys window | grep -m1 -o "isKeyguardShowing=[a-z]*")
+  case "$top" in
+    *RingActivity) top="RingActivity" ;;
+    "") top="not in front (nothing resumed)" ;;
+    *) top="not in front ($top)" ;;
+  esac
+  echo "fired: ${fired:-NO}; ringing: ${ringing:-NO}; alarm audio: ${playing:-not playing}; ${awake}; ${keyguard}; ring screen: ${top}"
 }
 
 row() { # condition, result, evidence
@@ -80,6 +105,8 @@ ring_once() {
     local pending; pending=$(sh_ dumpsys alarm | grep -cE "RTC_WAKEUP #[0-9]+: Alarm\{.* $PKG\}")
     RES="did not ring by $(date +%H:%M:%S) (set for $at); $pending pending alarm(s) for the app; log: $(log | grep -v 'matrix mark' | tail -4 | sed 's/.*SomniAlarm: //' | tr '\n' ' ')"
     "$ADB" logcat -d -v time > "matrix-fail-$id.log" 2>/dev/null
+    # Stop it too, in case it rang unseen: left ringing, it ran into the next condition.
+    dismiss
     cancel "$id"
     return 1
   fi
@@ -164,7 +191,7 @@ c_timezone() {
   if wait_log "ringing matrix-timezone" 300; then
     sleep 4
     local ev; ev=$(evidence matrix-timezone)
-    dismiss; cancel matrix-timezone
+    stop_ring matrix-timezone || ev="$ev; NOT STOPPED"; cancel matrix-timezone
     row "Time zone changed (to $other and back)" "$([ -n "$moved" ] && [ -n "$back" ] && echo Pass || echo CHECK)" "set for $at in $tz; in $other: ${moved:-NOT RESCHEDULED}; back in $tz: ${back:-NOT RESCHEDULED}; $ev"
   else
     cancel matrix-timezone
@@ -189,7 +216,7 @@ c_forcestop() {
   if wait_log "ringing matrix-forcestop" 240; then
     sleep 4
     local ev; ev=$(evidence matrix-forcestop)
-    dismiss; cancel matrix-forcestop
+    stop_ring matrix-forcestop || ev="$ev; NOT STOPPED"; cancel matrix-forcestop
     row "App force-stopped, then opened" "Pass (as designed: rings once reopened)" "after force-stop: alarm $gone ($count AlarmManager entries for the app); on opening: ${restored:-NOT RESTORED}; $ev"
   else
     cancel matrix-forcestop
@@ -213,7 +240,7 @@ c_doze() {
   if wait_log "ringing matrix-doze" 240; then
     sleep 4
     local ev; ev=$(evidence matrix-doze)
-    dismiss; cancel matrix-doze
+    stop_ring matrix-doze || ev="$ev; NOT STOPPED"; cancel matrix-doze
     row "Doze (deep idle, forced)" "$([ "$state" = IDLE ] && echo Pass || echo CHECK)" "$forced; deep state $state when the alarm was set, $after just after; $ev"
   else
     cancel matrix-doze
@@ -266,6 +293,7 @@ c_reboot() {
   # mark as soon as adb is back, before the boot broadcasts reach the app, so
   # the evidence below reads from here and boot's own logging can't rotate it out.
   big_log
+  follow_log all
   mark
   for _ in $(seq 1 60); do [ "$(sh_ getprop sys.boot_completed)" = "1" ] && break; sleep 5; done
   local booted; booted=$(date +%H:%M:%S)
@@ -281,7 +309,7 @@ c_reboot() {
   if [ -n "$fired" ]; then
     sleep 3
     local ev; ev=$(evidence matrix-reboot)
-    dismiss; cancel matrix-reboot
+    stop_ring matrix-reboot || ev="$ev; NOT STOPPED"; cancel matrix-reboot
     row "Rebooted (not unlocked afterwards)" "Pass" "set for $at; $when; rescheduled ${resched:-?}; $locked; $ev"
   else
     cancel matrix-reboot
@@ -291,6 +319,7 @@ c_reboot() {
 
 "$ADB" wait-for-device
 big_log
+follow_log
 MODEL=$(sh_ getprop ro.product.manufacturer)" "$(sh_ getprop ro.product.model)
 SDK=$(sh_ getprop ro.build.version.sdk)
 RELEASE=$(sh_ getprop ro.build.version.release)

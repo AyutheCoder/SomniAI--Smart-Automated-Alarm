@@ -88,7 +88,11 @@ and differ between versions.
    - `adb devices` (in `%LOCALAPPDATA%\Android\Sdk\platform-tools`) shows the
      phone as `device`.
 2. **App installed.** `npm run android:build`, then `npm run android:run`.
-   Open SomniAI once, and allow notifications if asked.
+   Open SomniAI once, and allow notifications if asked (the script also
+   grants them). On a phone, the debug build shows "Can't reach SomniAI right
+   now": it looks for the dev server at the emulator's address. The matrix
+   doesn't need it. Keep it that way while the matrix runs: a signed-in app
+   reconciles with the server's list and would remove the test alarms.
 3. **The scripted conditions** (about 35 minutes; leave the phone alone and
    plugged in):
    ```bash
@@ -171,7 +175,76 @@ had left the speaker at 7 (the defect fixed below).
   alarm-clock alarms; on Android 17 it rang 284 ms late. Check it on your
   phone too (row +).
 
-Your phone: **not run yet.**
+Phone, POCO M8 5G (Xiaomi), HyperOS 3.0, Android 16 (API 36), 2026-10-24,
+SomniAI **not exempted** from anything (Autostart, battery saver and
+notification settings as installed), plugged in over USB except where the
+script reports the battery unplugged:
+
+| Condition | Result | Fired late by | Evidence |
+| --- | --- | --- | --- |
+| Screen locked (off) | Pass (re-run) | 39 ms | over the lock screen; alarm audio unmuted; ring screen in front. First run: rang 58 ms late, but the script missed it (below) |
+| Silent mode | Pass (re-run) | 32 ms | ringer silent; alarm audio unmuted; ring screen in front, over the lock screen |
+| Do Not Disturb (priority, Android's default exceptions) | Pass | 70 ms | ringer silent; DND priority; alarm audio unmuted; ring screen in front |
+| Battery Saver on (unplugged) | Pass | 34 ms | Battery Saver on; alarm audio unmuted; ring screen in front |
+| Battery under 15 % (reported 10 %, unplugged) | Pass (re-run) | 27 ms | alarm audio unmuted; ring screen in front, over the lock screen |
+| Airplane mode | Pass | 86 ms | result queued offline (3 calls); alarm audio unmuted; ring screen in front |
+| Time zone changed (to Europe/London and back) | Pass | 54 ms | rescheduled to the same wall-clock time in London, and back; alarm audio unmuted; ring screen in front |
+| App force-stopped, then opened | Pass (as designed: rings once reopened; re-run) | 29 ms | deleted by Android on force-stop, restored on opening; ring screen in front, over the lock screen |
+| Doze (deep idle, forced) | Pass | 57 ms | deep idle; alarm audio unmuted; ring screen in front |
+| Battery usage set to Restricted (Android setting) | Pass | 27 ms | alarm audio unmuted; ring screen in front |
+| Standby bucket restricted | Not applicable: Android kept the app at bucket 20 | 27 ms | as on the emulator |
+| Rebooted (not unlocked afterwards) | Pass | 336 ms | rescheduled at LOCKED_BOOT_COMPLETED, before any unlock, and again at BOOT_COMPLETED; ring screen in front, over the lock screen. HyperOS's Autostart (off by default) did not block either |
+| **By hand:** swiped away from recents, then "clear all" | Pass | 415 ms | HyperOS killed the process (`Killing … SwipeUpClean`) but did not force-stop it: the alarm stayed in AlarmManager, and Android started the app again to deliver it. The phone was in use (another app in front), so Android showed the alarm as a heads-up notification, which popped up by itself; tapping it opened the ring screen and "Stop alarm" stopped it |
+| **By hand:** nobody answers | Pass | 24 ms | rang through all five levels, stopped itself at the 20-minute cap, and was recorded as "unanswered", queued for the server |
+| **By hand:** a real night, unplugged, maths wake check, 9:00 (2026-10-25) | Pass | not read yet | The tester's account: it rang at 9:00 after the night unplugged; the ring screen came up by itself with the sum (7 × 11); one correct answer stopped it. The app's own record of that ring (exact time, levels) is still on the phone, which wasn't connected when this was written |
+
+Full evidence: `device-results/poco-m8-hyperos3-2026-10-24.md`.
+
+**Found while running it on this phone, all in the test tool, all fixed:**
+
+- **HyperOS's logging deleted the evidence.** This phone logs about 1 MB a
+  minute, and Android's log daemon prunes the busiest sources' oldest lines
+  first. Within minutes that took the script's marks (adb's shell logs every
+  command it runs) and the app's own lines. So "Screen locked" read as "did
+  not ring" for an alarm that rang 58 ms late, and each read of the log took
+  about 13 s. The script now copies the app's lines to the computer as they
+  are written (`adb logcat -s SomniAlarm`), and reads them from there.
+- **An alarm the script gave up on kept ringing** into the next condition. The
+  first run's "Silent mode" joined that ring, so that row was re-run. The
+  script now stops an alarm it gave up on, and waits for "dismissed" after
+  every stop, writing NOT STOPPED if it doesn't come.
+- **After the reboot, the script's "stop" was held back until the phone was
+  unlocked.** Before the first unlock, Android only delivers broadcasts to
+  direct-boot-aware receivers; the alarm's own receivers are, but the
+  debug-only one the script uses wasn't. It is now. The alarm itself was
+  unaffected: it rang until it was stopped on the phone.
+
+**Seen once, not reproduced:** in the first run, the evidence read "ring screen
+not in front" on three rows (Silent mode, Battery under 15 %, Force-stop). The
+alarm rang in all three. That run's script didn't record what was in front
+instead, and Silent mode had joined the earlier ring, which opens no new
+screen. Re-run with the evidence naming what's in front, all three showed the
+ring screen over the lock screen, and on the real morning it came up by
+itself.
+
+**The tester's feedback on the wake check:** "the question is very easy". It is
+by design so far: one sum from 6 × 6 to 13 × 13, and a single quick correct
+answer clears the test alarm's minConfidence of 70. Harder sums, more of them,
+or a higher bar are a product decision no prompt covers yet; noted in
+`CLAUDE.md` under Open.
+
+**What HyperOS itself does, established here:**
+
+- In its default settings, it didn't stop SomniAI's alarm under any scripted
+  condition, after a reboot, after being swiped away, or after a night
+  unplugged. None of the Xiaomi exemptions above was needed on this phone.
+  Other Xiaomi models and versions may differ, which is why prompt 3.1 checks
+  them before bedtime.
+- Swiping the app away, or "clear all", kills it but doesn't force-stop it.
+  Alarms survive that; they don't survive force-stop.
+- While the phone is in use, Android shows a full-screen alarm as a heads-up
+  notification instead (Google's Clock does the same). HyperOS let it pop up:
+  its "Floating notifications" setting was on for SomniAI as installed.
 
 ## 2.1 Shell opens
 
