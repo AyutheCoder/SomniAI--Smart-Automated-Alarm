@@ -65,13 +65,19 @@ tap() {
       fi
     fi
     in_front || return 1
-    sh_ input swipe 540 1700 540 900 300 >/dev/null
+    # Sized to the screen: CI's emulators are smaller than a phone, and a swipe
+    # starting below the screen scrolls nothing.
+    sh_ input swipe $((WIDTH / 2)) $((HEIGHT * 3 / 4)) $((WIDTH / 2)) $((HEIGHT * 3 / 8)) 300 >/dev/null
     sleep 1
   done
   return 1
 }
 
 SDK=$(sh_ getprop ro.build.version.sdk)
+# "Physical size: 1080x2392" (an "Override size" line may follow; the first is the panel).
+SIZE=$(sh_ wm size | grep -o "[0-9]*x[0-9]*" | head -1)
+WIDTH=${SIZE%x*}
+HEIGHT=${SIZE#*x}
 
 # The alarm stream as the app sees and sets it: adb's shell sets the "default"
 # output's volume, not the speaker's the alarm plays on.
@@ -242,6 +248,8 @@ c_bedtime() {
   sh_ dumpsys battery reset >/dev/null
   sh_ am broadcast -a app.somniai.alarm.debug.CANCEL $HOOK --es id preflight-test >/dev/null
   sh_ am broadcast -a app.somniai.alarm.debug.PREFLIGHT $HOOK --ez open false --ez clear true >/dev/null
+  # Removal isn't instant: counted at once, the old one was still listed (CI, API 26 and 32).
+  for _ in $(seq 1 10); do [ "$(bedtime_notification)" = 0 ] && break; sleep 1; done
   # Everything passing: nothing posted. (A different minute, so it's a new alarm to check for.)
   local before; before=$(bedtime_notification)
   sh_ am broadcast -a app.somniai.alarm.debug.SCHEDULE $HOOK --es id preflight-quiet --ei minutes 75 --ez check false >/dev/null
