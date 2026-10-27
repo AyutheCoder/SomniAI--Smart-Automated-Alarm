@@ -49,6 +49,11 @@ export interface RingOutcome {
    * the same (Verification.java), so a wake scores the same from either.
    */
   timeOnTaskMs: number;
+  /**
+   * How many answers that time covers: the score judges speed per answer
+   * (three sums take three times as long as one). The phone sends the same.
+   */
+  steps: number;
   challenged: boolean;
   methods: string[];
   attempts: number;
@@ -81,6 +86,7 @@ export function syncCalls(alarmId: string, outcome: RingOutcome): OutboxCall[] {
       body: {
         methods: outcome.methods,
         responseMs: outcome.timeOnTaskMs,
+        steps: Math.max(1, outcome.steps),
         attempts: outcome.attempts,
         motion: outcome.motion,
         solved: outcome.solved,

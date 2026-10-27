@@ -7,6 +7,8 @@ export interface ChallengeResult {
   responseMs: number;
   motion?: number;
   interactions?: number;
+  /** How many answers `responseMs` covers (sums in a maths challenge). Default 1. */
+  steps?: number;
 }
 
 export interface ChallengeProps {

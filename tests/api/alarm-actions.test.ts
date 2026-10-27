@@ -168,6 +168,8 @@ describe("POST /api/alarms/[id]/verify", () => {
     ["correctness above 1", { solved: true, correctness: 1.5 }],
     ["motion above 1", { solved: true, motion: 3 }],
     ["negative attempts", { solved: true, attempts: -2 }],
+    ["zero steps", { solved: true, steps: 0 }],
+    ["fractional steps", { solved: true, steps: 1.5 }],
   ])("rejects %s", async (_what, body) => {
     const id = await alarmFor(alice);
     signInAs(alice);
@@ -186,6 +188,21 @@ describe("POST /api/alarms/[id]/verify", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ passed: true, threshold: 70 });
     expect(await BehaviorEvent.findOne({ type: "verify_pass" }).lean()).toMatchObject({ meta: { scoredServerSide: true } });
+  });
+
+  it("judges speed per sum: three sums in 90 s pass an 85 alarm that one sum in 90 s would not", async () => {
+    const id = await alarmFor(alice, { minConfidence: 85 });
+    signInAs(alice);
+    const threeSums = await read(await verify(request("POST", `/api/alarms/${id}/verify`, {
+      solved: true, correctness: 1, responseMs: 90_000, steps: 3, attempts: 0, methods: ["math"],
+    }), idParams(id)));
+    expect(threeSums.body.data).toMatchObject({ passed: true, threshold: 85 });
+    expect(await BehaviorEvent.findOne({ type: "verify_pass" }).lean()).toMatchObject({ meta: { steps: 3 } });
+
+    const oneSlowSum = await read(await verify(request("POST", `/api/alarms/${id}/verify`, {
+      solved: true, correctness: 1, responseMs: 90_000, attempts: 0, methods: ["math"],
+    }), idParams(id)));
+    expect(oneSlowSum.body.data.passed).toBe(false);
   });
 
   it("never passes an unsolved challenge, whatever score and motion are claimed", async () => {

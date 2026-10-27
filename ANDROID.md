@@ -316,9 +316,17 @@ and the result reaches the server once the phone is back online.
 ### The wake check
 
 When the ring plan asks for a check (`challenge.required`), Stop leads to maths
-problems on the ring screen. They are the same as the web's MathChallenge: a × b
-with both from 6 to 13, one problem per method the plan lists. The phone's check
-is always maths; the methods sent to the server say so.
+on the ring screen. The sums are the web's (`lib/mathChallenge.ts`):
+a × b + c × d, with a and c from 2 to 9 and b and d from 3 to 12, three in a row
+for each method the plan lists ("Sum 2 of 3"). A wrong answer brings a new sum
+without undoing the ones already solved. The phone's check is always maths; the
+methods sent to the server say so.
+
+Speed is judged **per sum**: the score's 6 to 45 s brackets describe one
+answer, so the time on task is divided by the number of answers (`steps`, sent
+to the server with it). Judged as one answer, three sums would always read as
+"fell back asleep", and a correct but unhurried wake couldn't pass the
+strictest tiers.
 
 **The gate is the web's.** `WakeConfidence.java` is `lib/wakeConfidence.ts`,
 line for line. The alarm stops only when every problem in the sequence is solved

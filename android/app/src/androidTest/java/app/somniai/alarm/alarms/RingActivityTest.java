@@ -82,7 +82,12 @@ public class RingActivityTest {
         answer(screen, Integer.MAX_VALUE);
         assertNotNull(RingService.current);
 
-        answer(screen, problemAnswer(screen));
+        // Three sums in a row; a right one moves on, and the alarm rings until the last.
+        for (int sum = 1; sum <= MathChallenge.SUMS; sum++) {
+            assertEquals("Sum " + sum + " of " + MathChallenge.SUMS, progressOf(screen));
+            assertNotNull("rings until the last sum", RingService.current);
+            answer(screen, problemAnswer(screen));
+        }
         waitFor("stopped", () -> RingService.current == null);
         assertEquals("dismissed", lastOutcome("t-screen"));
 
@@ -94,6 +99,7 @@ public class RingActivityTest {
         JSONObject verify = new JSONObject(calls.get(1).getString("body"));
         assertTrue(verify.getBoolean("solved"));
         assertEquals(5, verify.getInt("attempts"));
+        assertEquals("the time covers three answers", MathChallenge.SUMS, verify.getInt("steps"));
         assertTrue(calls.get(2).getString("path").endsWith("/escalate"));
         assertTrue(calls.get(3).getString("path").endsWith("/dismiss"));
     }
@@ -251,12 +257,25 @@ public class RingActivityTest {
         instrumentation.waitForIdleSync();
     }
 
-    /** Reads the problem on screen ("7 × 9 = ?") and works out its answer. */
+    /** Reads the sum on screen ("4 × 7 + 6 × 9 = ?") and works out its answer. */
     private int problemAnswer(RingActivity screen) {
         final String[] q = new String[1];
         instrumentation.runOnMainSync(() -> q[0] = ((TextView) findDesc(screen, "Problem")).getText().toString());
-        String[] ab = q[0].replace(" = ?", "").split(" × ");
-        return Integer.parseInt(ab[0]) * Integer.parseInt(ab[1]);
+        int total = 0;
+        for (String product : q[0].replace(" = ?", "").split(" [+] ")) {
+            String[] ab = product.split(" × ");
+            total += Integer.parseInt(ab[0]) * Integer.parseInt(ab[1]);
+        }
+        return total;
+    }
+
+    private String progressOf(RingActivity screen) {
+        final String[] m = new String[1];
+        instrumentation.runOnMainSync(() -> {
+            View v = findTextView(screen, "Sum ");
+            m[0] = v == null ? "" : ((TextView) v).getText().toString();
+        });
+        return m[0];
     }
 
     private String messageOf(RingActivity screen) {

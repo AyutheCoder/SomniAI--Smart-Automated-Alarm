@@ -1,6 +1,7 @@
 // The core promise, end to end in a real browser: an alarm set a minute ahead
 // rings, and only a correct answer turns it off.
 import { expect, test, type Page } from "@playwright/test";
+import { SUMS } from "../lib/mathChallenge";
 import { forbiddenWordingIn } from "../lib/predictionCopy";
 import { alarmRow, signUp } from "./helpers";
 
@@ -39,11 +40,21 @@ async function waitForRingAndOpenChallenge(page: Page) {
   await expect(challenge).toBeVisible();
 }
 
+/** Reads the sum on screen ("4 × 7 + 6 × 9 = ?") and works out its answer. */
 async function readProblem(page: Page): Promise<number> {
-  const text = await page.getByText(/^\d+ × \d+ = \?$/).textContent();
-  const [, a, b] = /(\d+) × (\d+)/.exec(text ?? "") ?? [];
-  expect(a, `could not read the maths problem from "${text}"`).toBeTruthy();
-  return Number(a) * Number(b);
+  const text = await page.getByText(/^\d+ × \d+ \+ \d+ × \d+ = \?$/).textContent();
+  const [, a, b, c, d] = /(\d+) × (\d+) \+ (\d+) × (\d+)/.exec(text ?? "") ?? [];
+  expect(a, `could not read the sum from "${text}"`).toBeTruthy();
+  return Number(a) * Number(b) + Number(c) * Number(d);
+}
+
+/** Solves every sum in a row; the alarm rings until the last. */
+async function solveSums(page: Page) {
+  for (let sum = 1; sum <= SUMS; sum++) {
+    await expect(page.getByText(`Sum ${sum} of ${SUMS}`)).toBeVisible();
+    await page.getByPlaceholder("Answer").fill(String(await readProblem(page)));
+    await page.getByRole("button", { name: "Check answer" }).click();
+  }
 }
 
 async function alarmStatus(page: Page, label: string): Promise<string | undefined> {
@@ -77,8 +88,7 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   await addAlarmOneMinuteAhead(page, label);
 
   await waitForRingAndOpenChallenge(page);
-  await page.getByPlaceholder("Answer").fill(String(await readProblem(page)));
-  await page.getByRole("button", { name: "Check answer" }).click();
+  await solveSums(page);
 
   await expect(page.getByText("You're awake — good morning!")).toBeVisible();
   await expect(page.getByRole("button", { name: "Check answer" })).toBeHidden({ timeout: 15_000 });
@@ -103,7 +113,8 @@ test("a wrong answer does not turn the alarm off, and unset backups say so", asy
   await page.getByPlaceholder("Answer").fill(String(wrong));
   await page.getByRole("button", { name: "Check answer" }).click();
 
-  await expect(page.getByText("Incorrect — try again.")).toBeVisible();
+  await expect(page.getByText("Incorrect — here's a new one.")).toBeVisible();
+  await expect(page.getByText(`Sum 1 of ${SUMS}`)).toBeVisible();
   // Still ringing a while later: the challenge is up and nothing was dismissed.
   await page.waitForTimeout(5_000);
   await expect(page.getByRole("button", { name: "Check answer" })).toBeVisible();
@@ -174,8 +185,7 @@ test("with the database down at ring time, the alarm still rings and is dismisse
   await expect(alarmRow(page, label)).toContainText("scheduled");
 
   await waitForRingAndOpenChallenge(page);
-  await page.getByPlaceholder("Answer").fill(String(await readProblem(page)));
-  await page.getByRole("button", { name: "Check answer" }).click();
+  await solveSums(page);
   await expect(page.getByText("You're awake — good morning!")).toBeVisible();
   await expect(page.locator("[data-ringing]")).toHaveCount(0, { timeout: 15_000 });
 

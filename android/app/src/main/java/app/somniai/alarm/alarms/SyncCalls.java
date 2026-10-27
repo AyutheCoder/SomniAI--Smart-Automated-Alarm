@@ -48,6 +48,7 @@ final class SyncCalls {
             JSONObject v = body("at", iso(verification.at));
             put(v, "methods", new JSONArray(verification.methods));
             put(v, "responseMs", verification.responseMs);
+            put(v, "steps", Math.max(1, verification.steps));
             put(v, "attempts", verification.attempts);
             put(v, "solved", verification.solved);
             put(v, "correctness", verification.correctness);

@@ -38,14 +38,21 @@ final class WakeConfidence {
         final Double motion;
         final Double interactions;
         final Boolean solved;
+        /** How many answers responseMs covers; speed is judged per answer. */
+        final Double steps;
 
         Signals(double correctness, double responseMs, double attempts, Double motion, Double interactions, Boolean solved) {
+            this(correctness, responseMs, attempts, motion, interactions, solved, null);
+        }
+
+        Signals(double correctness, double responseMs, double attempts, Double motion, Double interactions, Boolean solved, Double steps) {
             this.correctness = correctness;
             this.responseMs = responseMs;
             this.attempts = attempts;
             this.motion = motion;
             this.interactions = interactions;
             this.solved = solved;
+            this.steps = steps;
         }
     }
 
@@ -56,13 +63,20 @@ final class WakeConfidence {
         final double attempts;
         final Double motion;
         final Double interactions;
+        /** How many answers responseMs covers (sums in a maths challenge). */
+        final Double steps;
 
         Outcome(boolean solved, double responseMs, double attempts, Double motion, Double interactions) {
+            this(solved, responseMs, attempts, motion, interactions, null);
+        }
+
+        Outcome(boolean solved, double responseMs, double attempts, Double motion, Double interactions, Double steps) {
             this.solved = solved;
             this.responseMs = responseMs;
             this.attempts = attempts;
             this.motion = motion;
             this.interactions = interactions;
+            this.steps = steps;
         }
     }
 
@@ -80,7 +94,8 @@ final class WakeConfidence {
         double correctness = clamp01(s.correctness);
         boolean solved = s.solved != null ? s.solved : correctness >= 1;
 
-        double speedNorm = clamp01((SLOW_MS - s.responseMs) / (SLOW_MS - FAST_MS));
+        double perStepMs = s.responseMs / Math.max(1, s.steps == null ? 1 : s.steps);
+        double speedNorm = clamp01((SLOW_MS - perStepMs) / (SLOW_MS - FAST_MS));
         double motionNorm = s.motion == null ? 0.5 : clamp01(s.motion);
         double attemptPenalty = clamp01(Math.max(0, s.attempts - 1) / 3);
         double interactionNorm = clamp01((s.interactions == null ? 0 : s.interactions) / 6);
@@ -110,6 +125,7 @@ final class WakeConfidence {
         double responseMs = 0;
         double attempts = 0;
         double interactions = 0;
+        double steps = 0;
         double motionSum = 0;
         int motions = 0;
         for (Outcome o : outcomes) {
@@ -119,6 +135,7 @@ final class WakeConfidence {
             responseMs += o.responseMs;
             attempts += o.attempts;
             interactions += o.interactions == null ? 0 : o.interactions;
+            steps += Math.max(1, o.steps == null ? 1 : o.steps);
             if (o.motion != null) {
                 motionSum += o.motion;
                 motions++;
@@ -130,7 +147,8 @@ final class WakeConfidence {
             attempts,
             motions > 0 ? motionSum / motions : null,
             interactions,
-            solvedCount == outcomes.size()));
+            solvedCount == outcomes.size(),
+            steps));
     }
 
     static boolean meetsThreshold(int score, int minConfidence) {

@@ -411,6 +411,7 @@ export default function Home() {
       snoozedUntil: result.snoozed ? local.scheduledTime : undefined,
       responseMs: result.responseMs,
       timeOnTaskMs: result.timeOnTaskMs,
+      steps: result.steps,
       // An alarm with no challenge has nothing to verify.
       challenged: resolveRingPlan(alarm).challenge.required,
       methods: result.methods,

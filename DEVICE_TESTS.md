@@ -227,11 +227,12 @@ screen. Re-run with the evidence naming what's in front, all three showed the
 ring screen over the lock screen, and on the real morning it came up by
 itself.
 
-**The tester's feedback on the wake check:** "the question is very easy". It is
-by design so far: one sum from 6 × 6 to 13 × 13, and a single quick correct
-answer clears the test alarm's minConfidence of 70. Harder sums, more of them,
-or a higher bar are a product decision no prompt covers yet; noted in
-`CLAUDE.md` under Open.
+**The tester's feedback on the wake check:** "the question is very easy". It
+was one sum from 6 × 6 to 13 × 13, and a single quick correct answer cleared
+the test alarm's minConfidence of 70. Changed after 2.7 at the tester's
+request: three sums in a row, each a × b + c × d (2 to 9 times 3 to 12), with
+speed judged per sum (`ANDROID.md`, "The wake check"). Not yet tried on the
+phone.
 
 **What HyperOS itself does, established here:**
 
@@ -462,9 +463,9 @@ it has a wake check and the standard adaptive ladder), lock the phone, and
 | 1 | 0 s | It rings quietly at first, with one buzz |
 | 2 | 10 s | Clearly louder |
 | 3 | 22 s | It starts vibrating continuously |
-| 4 | 35 s | The ring screen shows the maths problem without you pressing Stop |
+| 4 | 35 s | The ring screen shows the first sum ("Sum 1 of 3") without you pressing Stop |
 | 5 | 75 s | Louder still, at full alarm volume |
-| 6 | then | Solve it: it stops. Your alarm volume is back to where it was |
+| 6 | then | Solve all three: it rings until the last, then stops. Your alarm volume is back to where it was |
 
 For an unmissable alarm, set one linked to a task marked critical or
 must-not-miss in the app. Once 2.5 has put it on the phone, it reaches level 5

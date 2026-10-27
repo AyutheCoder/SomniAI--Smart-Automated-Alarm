@@ -24,7 +24,7 @@ public class SyncCallsTest {
 
     @Test
     public void aVerifiedDismissalSendsFireVerifyEscalateDismissInOrder() throws Exception {
-        Verification v = new Verification(true, true, 1.0, 9_000, 1, List.of("math"), 88, RANG + 40_000);
+        Verification v = new Verification(true, true, 1.0, 9_000, 3, 1, List.of("math"), 88, RANG + 40_000);
         List<SyncCalls.Call> calls = SyncCalls.forRing(ID, RANG, "dismissed", RANG + 42_000, v, 5,
             Backups.tryAll(EscalationLadder.BACKUP_KINDS));
         assertEquals(List.of("/api/alarms/" + ID + "/fire", "/api/alarms/" + ID + "/verify", "/api/alarms/" + ID + "/escalate", "/api/alarms/" + ID + "/dismiss"), paths(calls));
@@ -34,6 +34,7 @@ public class SyncCallsTest {
         assertEquals(true, verify.getBoolean("solved"));
         assertEquals(1.0, verify.getDouble("correctness"), 0);
         assertEquals(9_000, verify.getLong("responseMs"));
+        assertEquals("three sums: the server judges speed per answer", 3, verify.getInt("steps"));
         assertEquals(1, verify.getInt("attempts"));
         assertEquals("math", verify.getJSONArray("methods").getString(0));
         assertEquals("2026-10-26T06:40:40Z", verify.getString("at"));

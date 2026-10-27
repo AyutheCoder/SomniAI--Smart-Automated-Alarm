@@ -39,7 +39,7 @@ describe("ring outcomes take effect on the device, with no server", () => {
 });
 
 const OUTCOME: RingOutcome = {
-  snoozed: false, responseMs: 9000, timeOnTaskMs: 4000, challenged: true, methods: ["math"], attempts: 1,
+  snoozed: false, responseMs: 9000, timeOnTaskMs: 4000, steps: 3, challenged: true, methods: ["math"], attempts: 1,
   solved: true, correctness: 1, escalationLevel: 5, backups: [{ kind: "smartwatch", status: "not_configured" }],
 };
 
@@ -52,7 +52,7 @@ describe("what the server is told afterwards", () => {
 
   it("verify reports the time on the challenges; dismiss the whole ring, as the phone does", () => {
     const calls = syncCalls("a1", OUTCOME);
-    expect(calls.find((c) => c.path.endsWith("/verify"))?.body).toMatchObject({ responseMs: 4000 });
+    expect(calls.find((c) => c.path.endsWith("/verify"))?.body).toMatchObject({ responseMs: 4000, steps: 3 });
     expect(calls.find((c) => c.path.endsWith("/dismiss"))?.body).toMatchObject({ responseMs: 9000 });
   });
 

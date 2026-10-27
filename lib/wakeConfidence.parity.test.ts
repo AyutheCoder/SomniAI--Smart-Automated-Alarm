@@ -41,10 +41,24 @@ function build(): Table {
       }
     }
   }
-  const o = (solved: boolean, responseMs: number, attempts: number, motion?: number, interactions?: number): ChallengeOutcome => {
+  // Speed judged per answer: several answers in one responseMs (three sums).
+  for (const steps of [0, 1, 2, 3, 6]) {
+    for (const responseMs of [0, 9000, 18000, 45000, 75000, 135000, 270000]) {
+      for (const attempts of [0, 2]) {
+        for (const motion of [undefined, 0.5]) {
+          const input: WakeSignals = { correctness: 1, responseMs, attempts, steps };
+          if (motion !== undefined) input.motion = motion;
+          const r = computeWakeConfidence(input);
+          signals.push({ in: input, score: r.score, gated: r.gated });
+        }
+      }
+    }
+  }
+  const o = (solved: boolean, responseMs: number, attempts: number, motion?: number, interactions?: number, steps?: number): ChallengeOutcome => {
     const out: ChallengeOutcome = { solved, responseMs, attempts };
     if (motion !== undefined) out.motion = motion;
     if (interactions !== undefined) out.interactions = interactions;
+    if (steps !== undefined) out.steps = steps;
     return out;
   };
   const seqs: ChallengeOutcome[][] = [
@@ -60,6 +74,11 @@ function build(): Table {
     [o(false, 1000, 1, 1, 50)],
     [o(true, 45000, 6, 0, 0)],
     [o(true, 25000, 3, 0.4, 3)],
+    [o(true, 75000, 0, undefined, 3, 3)],
+    [o(true, 60000, 1, 0.5, 4, 3), o(true, 90000, 2, undefined, 5, 3)],
+    [o(true, 60000, 0, undefined, 3, 3), o(true, 8000, 0)],
+    [o(true, 200000, 4, 0, 7, 3)],
+    [o(false, 30000, 2, 1, 5, 3), o(true, 30000, 0, 1, 3, 3)],
   ];
   const sequences = seqs.map((s) => {
     const r = accumulateWakeEvidence(s);

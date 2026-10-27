@@ -203,7 +203,8 @@ public class WakeConfidenceTest {
                 in.getDouble("correctness"), in.getDouble("responseMs"), in.getDouble("attempts"),
                 in.has("motion") ? in.getDouble("motion") : null,
                 in.has("interactions") ? in.getDouble("interactions") : null,
-                in.has("solved") ? in.getBoolean("solved") : null));
+                in.has("solved") ? in.getBoolean("solved") : null,
+                in.has("steps") ? in.getDouble("steps") : null));
             assertEquals("signals " + in, c.getInt("score"), r.score);
             assertEquals("signals " + in, c.getBoolean("gated"), r.gated);
             checked++;
@@ -217,13 +218,15 @@ public class WakeConfidenceTest {
                 JSONObject o = in.getJSONObject(k);
                 outcomes.add(new Outcome(o.getBoolean("solved"), o.getDouble("responseMs"), o.getDouble("attempts"),
                     o.has("motion") ? o.getDouble("motion") : null,
-                    o.has("interactions") ? o.getDouble("interactions") : null));
+                    o.has("interactions") ? o.getDouble("interactions") : null,
+                    o.has("steps") ? o.getDouble("steps") : null));
             }
             Result r = WakeConfidence.accumulate(outcomes);
             assertEquals("sequence " + in, c.getInt("score"), r.score);
             assertEquals("sequence " + in, c.getBoolean("gated"), r.gated);
             checked++;
         }
-        assertEquals(3456 + 12, checked);
+        // 140 signals and 5 sequences with several answers per responseMs (three sums).
+        assertEquals(3456 + 140 + 12 + 5, checked);
     }
 }

@@ -18,6 +18,8 @@ final class Verification {
     final double correctness;
     /** Time on task across the sequence, which is what the score is based on. */
     final long responseMs;
+    /** How many answers responseMs covers (sums); the server judges speed per answer. */
+    final int steps;
     final int attempts;
     final List<String> methods;
     /** The phone's own score. Not sent: the server never takes a client's score. */
@@ -25,11 +27,17 @@ final class Verification {
     /** When the check was passed (or Stop pressed, if there was none). */
     final long at;
 
+    /** One answer per challenge. */
     Verification(boolean challenged, boolean solved, double correctness, long responseMs, int attempts, List<String> methods, int score, long at) {
+        this(challenged, solved, correctness, responseMs, methods.size(), attempts, methods, score, at);
+    }
+
+    Verification(boolean challenged, boolean solved, double correctness, long responseMs, int steps, int attempts, List<String> methods, int score, long at) {
         this.challenged = challenged;
         this.solved = solved;
         this.correctness = correctness;
         this.responseMs = responseMs;
+        this.steps = steps;
         this.attempts = attempts;
         this.methods = methods;
         this.score = score;
@@ -38,7 +46,7 @@ final class Verification {
 
     /** Stopped with no check, because the ring plan didn't ask for one. */
     static Verification none(long at) {
-        return new Verification(false, false, 0, 0, 0, new ArrayList<>(), -1, at);
+        return new Verification(false, false, 0, 0, 0, 0, new ArrayList<>(), -1, at);
     }
 
     JSONObject toJson() {

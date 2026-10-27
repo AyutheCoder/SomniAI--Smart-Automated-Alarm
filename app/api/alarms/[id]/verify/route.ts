@@ -13,6 +13,8 @@ interface VerifyBody {
   confidence?: number;
   methods?: string[];
   responseMs?: number;
+  /** How many answers responseMs covers (sums in a maths challenge); speed is judged per answer. */
+  steps?: number;
   attempts?: number;
   motion?: number;
   /** Did the user actually solve every challenge in the sequence? */
@@ -32,6 +34,9 @@ function invalidSignals(body: VerifyBody): string | null {
   }
   if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
     return "responseMs must be a non-negative number";
+  }
+  if (body.steps !== undefined && !isInt(body.steps, 1, 1000)) {
+    return "steps must be a whole number from 1";
   }
   if (body.attempts !== undefined && !isInt(body.attempts, 0, 1000)) {
     return "attempts must be a non-negative whole number";
@@ -81,6 +86,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       correctness: body.correctness ?? (solved ? 1 : 0),
       solved,
       responseMs: body.responseMs ?? 45000,
+      steps: body.steps,
       attempts: body.attempts ?? 1,
       motion: body.motion,
     }).score;
@@ -99,6 +105,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
         alarmId: id,
         methods: body.methods ?? [],
         responseMs: body.responseMs ?? null,
+        steps: body.steps ?? null,
         attempts: body.attempts ?? null,
         motion: body.motion ?? null,
         solved: body.solved ?? null,

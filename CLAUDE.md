@@ -36,7 +36,7 @@ fixes it natively on Android.
 | Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 need the dev server and a signed-in phone). The app's own record of the 2.7 night ring (2026-10-25 09:00, id `night-test`) is still on the phone: read it when it's next connected. The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
-| Open (wake check) | Tester on 2026-10-25: "the question is very easy". One sum from 6x6 to 13x13, and one quick correct answer clears minConfidence 70. Harder sums, more of them, or a higher bar is a product decision no prompt covers yet |
+| Wake check (after 2.7, tester's request) | Three sums in a row, each a × b + c × d (2-9 times 3-12), the same on web and phone (`lib/mathChallenge.ts`, `MathChallenge.java`). Speed is now judged per answer (`steps`), on both clients and the server: this also raised the scores of existing multi-challenge sequences, which had been judged as one slow answer. Not yet tried on the phone |
 | Branch for development | `develop` |
 
 Update this table after each prompt, in the same commit.

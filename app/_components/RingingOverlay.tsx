@@ -42,6 +42,8 @@ export interface ResolveResult {
   responseMs: number;
   /** Time spent on the challenges themselves (lib/ringFlow.ts, timeOnTaskMs). */
   timeOnTaskMs: number;
+  /** How many answers that time covers (lib/ringFlow.ts, steps). */
+  steps: number;
   methods: ChallengeType[];
   attempts: number;
   motion?: number;
@@ -172,6 +174,7 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
       verified: result.verified,
       responseMs: elapsed,
       timeOnTaskMs: result.collected.reduce((s, r) => s + r.responseMs, 0),
+      steps: result.collected.reduce((s, r) => s + Math.max(1, r.steps ?? 1), 0),
       methods,
       attempts: totalAttempts,
       motion,
@@ -201,6 +204,7 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
       attempts: r.attempts,
       motion: r.motion,
       interactions: r.interactions,
+      steps: r.steps,
     })));
     setConfidence(score);
     if (passedAll && meetsThreshold(score, minConfidence)) {

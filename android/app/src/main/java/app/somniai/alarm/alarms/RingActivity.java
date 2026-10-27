@@ -143,8 +143,7 @@ public class RingActivity extends Activity {
     }
 
     private void showProblem(String note) {
-        WakeCheck.Plan plan = check.plan();
-        progress.setText(plan.count > 1 ? "Problem " + check.position() + " of " + plan.count : "");
+        progress.setText("Sum " + check.position() + " of " + check.sums());
         question.setText(check.question() + " = ?");
         answer.setText("");
         answer.requestFocus();

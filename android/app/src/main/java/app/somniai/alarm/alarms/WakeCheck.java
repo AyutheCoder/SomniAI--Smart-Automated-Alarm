@@ -9,7 +9,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * The native wake check: maths problems on the ring screen, scored with
+ * The native wake check: maths on the ring screen, scored with
  * {@link WakeConfidence}, gated the way the web's RingingOverlay gates it. The
  * alarm is dismissed only when every challenge in the sequence was solved
  * <em>and</em> the score meets the ring plan's minConfidence. A wrong answer
@@ -77,9 +77,9 @@ final class WakeCheck {
     }
 
     enum Step {
-        /** Wrong answer: a new problem, an attempt counted. */
+        /** Wrong answer: a new sum, an attempt counted. */
         WRONG,
-        /** Right answer, and there is another challenge in the sequence. */
+        /** Right answer, and there is another sum to do. */
         NEXT,
         /** All solved and the score meets minConfidence: dismiss. */
         PASSED,
@@ -90,14 +90,25 @@ final class WakeCheck {
     private final Plan plan;
     private final Random random;
     private final List<WakeConfidence.Outcome> outcomes = new ArrayList<>();
+    /** The sum on screen, and the challenge it belongs to. */
     private MathChallenge current;
+    private long challengeStartedAt;
+    private int sumsSolved;
+    private int wrongAnswers;
     private int totalAttempts;
     private int lastScore = -1;
 
     WakeCheck(Plan plan, Random random, long now) {
         this.plan = plan;
         this.random = random;
-        current = new MathChallenge(random, now);
+        startChallenge(now);
+    }
+
+    private void startChallenge(long now) {
+        current = new MathChallenge(random);
+        challengeStartedAt = now;
+        sumsSolved = 0;
+        wrongAnswers = 0;
     }
 
     Plan plan() {
@@ -108,9 +119,14 @@ final class WakeCheck {
         return current.question();
     }
 
-    /** 1-based position in the sequence, for "Problem 2 of 3". */
+    /** 1-based position among all the sums in the sequence, for "Sum 2 of 3". */
     int position() {
-        return outcomes.size() + 1;
+        return outcomes.size() * MathChallenge.SUMS + sumsSolved + 1;
+    }
+
+    /** How many sums the sequence has. */
+    int sums() {
+        return plan.count * MathChallenge.SUMS;
     }
 
     /** The score of the last complete sequence, or -1 before there was one. */
@@ -120,13 +136,22 @@ final class WakeCheck {
 
     Step submit(String answer, long now) {
         if (!current.check(answer)) {
-            current = current.next(random, now);
+            // A new sum; the clock keeps running from the challenge's first, as on the web.
+            current = new MathChallenge(random);
+            wrongAnswers++;
             return Step.WRONG;
         }
-        outcomes.add(current.outcome(now));
-        totalAttempts += current.wrongAnswers();
+        sumsSolved++;
+        if (sumsSolved < MathChallenge.SUMS) {
+            current = new MathChallenge(random);
+            return Step.NEXT;
+        }
+        // The web reports attempts as wrong answers, interactions as all answers.
+        outcomes.add(new WakeConfidence.Outcome(true, now - challengeStartedAt, wrongAnswers, null,
+            (double) (wrongAnswers + MathChallenge.SUMS), (double) MathChallenge.SUMS));
+        totalAttempts += wrongAnswers;
         if (outcomes.size() < plan.count) {
-            current = new MathChallenge(random, now);
+            startChallenge(now);
             return Step.NEXT;
         }
         WakeConfidence.Result r = WakeConfidence.accumulate(outcomes);
@@ -141,7 +166,7 @@ final class WakeCheck {
         // As the web does: the next sequence is scored on its own.
         outcomes.clear();
         totalAttempts = 0;
-        current = new MathChallenge(random, now);
+        startChallenge(now);
         return Step.RETRY;
     }
 
@@ -151,7 +176,7 @@ final class WakeCheck {
         for (WakeConfidence.Outcome o : outcomes) {
             timeOnTask += (long) o.responseMs;
         }
-        return new Verification(true, true, 1.0, timeOnTask, totalAttempts,
+        return new Verification(true, true, 1.0, timeOnTask, outcomes.size() * MathChallenge.SUMS, totalAttempts,
             Collections.nCopies(outcomes.size(), "math"), lastScore, now);
     }
 }
