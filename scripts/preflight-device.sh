@@ -20,7 +20,17 @@ OUT="${OUT:-preflight-results.md}"
 sh_() { "$ADB" shell "$@" 2>&1 | tr -d '\r'; }
 say() { echo "preflight: $*"; }
 FAILED=0
+COVERED=""
 row() {
+  local result=$2
+  # A fix that couldn't be tapped because a system window lay over the screen
+  # (the API 26 emulator's System UI crash dialog) is the emulator's, not SomniAI's.
+  # Only when the setting was still detected: a covering window never excuses a wrong verdict.
+  if [[ "$result" == FAIL* ]] && [ -n "$COVERED" ] && [[ "$3" == "detected: fail;"* || "$3" == found:* ]]; then
+    result="Skipped: $COVERED lies over the screen"
+  fi
+  COVERED=""
+  set -- "$1" "$result" "$3"
   printf '| %s | %s | %s | %s |\n' "$1" "$2" "$3" "$(date '+%Y-%m-%d %H:%M')" >> "$OUT"
   say "$1: $2"
   [[ "$2" == FAIL* ]] && FAILED=$((FAILED + 1))
@@ -28,7 +38,16 @@ row() {
 }
 
 # Every verdict now, "exact_alarm=pass notifications=pass ...", without opening the screen.
-verdicts() { sh_ am broadcast -a app.somniai.alarm.debug.PREFLIGHT $HOOK --ez open false | grep -o 'data="[^"]*"' | sed 's/data="//; s/"$//'; }
+# Retried: taking a permission away (exact alarms on 12L) restarts the app, and a
+# broadcast in that moment comes back empty.
+verdicts() {
+  local v
+  for _ in 1 2 3 4 5 6 7 8; do
+    v=$(sh_ am broadcast -a app.somniai.alarm.debug.PREFLIGHT $HOOK --ez open false | grep -o 'data="[^"]*"' | sed 's/data="//; s/"$//')
+    [ -n "$v" ] && { echo "$v"; return; }
+    sleep 1
+  done
+}
 verdict() { verdicts | tr ' ' '\n' | grep "^$1=" | cut -d= -f2; }
 # By am start: a receiver can't open a screen while the app is in the background.
 # Fresh each time: an earlier task may still have a settings page on top.
@@ -52,6 +71,11 @@ back_to_check() { sh_ input keyevent KEYCODE_BACK >/dev/null; sleep 1; }
 # nothing (once, it tapped the home screen and opened another app).
 tap() {
   for _ in 1 2 3 4 5 6 7 8; do
+    local focus; focus=$(sh_ dumpsys window | grep -m1 "mCurrentFocus")
+    if [[ "$focus" == *"Application Error"* || "$focus" == *"Not Responding"* ]]; then
+      COVERED=$(grep -o "Window{[^}]*}" <<<"$focus")
+      return 1
+    fi
     in_front || return 1
     sh_ uiautomator dump /sdcard/preflight-ui.xml >/dev/null
     local b; b=$(sh_ cat /sdcard/preflight-ui.xml | grep -o "content-desc=\"$1\"[^>]*bounds=\"\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]\"" | grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' | head -1)
@@ -228,7 +252,8 @@ c_manufacturer() {
 # (8.5 hours before), so the check runs a minute after it is set. Once with the
 # battery failing (a notification that opens the check), once with everything
 # passing (no notification).
-bedtime_notification() { sh_ dumpsys notification | grep -c "pkg=$PKG user=[^ ]* id=7002"; }
+# From the app's own active notifications: dumpsys's list kept removed ones on Android 8.
+bedtime_notification() { verdict bedtime_notification; }
 c_bedtime() {
   local posted opens quiet
   sh_ dumpsys battery unplug >/dev/null

@@ -73,11 +73,21 @@ public class DebugAlarmReceiver extends BroadcastReceiver {
                     Log.i(AlarmScheduler.TAG, "debug: preflight " + c.id + " " + c.status.name().toLowerCase() + ": " + c.detail);
                     verdicts.append(c.id).append('=').append(c.status.name().toLowerCase()).append(' ');
                 }
-                setResultData(verdicts.toString().trim());
+                android.app.NotificationManager nm = context.getSystemService(android.app.NotificationManager.class);
                 if (intent.getBooleanExtra("clear", false)) {
                     // The bedtime notification, so a test can see whether a new one comes.
-                    context.getSystemService(android.app.NotificationManager.class).cancel(PreflightReceiver.NOTIFICATION_ID);
+                    nm.cancel(PreflightReceiver.NOTIFICATION_ID);
                 }
+                // Whether it is showing, from the app's own active list: dumpsys's
+                // list also kept removed ones on Android 8.
+                int showing = 0;
+                for (android.service.notification.StatusBarNotification n : nm.getActiveNotifications()) {
+                    if (n.getId() == PreflightReceiver.NOTIFICATION_ID) {
+                        showing++;
+                    }
+                }
+                verdicts.append("bedtime_notification=").append(showing);
+                setResultData(verdicts.toString().trim());
                 if (intent.getBooleanExtra("open", true)) {
                     context.startActivity(new Intent(context, PreflightActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 }
