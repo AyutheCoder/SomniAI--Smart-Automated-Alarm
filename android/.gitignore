@@ -62,7 +62,9 @@ captures/
 .cxx/
 
 # Google Services (e.g. APIs or Firebase)
-# google-services.json
+# Not committed: it names the Firebase project, and this repository is public
+# (CLAUDE.md, rule 1). Each developer downloads their own (BUDDY.md).
+google-services.json
 
 # Freeline
 freeline.py

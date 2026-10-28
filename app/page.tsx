@@ -12,12 +12,14 @@ import { resolveRingPlan } from "@/lib/ringPlan";
 import { connectNative, type NativeConnection, type NativeSyncStatus } from "@/lib/nativeSync";
 import { SomniAlarm } from "@/lib/nativeAlarm";
 import { hasPreflight, preflightLine } from "@/lib/nativePreflight";
+import { hasPush, registerPush, type PushRegistration } from "@/lib/nativeBuddy";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
 import BedtimeReminder from "./_components/BedtimeReminder";
+import BuddyPanel from "./_components/BuddyPanel";
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   low: "text-slate-400 bg-slate-500/10",
@@ -97,6 +99,8 @@ export default function Home() {
   const [native, setNative] = useState<NativeConnection | null>(null);
   const [nativeStatus, setNativeStatus] = useState<NativeSyncStatus>({ state: "idle" });
   const nativeSync = native && "sync" in native ? native.sync : null;
+  // This phone's push token for wake-buddy alerts: null in a browser.
+  const [push, setPush] = useState<PushRegistration | null>(null);
   // True only while the alarm list is the server's own: a list that failed to
   // load, or the offline cache, must never be sent to the phone, which would
   // remove the alarms missing from it.
@@ -112,6 +116,27 @@ export default function Home() {
       live = false;
     };
   }, []);
+
+  // In the app, with plugin API 4: send this phone's push token to the
+  // server, every time the app opens (a token Firebase replaced goes then).
+  useEffect(() => {
+    if (!userId || !native) {
+      return;
+    }
+    if (!hasPush(native)) {
+      setPush("sync" in native ? { state: "unavailable", reason: "This version of the app can't receive alerts. Update it." } : null);
+      return;
+    }
+    let live = true;
+    void registerPush().then((r) => {
+      if (live) {
+        setPush(r);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, [userId, native]);
 
   const loadData = useCallback(async () => {
     // Wait for the session: the device's own copy of the alarms is per user.
@@ -509,6 +534,8 @@ export default function Home() {
       <DataSourcesPanel />
 
       <SmartSchedulePanel onChange={loadData} />
+
+      {userId && <BuddyPanel push={push} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">

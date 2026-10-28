@@ -60,3 +60,9 @@ paper/authors.local.tex
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Firebase (wake-buddy push, BUDDY.md): the app config names the project, and
+# the service-account key is a secret. Neither is ever committed.
+google-services.json
+*-firebase-adminsdk-*.json
+*service-account*.json

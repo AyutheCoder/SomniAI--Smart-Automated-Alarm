@@ -48,10 +48,11 @@ for (const file of walk(join(ROOT, "tests", "api"), (f) => f.endsWith(".test.ts"
 }
 
 describe("API route coverage", () => {
-  // DEVELOPMENT_PLAN.md says 22; there are 23 route files. Update this count
-  // deliberately when adding or removing a route, alongside its tests.
-  it("finds all 23 route files", () => {
-    expect(routes).toHaveLength(23);
+  // DEVELOPMENT_PLAN.md says 22; there were 23 route files, and 3.2 (wake
+  // buddy) added 7. Update this count deliberately when adding or removing a
+  // route, alongside its tests.
+  it("finds all 30 route files", () => {
+    expect(routes).toHaveLength(30);
   });
 
   it.each(routes.flatMap((r) => r.methods.map((m) => [`${m} /api/${r.key}`, r.key, m] as const)))(

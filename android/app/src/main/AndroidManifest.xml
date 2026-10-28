@@ -82,6 +82,16 @@
             android:label="Tonight's alarm check"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
 
+        <!-- Wake-buddy alerts by Firebase Cloud Messaging (prompt 3.2). Only
+             Google Play services delivers MESSAGING_EVENT, so not exported. -->
+        <service
+            android:name=".alarms.BuddyMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Reschedules every alarm (alarms/RescheduleReceiver.java says why
              for each action). All are protected broadcasts sent by the
              system, which reaches a non-exported receiver. -->

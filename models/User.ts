@@ -20,6 +20,13 @@ export interface UserDocument {
       channel: "email" | "sms";
       value: string;
     };
+    /** Wake buddy settings (lib/buddy.ts BuddySettings). */
+    buddy?: {
+      alertAfterMinutes?: number;
+      ordinaryAlarms?: boolean;
+      phone?: string;
+      sharePhone?: boolean;
+    };
   };
   createdAt: Date;
   updatedAt: Date;
@@ -56,6 +63,12 @@ const UserSchema = new Schema<UserDocument>({
       name: { type: String },
       channel: { type: String, enum: ["email", "sms"] },
       value: { type: String },
+    },
+    buddy: {
+      alertAfterMinutes: { type: Number, min: 5, max: 60 },
+      ordinaryAlarms: { type: Boolean },
+      phone: { type: String, maxlength: 20 },
+      sharePhone: { type: Boolean },
     },
   },
 }, { timestamps: true });

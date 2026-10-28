@@ -557,3 +557,30 @@ What a shell can't change, or needs a particular phone:
 | 4 | On a Samsung, Oppo, Realme, Vivo or OnePlus phone: open the check and tap the manufacturer's "Open settings" | It opens that brand's autostart or battery screen, or SomniAI's own app info if this version has none of the known ones; note which |
 | 5 | On an Android 12 or 12L phone: turn off Settings > Apps > Special app access > Alarms & reminders for SomniAI | "Alarms & reminders: FIX THIS", "Allow" opens that page (CI covers this on the API 32 emulator) |
 | 6 | Signed in, with the dev server: the app's alarm list | "Tonight's alarm check: all clear" (or how many things), and "Check and fix" opens the check |
+
+## 3.2 Wake buddy
+
+The pairing, the trigger timing and the rate limit are tested without a phone
+(`BUDDY.md`, "Tests"). What only phones show: the push arrives, and its button
+calls. This needs Firebase set up (`BUDDY.md`, "Setup") and two phones signed
+in to two accounts on the same dev server.
+
+**Not run yet: waiting for the Firebase setup.**
+
+### On two phones: checklist
+
+Both phones on the same Wi-Fi as the laptop; `npm run dev`, `npm run buddy:cron`
+running; the app built with `CAP_SERVER_URL=http://<laptop's address>:3000` so
+both phones reach it, and installed on both.
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Phone A, account A: Wake buddy > "Get a code". Phone B, account B: enter it, "Ask to pair" | B shows "Waiting for A to accept"; nothing is paired yet |
+| 2 | Phone A: "Accept" | Both show the other as their wake buddy; both say "This phone receives your buddy's alerts" |
+| 3 | On A: add a phone number and turn on "Put my number in my alerts"; set the delay to 5 minutes. Set a critical alarm (a task marked must-not-miss, or the wake check at 80 % or more) 2 minutes ahead | — |
+| 4 | Let it ring on phone A. Don't answer it | 5 minutes after the alarm, phone B shows "A hasn't confirmed they're awake", with "Call A" and "Open SomniAI"; `buddy:cron` prints "1 sent" |
+| 5 | Phone B: tap "Call A" | The dialler opens with A's number filled in; nothing is dialled until B presses call |
+| 6 | Wait 10 more minutes | No second alert for that alarm |
+| 7 | A sets another critical alarm and answers it within the 5 minutes | No alert |
+| 8 | An ordinary alarm on A, not answered | No alert. Turn on "Ordinary alarms too", repeat: an alert (once 30 minutes have passed since the last) |
+| 9 | Phone B: "Unpair" | Both show no buddy; an unanswered critical alarm on A alerts nobody |

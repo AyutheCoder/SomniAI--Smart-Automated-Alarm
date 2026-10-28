@@ -90,9 +90,9 @@ public class SomniAlarmPlugin extends Plugin {
      * What this native code offers, for the web app's check before it relies on
      * it (lib/nativeSync.ts). Raised when the plugin gains something the web app
      * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
-     * bedtime check (3.1).
+     * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2).
      */
-    static final int API = 3;
+    static final int API = 4;
 
     @PluginMethod
     public void version(PluginCall call) {
@@ -113,6 +113,30 @@ public class SomniAlarmPlugin extends Plugin {
             out.put(o);
         }
         call.resolve(new JSObject().put("checks", out).put("attention", Preflight.attention(checks)));
+    }
+
+    /**
+     * This phone's push token, for wake-buddy alerts (the page sends it to the
+     * server). A build without google-services.json has no Firebase: it says
+     * so rather than failing.
+     */
+    @PluginMethod
+    public void pushToken(PluginCall call) {
+        if (com.google.firebase.FirebaseApp.getApps(getContext()).isEmpty()) {
+            call.resolve(new JSObject().put("available", false)
+                .put("reason", "Push isn't set up in this build of the app (no Firebase configuration)."));
+            return;
+        }
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+            if (task.isSuccessful() && task.getResult() != null) {
+                call.resolve(new JSObject().put("available", true).put("token", task.getResult()));
+            }
+            else {
+                Exception e = task.getException();
+                call.resolve(new JSObject().put("available", false)
+                    .put("reason", "This phone couldn't get a push token" + (e == null ? "" : ": " + e.getMessage())));
+            }
+        });
     }
 
     /** Opens "Tonight's alarm check", where each failing setting has its fix. */

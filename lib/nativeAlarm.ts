@@ -112,6 +112,8 @@ export interface SomniAlarmPlugin {
   openPreflight(): Promise<void>;
   /** API 3: the wake plan's bedtime (ISO), or null to clear it; the check runs half an hour before. */
   setBedtime(options: { at: string | null }): Promise<{ bedtime: string | null }>;
+  /** API 4: this phone's push token for wake-buddy alerts, or why there isn't one. */
+  pushToken(): Promise<{ available: boolean; token?: string; reason?: string }>;
 }
 
 export interface PreflightCheck {
