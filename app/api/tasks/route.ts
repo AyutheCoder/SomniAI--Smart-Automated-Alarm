@@ -5,6 +5,7 @@ import { getUserId } from "@/lib/session";
 import { Task } from "@/models/Task";
 import { analyzeSemantic } from "@/lib/aiClient";
 import { parseWhen } from "@/lib/whenParser";
+import { invalidDue } from "@/lib/taskFields";
 
 interface CreateTaskBody {
   title?: string;
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
     const title = (body.title || "").trim();
     if (!title) {
       return jsonError("Title is required", 422);
+    }
+    const dueError = invalidDue(body);
+    if (dueError) {
+      return jsonError(dueError, 422);
     }
     const analysisText = [title, body.description].filter(Boolean).join(". ");
     let semantic;

@@ -55,3 +55,17 @@ paper/authors.local.tex
 
 # Identity list for scripts/check-anonymity.mjs. Never commit.
 .anonymity-terms.local
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Firebase (wake-buddy push, BUDDY.md): the app config names the project, and
+# the service-account key is a secret. Neither is ever committed.
+google-services.json
+*-firebase-adminsdk-*.json
+*service-account*.json
+
+# Local MongoDB data for npm run dev:phone (scripts/dev-phone.mjs).
+/.data/

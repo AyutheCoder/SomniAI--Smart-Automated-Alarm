@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Smartphone } from "lucide-react";
 import type { ChallengeProps } from "./types";
 
@@ -35,8 +35,14 @@ export default function ShakeChallenge({ onComplete }: ChallengeProps) {
       interactions,
     });
   };
+  // onComplete is a new function on every parent render; reading finish
+  // through a ref keeps the listener (and its shake count) attached once.
+  const finishRef = useRef(finish);
+  useEffect(() => {
+    finishRef.current = finish;
+  });
 
-  const attachListener = () => {
+  const attachListener = useCallback(() => {
     let count = 0;
     const handler = (e: DeviceMotionEvent) => {
       const acc = e.accelerationIncludingGravity;
@@ -49,13 +55,13 @@ export default function ShakeChallenge({ onComplete }: ChallengeProps) {
         setProgress(Math.min(1, count / required.current));
         if (count >= required.current) {
           window.removeEventListener("devicemotion", handler);
-          finish(count);
+          finishRef.current(count);
         }
       }
     };
     window.addEventListener("devicemotion", handler);
     return () => window.removeEventListener("devicemotion", handler);
-  };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("DeviceMotionEvent" in window)) {
@@ -70,7 +76,7 @@ export default function ShakeChallenge({ onComplete }: ChallengeProps) {
     }
     setSupported(true);
     return attachListener();
-  }, []);
+  }, [attachListener]);
 
   async function requestPermission() {
     const ctor = window.DeviceMotionEvent as DeviceMotionEventCtor;

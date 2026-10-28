@@ -6,6 +6,8 @@ export interface BehaviorEventDocument {
   type: BehaviorEventType;
   value?: number;
   meta?: Record<string, unknown>;
+  /** Events the routes record are live; the simulator's are not, and never reach a model. */
+  source: "live" | "simulated";
   at: Date;
 }
 const BehaviorEventSchema = new Schema<BehaviorEventDocument>({
@@ -13,6 +15,7 @@ const BehaviorEventSchema = new Schema<BehaviorEventDocument>({
   type: { type: String, required: true },
   value: { type: Number },
   meta: { type: Schema.Types.Mixed },
+  source: { type: String, enum: ["live", "simulated"], default: "live" },
   at: { type: Date, default: Date.now, index: true },
 });
 export const BehaviorEvent = models.BehaviorEvent ||

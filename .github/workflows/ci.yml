@@ -1,0 +1,172 @@
+# The gate from DEVELOPMENT_PLAN.md Part 4, on every push and pull request to
+# develop and main. Needs no secrets: tests use an in-memory MongoDB, no AI
+# Brain and no Google sign-in, and the build reads no environment at all.
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  # requirements-lock.txt was generated on 3.13.
+  PYTHON_VERSION: "3.13"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  verify:
+    name: Web gate (lint, tsc, vitest, build)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # The API tests download a MongoDB binary into node_modules/.cache; keep
+      # it between runs. After `npm ci`, which would otherwise delete it.
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm run verify
+
+  ai-brain:
+    name: AI Brain (pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ai-brain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ai-brain/requirements-lock.txt
+      - run: pip install -r requirements-lock.txt
+      # Prints its summary even when quiet; the 28 LifeSnaps tests skip
+      # without the dataset, and the slow studies are deselected by pytest.ini.
+      - run: python -m pytest -p no:warnings -rN
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/mongodb-memory-server
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium's system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run e2e
+      - name: Keep traces of failed flows
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+
+  android:
+    name: Android (unit tests, debug APK)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      # Capacitor's Android library compiles for Java 21 (see ANDROID.md).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      # The runner has an Android SDK, but not necessarily the platform this
+      # project compiles against (android/variables.gradle: compileSdk 36).
+      - name: Install SDK platform 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "platform-tools" > /dev/null
+      - run: npm ci
+      - run: npm run android:doctor
+      - run: npm run android:test
+      - run: npm run android:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk
+          # Kept relative to apk/: debug/app-debug.apk and the on-device tests'
+          # androidTest/debug/app-debug-androidTest.apk.
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          retention-days: 7
+
+  android-emulator:
+    name: Android ${{ matrix.api-level }} (opens; alarm fires and rings; on-device tests; bedtime check)
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # One per exact-alarm regime: 8.0 (no permission), 12L (user-controlled
+        # SCHEDULE_EXACT_ALARM), 15 (USE_EXACT_ALARM).
+        api-level: [26, 32, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: debug-apk
+          path: apk
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          # The bedtime check last: it needs the app installed, and changes (then restores) settings.
+          script: bash scripts/android-smoke.sh apk/debug/app-debug.apk android-smoke.png && bash scripts/android-alarm-check.sh apk/debug/app-debug.apk && bash scripts/android-instrument.sh apk/debug/app-debug.apk apk/androidTest/debug/app-debug-androidTest.apk && adb install -r apk/debug/app-debug.apk && OUT=preflight-results.md bash scripts/preflight-device.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-smoke-screenshot-api${{ matrix.api-level }}
+          path: |
+            android-smoke.png
+            preflight-results.md
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: lets adb set and inspect native alarms for the device
+     checks (ANDROID.md, "Checking alarms on a device"). Guarded by DUMP, which
+     adb's shell holds and ordinary apps cannot get. Not in release builds.
+     Direct-boot aware like the alarm itself: after a reboot, before the first
+     unlock, Android holds back broadcasts to receivers that aren't, so the
+     matrix's "stop" waited until the phone was unlocked (Xiaomi, 2026-10-24). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <receiver
+            android:name=".alarms.DebugAlarmReceiver"
+            android:directBootAware="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="app.somniai.alarm.debug.SCHEDULE" />
+                <action android:name="app.somniai.alarm.debug.CANCEL" />
+                <action android:name="app.somniai.alarm.debug.DISMISS" />
+                <action android:name="app.somniai.alarm.debug.LIST" />
+                <action android:name="app.somniai.alarm.debug.SYNC" />
+                <action android:name="app.somniai.alarm.debug.PREFLIGHT" />
+                <action android:name="app.somniai.alarm.debug.VOLUME" />
+            </intent-filter>
+        </receiver>
+        <!-- The bedtime check screen, for adb's `am start` (scripts/preflight-device.sh):
+             a receiver can't open it while the app is in the background, which
+             is where revoking a permission leaves it. Guarded by DUMP too. -->
+        <activity-alias
+            android:name=".alarms.DebugPreflightScreen"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:targetActivity=".alarms.PreflightActivity" />
+    </application>
+</manifest>

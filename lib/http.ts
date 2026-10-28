@@ -5,9 +5,15 @@ export function jsonOk<T>(data: T, init?: ResponseInit) {
 export function jsonError(message: string, status: number = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
+/**
+ * The request body if it is a JSON object, else null. Every route takes an
+ * object; a bare string, number or array used to reach `key in body` and
+ * crash the route with a 500.
+ */
 export async function parseJson<T>(req: NextRequest): Promise<T | null> {
   try {
-    return (await req.json()) as T;
+    const body: unknown = await req.json();
+    return body !== null && typeof body === "object" && !Array.isArray(body) ? (body as T) : null;
   }
   catch {
     return null;
@@ -100,7 +106,9 @@ export function routeError(err: unknown) {
   // (MongoServerSelectionError vs MongooseServerSelectionError), so match the
   // family rather than an exhaustive list of exact names.
   const isConnectionFailure =
-    /^Mongoo?se?(ServerSelection|Network|NotConnected|Timeout|Topology)/.test(name) ||
+    // "Mongo" or "Mongoose", then the condition. This was /^Mongoo?se?(...)/,
+    // which demands an "s" after "Mongo" and so missed every driver error.
+    /^Mongo(ose)?(ServerSelection|Network|NotConnected|Timeout|Topology)/.test(name) ||
     /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|server selection|topology was destroyed|buffering timed out/i.test(
       e.message ?? "",
     );

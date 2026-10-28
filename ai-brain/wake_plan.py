@@ -319,11 +319,11 @@ def plan_wake(payload: dict | None) -> dict[str, Any]:
         if shift_min > 5:
             summary = (
                 f"Asleep by {_hhmm(bedtime)} - about {shift_min} min earlier than "
-                f"your usual - reaches {achieved:.0%} wake reliability."
+                f"your usual - reaches {achieved:.0%} wake-time regularity."
             )
         else:
             summary = (
-                f"Your usual bedtime already reaches {achieved:.0%} wake reliability."
+                f"Your usual bedtime already reaches {achieved:.0%} wake-time regularity."
             )
     elif combined_reliability >= target:
         names = ", ".join(s["label"].lower() for s in combined_steps)

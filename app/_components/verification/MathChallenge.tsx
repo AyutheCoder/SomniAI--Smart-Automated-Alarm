@@ -2,37 +2,40 @@
 
 import { useMemo, useState } from "react";
 import { BrainCircuit } from "lucide-react";
+import { isAnswer, makeProblem, SUMS } from "@/lib/mathChallenge";
 import type { ChallengeProps } from "./types";
-
-function makeProblem() {
-  const a = Math.floor(Math.random() * 8) + 6;
-  const b = Math.floor(Math.random() * 8) + 6;
-  return { question: `${a} × ${b}`, answer: a * b };
-}
 
 export default function MathChallenge({ onComplete }: ChallengeProps) {
   const startedAt = useMemo(() => Date.now(), []);
-  const [problem, setProblem] = useState(makeProblem);
+  const [problem, setProblem] = useState(() => makeProblem());
+  const [solved, setSolved] = useState(0);
   const [input, setInput] = useState("");
   const [attempts, setAttempts] = useState(0);
-  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (Number(input) === problem.answer) {
-      onComplete({
-        type: "math",
-        passed: true,
-        attempts,
-        responseMs: Date.now() - startedAt,
-        interactions: attempts + 1,
-      });
+    if (isAnswer(input, problem)) {
+      if (solved + 1 >= SUMS) {
+        onComplete({
+          type: "math",
+          passed: true,
+          attempts,
+          responseMs: Date.now() - startedAt,
+          // Every answer given, right or wrong.
+          interactions: attempts + SUMS,
+          steps: SUMS,
+        });
+        return;
+      }
+      setSolved(solved + 1);
+      setNote("Right. Next one.");
     } else {
       setAttempts((a) => a + 1);
-      setError("Incorrect — try again.");
-      setProblem(makeProblem());
-      setInput("");
+      setNote("Incorrect — here's a new one.");
     }
+    setProblem(makeProblem());
+    setInput("");
   }
 
   return (
@@ -41,7 +44,8 @@ export default function MathChallenge({ onComplete }: ChallengeProps) {
         <BrainCircuit className="h-8 w-8 text-sky-300" />
       </div>
       <h3 className="text-lg font-semibold text-white">Solve to continue</h3>
-      <p className="mt-4 text-4xl font-bold tracking-wider text-white">
+      <p className="mt-1 text-sm text-slate-400">Sum {solved + 1} of {SUMS}</p>
+      <p className="mt-4 text-3xl font-bold tracking-wider text-white">
         {problem.question} = ?
       </p>
       <form onSubmit={submit} className="mt-5 flex flex-col gap-3">
@@ -53,7 +57,7 @@ export default function MathChallenge({ onComplete }: ChallengeProps) {
           className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-center text-2xl text-white outline-none focus:border-sky-400"
           placeholder="Answer"
         />
-        {error && <p className="text-sm text-rose-400">{error}</p>}
+        {note && <p className={`text-sm ${note.startsWith("Right") ? "text-emerald-400" : "text-rose-400"}`}>{note}</p>}
         <button
           type="submit"
           className="rounded-xl bg-sky-500 px-6 py-3 font-semibold text-white transition hover:bg-sky-400"

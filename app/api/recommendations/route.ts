@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { jsonError, jsonOk, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { buildUserSignals, type UserSignals } from "@/lib/aiFeatures";
@@ -14,7 +13,7 @@ function neutralSignals(): UserSignals {
   };
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {

@@ -10,11 +10,24 @@ import {
   Info,
   Moon,
   Repeat,
-  Sparkles,
   TrendingUp,
   VolumeX,
   type LucideIcon,
 } from "lucide-react";
+
+import PredictionOrigin from "./PredictionOrigin";
+import {
+  REGULARITY_HINT,
+  REGULARITY_LABEL,
+  describeConfidence,
+  type ConfidenceText,
+} from "@/lib/predictionCopy";
+
+/** Coaching is fixed rules applied to the data, whichever side computed it. */
+const COACHING_CONFIDENCE: ConfidenceText = {
+  label: "rule-based advice",
+  detail: "Suggestions from fixed rules applied to your logged data and the predictions above.",
+};
 
 type Priority = "low" | "medium" | "high";
 type AISource = "ai" | "fallback";
@@ -26,7 +39,7 @@ interface Recommendation {
   basis?: string;
 }
 
-interface Insights {
+export interface Insights {
   sleepScore: number;
   subScores: {
     duration: number;
@@ -126,24 +139,11 @@ export default function InsightsPanel() {
     };
   }, []);
 
-  const isLive =
-    insights?.reportSource === "ai" || insights?.predictionSource === "ai";
-
   return (
-    <section className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-5">
+    <section aria-label="Sleep score and coaching" className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-5">
       <div className="mb-4 flex items-center gap-2">
         <BrainCircuit className="h-5 w-5 text-fuchsia-300" />
         <h2 className="text-lg font-semibold text-white">Sleep Score &amp; Coaching</h2>
-        <span
-          className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${
-            isLive
-              ? "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-200"
-              : "border-white/10 bg-white/5 text-slate-400"
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          {isLive ? "AI Brain" : "Rule-based"}
-        </span>
       </div>
 
       {loading && (
@@ -159,84 +159,98 @@ export default function InsightsPanel() {
         </p>
       )}
 
-      {!loading && insights && (
-        <div className="grid gap-5 lg:grid-cols-[auto_1fr]">
-          <div className="flex flex-col gap-4 sm:flex-row lg:flex-col">
-            <div className="flex min-w-[140px] flex-col items-center justify-center rounded-xl border border-white/10 bg-slate-900/40 p-4">
-              <span className="text-xs uppercase tracking-wide text-slate-400">Sleep Score</span>
-              <span className={`text-5xl font-bold ${scoreColor(insights.sleepScore)}`}>
-                {insights.sleepScore.toFixed(1)}
-              </span>
-              <span className="text-xs text-slate-500">out of 10</span>
-            </div>
-
-            <div className="flex flex-1 flex-col justify-center gap-2.5">
-              <SubScoreBar label="Duration" value={insights.subScores.duration} />
-              <SubScoreBar label="Consistency" value={insights.subScores.consistency} />
-              <SubScoreBar label="Behavior" value={insights.subScores.behavior} />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3">
-              <Metric
-                icon={Moon}
-                label="Predicted sleep"
-                value={`${insights.prediction.predictedSleepDuration.toFixed(1)} h`}
-              />
-              <Metric
-                icon={TrendingUp}
-                label="Wake success"
-                value={`${Math.round(insights.prediction.wakeSuccessProbability * 100)}%`}
-              />
-              <Metric
-                icon={Repeat}
-                label="Consistency"
-                value={`${Math.round(insights.prediction.wakeupConsistency)}%`}
-              />
-            </div>
-
-            <div className="space-y-2">
-              {insights.recommendations.length === 0 && (
-                <p className="text-sm text-slate-400">
-                  No recommendations — your routine looks great.
-                </p>
-              )}
-              {insights.recommendations.map((rec, i) => {
-                const Icon = (rec.icon && ICONS[rec.icon]) || Info;
-                return (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-3`}
-                  >
-                    <span
-                      className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${
-                        PRIORITY_STYLES[rec.priority]
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm text-slate-200">{rec.text}</p>
-                      {rec.basis && (
-                        <p className="mt-0.5 text-xs text-slate-500">{rec.basis}</p>
-                      )}
-                    </div>
-                    <span
-                      className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                        PRIORITY_STYLES[rec.priority]
-                      }`}
-                    >
-                      {rec.priority}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {!loading && insights && <InsightsView insights={insights} />}
     </section>
+  );
+}
+
+/** The panel body for a set of insights; separate so its text can be tested. */
+export function InsightsView({ insights }: { insights: Insights }) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[auto_1fr]">
+      <div className="flex flex-col gap-4 sm:flex-row lg:flex-col">
+        <div className="flex min-w-[140px] flex-col items-center justify-center rounded-xl border border-white/10 bg-slate-900/40 p-4">
+          <span className="text-xs uppercase tracking-wide text-slate-400">Sleep Score</span>
+          <span className={`text-5xl font-bold ${scoreColor(insights.sleepScore)}`}>
+            {insights.sleepScore.toFixed(1)}
+          </span>
+          <span className="text-xs text-slate-500">out of 10</span>
+        </div>
+
+        <div className="flex flex-1 flex-col justify-center gap-2.5">
+          <SubScoreBar label="Duration" value={insights.subScores.duration} />
+          <SubScoreBar label="Consistency" value={insights.subScores.consistency} />
+          <SubScoreBar label="Behavior" value={insights.subScores.behavior} />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-3">
+          <Metric
+            icon={Moon}
+            label="Predicted sleep"
+            value={`${insights.prediction.predictedSleepDuration.toFixed(1)} h`}
+          />
+          <Metric
+            icon={TrendingUp}
+            label={REGULARITY_LABEL}
+            value={`${Math.round(insights.prediction.wakeSuccessProbability * 100)}%`}
+          />
+          <Metric
+            icon={Repeat}
+            label="Consistency"
+            value={`${Math.round(insights.prediction.wakeupConsistency)}%`}
+          />
+        </div>
+        <p className="-mt-2 text-xs text-slate-500">
+          {REGULARITY_LABEL}: {REGULARITY_HINT}
+        </p>
+        <PredictionOrigin
+          what="Predictions"
+          origin={insights.predictionSource}
+          confidence={describeConfidence(insights.predictionSource, insights.prediction.confidence)}
+        />
+
+        <div className="space-y-2">
+          <PredictionOrigin what="Coaching" origin={insights.reportSource} confidence={COACHING_CONFIDENCE} />
+          {insights.recommendations.length === 0 && (
+            <p className="text-sm text-slate-400">
+              No suggestions from the data you&apos;ve logged.
+            </p>
+          )}
+          {insights.recommendations.map((rec, i) => {
+            const Icon = (rec.icon && ICONS[rec.icon]) || Info;
+            return (
+              <div
+                key={i}
+                className={`flex items-start gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-3`}
+              >
+                <span
+                  className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${
+                    PRIORITY_STYLES[rec.priority]
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-200">{rec.text}</p>
+                  {rec.basis && (
+                    <p className="mt-0.5 text-xs text-slate-500">{rec.basis}</p>
+                  )}
+                </div>
+                <span
+                  className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                    PRIORITY_STYLES[rec.priority]
+                  }`}
+                >
+                  {rec.priority}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

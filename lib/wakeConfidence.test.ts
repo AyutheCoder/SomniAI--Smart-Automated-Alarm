@@ -216,7 +216,7 @@ describe("multi-challenge evidence accumulation", () => {
     expect(meetsThreshold(result.score, LOWEST_THRESHOLD)).toBe(true);
   });
 
-  it("sums time on task so a long fumble stays visible", () => {
+  it("judges time on task per answer, so a long fumble still shows", () => {
     const quick = accumulateWakeEvidence([solve({ responseMs: 3000 }), solve({ responseMs: 3000 })]);
     const slow = accumulateWakeEvidence([solve({ responseMs: 20000 }), solve({ responseMs: 20000 })]);
     expect(slow.score).toBeLessThan(quick.score);
@@ -250,8 +250,9 @@ describe("multi-challenge evidence accumulation", () => {
    *
    * `accumulateWakeEvidence` passes correctness as a *ratio*
    * (solvedCount / length), so two perfect solves and one perfect solve both
-   * yield correctness = 1 and the same 2.4 log-odds. Meanwhile responseMs and
-   * attempts are *summed*, so the longer sequence carries strictly more penalty.
+   * yield correctness = 1 and the same 2.4 log-odds. Meanwhile attempts are
+   * *summed* (time is judged per answer), so the longer sequence carries
+   * strictly more penalty.
    * Net effect: solving more challenges perfectly scores slightly lower.
    *
    * Pinned here deliberately. If the intended semantics are adopted instead,
@@ -261,5 +262,42 @@ describe("multi-challenge evidence accumulation", () => {
     const single = accumulateWakeEvidence([solve()]);
     const double = accumulateWakeEvidence([solve(), solve()]);
     expect(double.score).toBeLessThanOrEqual(single.score);
+  });
+});
+
+describe("speed per answer (three sums in a maths challenge)", () => {
+  it("scores three answers in 60 s as one answer in 20 s", () => {
+    const three = computeWakeConfidence({ correctness: 1, responseMs: 60_000, attempts: 0, steps: 3 });
+    const one = computeWakeConfidence({ correctness: 1, responseMs: 20_000, attempts: 0 });
+    expect(three).toEqual(one);
+  });
+
+  it("treats missing, zero or negative steps as one answer", () => {
+    const one = computeWakeConfidence({ correctness: 1, responseMs: 20_000, attempts: 0 });
+    for (const steps of [undefined, 0, -3]) {
+      expect(computeWakeConfidence({ correctness: 1, responseMs: 20_000, attempts: 0, steps })).toEqual(one);
+    }
+  });
+
+  it("adds up the answers across a sequence", () => {
+    const sums = accumulateWakeEvidence([solve({ responseMs: 60_000, steps: 3 })]);
+    const single = accumulateWakeEvidence([solve({ responseMs: 20_000 })]);
+    expect(sums.breakdown.speed).toBe(single.breakdown.speed);
+    // Two challenges of three sums: six answers in two minutes, 20 s each.
+    const two = accumulateWakeEvidence([solve({ responseMs: 60_000, steps: 3 }), solve({ responseMs: 60_000, steps: 3 })]);
+    expect(two.breakdown.speed).toBe(single.breakdown.speed);
+  });
+
+  it("lets three correct sums at a groggy 25 s each clear the strictest tier", () => {
+    const groggy = accumulateWakeEvidence([solve({ responseMs: 75_000, steps: 3, attempts: 0, motion: undefined })]);
+    expect(meetsThreshold(groggy.score, 85)).toBe(true);
+    // Judged as one answer, the same wake read as "fell back asleep" and failed.
+    const asOne = accumulateWakeEvidence([solve({ responseMs: 75_000, attempts: 0, motion: undefined })]);
+    expect(meetsThreshold(asOne.score, 85)).toBe(false);
+  });
+
+  it("still fails sums done at a crawl at the strictest tier", () => {
+    const crawl = accumulateWakeEvidence([solve({ responseMs: 3 * 60_000, steps: 3, attempts: 0, motion: 0 })]);
+    expect(meetsThreshold(crawl.score, 85)).toBe(false);
   });
 });

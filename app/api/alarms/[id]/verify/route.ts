@@ -6,18 +6,51 @@ import { getUserId } from "@/lib/session";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { computeWakeConfidence } from "@/lib/wakeConfidence";
+import { isInt, isNum, isOccurredAt, isStringList } from "@/lib/validate";
 
 interface VerifyBody {
-  /** Legacy: a pre-scored value. Only trusted when raw signals are absent. */
+  /** The client's own score. Ignored: the server scores from the signals. */
   confidence?: number;
   methods?: string[];
   responseMs?: number;
+  /** How many answers responseMs covers (sums in a maths challenge); speed is judged per answer. */
+  steps?: number;
   attempts?: number;
   motion?: number;
   /** Did the user actually solve every challenge in the sequence? */
   solved?: boolean;
   /** Fraction of challenges solved, when a sequence was presented. */
   correctness?: number;
+  /** When it was answered, if it is being reported later (a phone that was offline). */
+  at?: string;
+}
+
+function invalidSignals(body: VerifyBody): string | null {
+  if (typeof body.solved !== "boolean") {
+    return "solved (true or false) is required; the server scores the challenge itself";
+  }
+  if (body.correctness !== undefined && !isNum(body.correctness, 0, 1)) {
+    return "correctness must be a number from 0 to 1";
+  }
+  if (body.responseMs !== undefined && !isNum(body.responseMs, 0)) {
+    return "responseMs must be a non-negative number";
+  }
+  if (body.steps !== undefined && !isInt(body.steps, 1, 1000)) {
+    return "steps must be a whole number from 1";
+  }
+  if (body.attempts !== undefined && !isInt(body.attempts, 0, 1000)) {
+    return "attempts must be a non-negative whole number";
+  }
+  if (body.motion !== undefined && !isNum(body.motion, 0, 1)) {
+    return "motion must be a number from 0 to 1";
+  }
+  if (body.methods !== undefined && !isStringList(body.methods)) {
+    return "methods must be a list of challenge names";
+  }
+  if (body.at !== undefined && !isOccurredAt(body.at)) {
+    return "at must be an ISO time within the last 7 days and not in the future";
+  }
+  return null;
 }
 
 type RouteContext = {
@@ -38,37 +71,26 @@ export async function POST(req: NextRequest, context: RouteContext) {
       return jsonError("Invalid id", 400);
     }
     const body = (await parseJson<VerifyBody>(req)) ?? {};
+    const invalid = invalidSignals(body);
+    if (invalid) {
+      return jsonError(invalid, 422);
+    }
 
     // Score from the raw signals here rather than trusting a number the client
-    // computed: the posted score decides whether the alarm is satisfied, so a
-    // replayed or edited request must not be able to assert its own wakefulness.
-    const hasSignals =
-      typeof body.responseMs === "number" ||
-      typeof body.solved === "boolean" ||
-      typeof body.correctness === "number";
-
-    let confidence: number;
-    let scoredServerSide = false;
-    if (hasSignals) {
-      const correctness = typeof body.correctness === "number"
-        ? Math.min(1, Math.max(0, body.correctness))
-        : body.solved
-          ? 1
-          : 0;
-      confidence = computeWakeConfidence({
-        correctness,
-        solved: body.solved ?? correctness >= 1,
-        responseMs: typeof body.responseMs === "number" ? body.responseMs : 45000,
-        attempts: typeof body.attempts === "number" ? body.attempts : 1,
-        motion: typeof body.motion === "number" ? body.motion : undefined,
-      }).score;
-      scoredServerSide = true;
-    }
-    else {
-      confidence = typeof body.confidence === "number"
-        ? Math.min(100, Math.max(0, body.confidence))
-        : 0;
-    }
+    // computed: the verdict decides whether the alarm counts as verified, so a
+    // replayed or edited request must not be able to assert its own
+    // wakefulness. A request carrying only a score used to be trusted as-is,
+    // which let `{ "confidence": 100 }` pass any alarm.
+    const solved = body.solved as boolean;
+    const confidence = computeWakeConfidence({
+      correctness: body.correctness ?? (solved ? 1 : 0),
+      solved,
+      responseMs: body.responseMs ?? 45000,
+      steps: body.steps,
+      attempts: body.attempts ?? 1,
+      motion: body.motion,
+    }).score;
+    const scoredServerSide = true;
     const alarm = await Alarm.findOne({ _id: id, userId });
     if (!alarm) {
       return jsonError("Alarm not found", 404);
@@ -83,13 +105,15 @@ export async function POST(req: NextRequest, context: RouteContext) {
         alarmId: id,
         methods: body.methods ?? [],
         responseMs: body.responseMs ?? null,
+        steps: body.steps ?? null,
         attempts: body.attempts ?? null,
         motion: body.motion ?? null,
         solved: body.solved ?? null,
         scoredServerSide,
         threshold,
+        reportedLate: body.at !== undefined,
       },
-      at: new Date(),
+      at: body.at ? new Date(body.at) : new Date(),
     });
     return jsonOk({ confidence, passed, threshold });
   });

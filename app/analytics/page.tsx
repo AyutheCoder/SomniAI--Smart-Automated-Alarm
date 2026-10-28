@@ -24,7 +24,6 @@ import {
   BrainCircuit,
   Lightbulb,
   Moon,
-  Sparkles,
   TrendingUp,
 } from "lucide-react";
 
@@ -315,20 +314,6 @@ export default function AnalyticsPage() {
             Sleep trends, fatigue &amp; productivity insights, and learned personalization.
           </p>
         </div>
-        {data?.coaching && (
-          <span
-            className={`ml-auto inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${
-              data.coaching.reportSource === "ai" || data.coaching.predictionSource === "ai"
-                ? "border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-200"
-                : "border-white/10 bg-white/5 text-slate-300"
-            }`}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            {data.coaching.reportSource === "ai" || data.coaching.predictionSource === "ai"
-              ? "AI Brain"
-              : "Rule-based"}
-          </span>
-        )}
       </header>
 
       {loading && (
@@ -433,6 +418,9 @@ export default function AnalyticsPage() {
                 Personalized insights
               </h2>
             </div>
+            <p className="-mt-2 mb-4 text-xs text-slate-500">
+              Worked out by fixed rules from the nights you logged this week. No model is involved.
+            </p>
             <ul className="space-y-3">
               {report.insights.map((ins, i) => (
                 <li key={i} className={`rounded-xl border px-4 py-3 text-sm ${TONE_STYLES[ins.tone]}`}>

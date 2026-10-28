@@ -6,6 +6,7 @@ import { SleepLog } from "@/models/SleepLog";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { computeMetrics, type BehaviorEventInput, type SleepLogInput } from "@/lib/features";
 import { deriveEscalationProfile } from "@/lib/escalation";
+import { isInt } from "@/lib/validate";
 
 export async function GET(req: NextRequest) {
   return guard(async () => {
@@ -15,7 +16,11 @@ export async function GET(req: NextRequest) {
     }
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
-    const days = Math.min(180, Math.max(1, Number(searchParams.get("days")) || 30));
+    const rawDays = searchParams.get("days");
+    const days = rawDays === null ? 30 : Number(rawDays);
+    if (!isInt(days, 1, 180)) {
+      return jsonError("days must be a whole number from 1 to 180", 422);
+    }
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const [logs, events] = await Promise.all([
       SleepLog.find({ userId }).sort({ date: -1 }).limit(days).lean(),

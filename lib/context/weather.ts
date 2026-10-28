@@ -43,7 +43,12 @@ export function simulateWeather(): WeatherInfo {
   };
 }
 
-export async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo> {
+/**
+ * Live weather for a location, or null when it can't be had. It used to fall
+ * back to simulateWeather() here, so a network failure quietly produced made-up
+ * weather that nothing could tell apart from the real thing.
+ */
+export async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo | null> {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}` +
       `&longitude=${lon}&current=temperature_2m,weather_code`;
@@ -64,6 +69,6 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherInf
     }
     return { tempC, condition: conditionFor(code) };
   } catch {
-    return simulateWeather();
+    return null;
   }
 }
