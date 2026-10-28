@@ -81,8 +81,13 @@ final class RingController {
         void showLevel(EscalationLadder.Level level);
         /** The challenge level: put the wake check in front of the user. */
         void promptChallenge();
-        /** The backup level: try each channel once and say what each did. */
-        List<Backups.Outcome> tryBackups(List<String> kinds);
+        /**
+         * The backup level: ask the server, in the background, to try each
+         * channel. Never waits: the answer comes back through onBackups.
+         */
+        void requestBackups(Alarm alarm, List<String> kinds);
+        /** The ring ended after another device was rung: stop it there too. */
+        void stopBackupRing(Alarm alarm);
         void scheduleTick(long delayMs);
         void cancelTicks();
         void closeRingScreen();
@@ -102,8 +107,13 @@ final class RingController {
     private Source source;
     private EscalationLadder.Level level;
     private boolean vibrating;
-    /** What the backup channels did, once tried; null before. */
+    /** Whether this ring asked for its backups yet: once only. */
+    private boolean backupsRequested;
+    /** What the backup channels did, once the server answered; null before. */
     private List<Backups.Outcome> backups;
+    /** The alarms of the ring that last ended, for an answer that comes after it. */
+    private List<Alarm> ended = Collections.emptyList();
+    private boolean endedRangAnotherDevice;
 
     RingController(Effects fx) {
         this.fx = fx;
@@ -188,6 +198,7 @@ final class RingController {
         startedAt = now;
         vibrating = false;
         backups = null;
+        backupsRequested = false;
         level = null;
         boolean foreground = fx.startForeground(alarm);
         fx.acquireWakeLock(RingTuning.MAX_RING_MS + 60_000);
@@ -257,15 +268,9 @@ final class RingController {
         if (l.requireVerification && check().required) {
             fx.promptChallenge();
         }
-        if (!l.backup.isEmpty() && backups == null) {
-            backups = fx.tryBackups(l.backup);
-            StringBuilder said = new StringBuilder();
-            for (Backups.Outcome o : backups) {
-                said.append(said.length() > 0 ? "; " : "").append(o.kind).append(": ").append(o.status);
-            }
-            for (Alarm a : ringing.values()) {
-                fx.record(a, "backups", now, said.toString());
-            }
+        if (!l.backup.isEmpty() && !backupsRequested) {
+            backupsRequested = true;
+            fx.requestBackups(ringing.values().iterator().next(), l.backup);
         }
         if (!first) {
             for (Alarm a : ringing.values()) {
@@ -348,14 +353,48 @@ final class RingController {
         }
     }
 
+    /**
+     * The server's answer to requestBackups, on the main thread. During the
+     * ring it is recorded and goes with the ring's report; after it, it is
+     * recorded, and a device it rang is stopped.
+     */
+    void onBackups(Backups.Answer answer, long now) {
+        StringBuilder said = new StringBuilder();
+        for (Backups.Outcome o : answer.outcomes) {
+            said.append(said.length() > 0 ? "; " : "").append(o.kind).append(": ").append(o.status)
+                .append(o.reason == null || o.reason.isEmpty() ? "" : " (" + o.reason + ")");
+        }
+        for (Backups.Later l : answer.later) {
+            said.append(said.length() > 0 ? "; " : "").append(l.who).append(": later, at ").append(java.time.Instant.ofEpochMilli(l.at));
+        }
+        if (state == State.RINGING) {
+            backups = answer.outcomes;
+            for (Alarm a : ringing.values()) {
+                fx.record(a, "backups", now, said.toString());
+            }
+            return;
+        }
+        for (Alarm a : ended) {
+            fx.record(a, "backups", now, said + " (after the ring ended)");
+        }
+        if (answer.rangAnotherDevice() && !ended.isEmpty() && !endedRangAnotherDevice) {
+            fx.stopBackupRing(ended.get(0));
+        }
+    }
+
     private void finish(String outcome, long now, String detail, Verification verification) {
         int reached = level.level;
         List<Backups.Outcome> tried = backups == null ? Collections.emptyList() : backups;
+        endedRangAnotherDevice = new Backups.Answer(tried, Collections.emptyList()).rangAnotherDevice();
+        ended = new ArrayList<>(ringing.values());
         release();
         fx.closeRingScreen();
         for (Alarm a : ringing.values()) {
             fx.record(a, outcome, now, detail);
             fx.queueSync(a, rangAt.get(a.id), outcome, now, verification, reached, tried);
+        }
+        if (endedRangAnotherDevice) {
+            fx.stopBackupRing(ended.get(0));
         }
         ringing.clear();
         rangAt.clear();

@@ -26,6 +26,8 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Rings an alarm: a foreground service of type systemExempted, which Android
@@ -46,6 +48,8 @@ public class RingService extends Service implements RingController.Effects {
     static final String ACTION_CHALLENGE = "app.somniai.alarm.CHALLENGE";
     /** Sent (to this app only) when ringing ends, so the ring screen closes. */
     static final String ACTION_STOPPED = "app.somniai.alarm.RING_STOPPED";
+    /** The backup level's answer arrived: the ring screen shows who will be told. */
+    static final String ACTION_BACKUPS = "app.somniai.alarm.RING_BACKUPS";
     static final String CHANNEL = "ringing";
     private static final int NOTIFICATION_ID = 7001;
     private static final String EXTRA_ID = "id";
@@ -60,6 +64,8 @@ public class RingService extends Service implements RingController.Effects {
      * tick has finished), never halfway through one.
      */
     static volatile Snapshot current;
+    /** Who will be told, and when, once the backup level asked (3.3); null before, or with nobody. */
+    static volatile String backupNote;
 
     static final class Snapshot {
         final List<String> ids;
@@ -164,6 +170,9 @@ public class RingService extends Service implements RingController.Effects {
                 intent.getLongExtra(EXTRA_AT, now),
                 WakeCheck.Plan.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)),
                 EscalationLadder.fromRingPlan(intent.getStringExtra(EXTRA_PLAN)));
+            if (controller.state() != RingController.State.RINGING) {
+                backupNote = null;
+            }
             controller.start(alarm, RingTuning.fromPlan(intent.getStringExtra(EXTRA_PLAN)), now);
             if (controller.state() == RingController.State.RINGING) {
                 List<RingController.Alarm> all = new ArrayList<>();
@@ -337,9 +346,55 @@ public class RingService extends Service implements RingController.Effects {
         sendBroadcast(new Intent(ACTION_CHALLENGE).setPackage(getPackageName()));
     }
 
+    /**
+     * The backup level (3.3): asks the server in the background, which rings
+     * the user's other devices and says when people will be told
+     * (lib/backupServer.ts). The ring never waits on it; the answer, or
+     * "couldn't reach the server", comes back to the controller.
+     */
     @Override
-    public List<Backups.Outcome> tryBackups(List<String> kinds) {
-        return Backups.tryAll(kinds);
+    public void requestBackups(RingController.Alarm alarm, List<String> kinds) {
+        Context app = getApplicationContext();
+        new Thread(() -> {
+            String token = SomniMessagingService.ownToken(app, 10_000);
+            rememberToken(app, token);
+            Outbox.Response r = Outbox.request(app, "/api/alarms/" + alarm.id + "/backups", Backups.request(kinds, token).toString(), 20_000);
+            Backups.Answer answer = Backups.fromResponse(kinds, r.status, r.body);
+            handler.post(() -> {
+                backupNote = Backups.laterLine(answer.later,
+                    t -> DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(t)));
+                controller.onBackups(answer, System.currentTimeMillis());
+                publish();
+                sendBroadcast(new Intent(ACTION_BACKUPS).setPackage(getPackageName()));
+            });
+        }, "somni-backups").start();
+    }
+
+    /** The alarm was stopped here after another device was rung: stop it there, through the queue. */
+    @Override
+    public void stopBackupRing(RingController.Alarm alarm) {
+        JSONObject body = new JSONObject();
+        // Device-protected, as saved: a stop can come before the first unlock.
+        String token = createDeviceProtectedStorageContext().getSharedPreferences(TOKEN_PREFS, MODE_PRIVATE).getString("token", null);
+        try {
+            if (token != null) {
+                body.put("fromToken", token);
+            }
+        }
+        catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+        Outbox.enqueue(this, java.util.Collections.singletonList(
+            new SyncCalls.Call(alarm.id, "/api/alarms/" + alarm.id + "/backups/stop", body)));
+    }
+
+    private static final String TOKEN_PREFS = "somni_push";
+
+    private static void rememberToken(Context context, String token) {
+        if (token != null) {
+            context.createDeviceProtectedStorageContext().getSharedPreferences(TOKEN_PREFS, MODE_PRIVATE)
+                .edit().putString("token", token).apply();
+        }
     }
 
     @Override
@@ -389,6 +444,10 @@ public class RingService extends Service implements RingController.Effects {
     @Override
     public void queueSync(RingController.Alarm alarm, long rangAt, String outcome, long endedAt, Verification verification,
             int level, List<Backups.Outcome> backups) {
+        if (BackupRing.isBackup(alarm.id)) {
+            // Another device's alarm rang here: that device reports its ring, not this one.
+            return;
+        }
         Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification, level, backups));
     }
 

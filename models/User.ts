@@ -19,6 +19,8 @@ export interface UserDocument {
       name: string;
       channel: "email" | "sms";
       value: string;
+      /** When the user confirmed the contact agreed to these texts (3.3); none, none sent. */
+      consentAt?: Date;
     };
     /** Wake buddy settings (lib/buddy.ts BuddySettings). */
     buddy?: {
@@ -63,6 +65,7 @@ const UserSchema = new Schema<UserDocument>({
       name: { type: String },
       channel: { type: String, enum: ["email", "sms"] },
       value: { type: String },
+      consentAt: { type: Date },
     },
     buddy: {
       alertAfterMinutes: { type: Number, min: 5, max: 60 },

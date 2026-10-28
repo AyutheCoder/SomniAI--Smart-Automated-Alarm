@@ -65,3 +65,23 @@ test("two people pair with consent on both sides, and either can unpair", async 
   await alice.reload();
   await expect(aliceBuddy).not.toContainText("is your wake buddy");
 });
+
+test("an emergency contact needs their agreement, and can be removed", async ({ page }) => {
+  await signUp(page);
+  const form = page.getByRole("form", { name: "Emergency contact" });
+  await form.getByLabel("Contact's name").fill("Mum");
+  await form.getByLabel("Contact's number").fill("+91 98765 43210");
+  await form.getByRole("button", { name: "Save contact" }).click();
+  await expect(page.getByRole("region", { name: "Wake buddy" }).getByRole("alert")).toContainText("agreed");
+
+  await form.getByLabel("They've agreed to get these texts from SomniAI.").check();
+  await form.getByRole("button", { name: "Save contact" }).click();
+  await expect(form.getByRole("button", { name: "Remove" })).toBeVisible();
+  // No Twilio in the e2e server: the panel says texts wouldn't be sent, rather than pretend.
+  await expect(form).toContainText("Texts aren't set up on this server yet");
+  await page.reload();
+  await expect(form.getByLabel("Contact's number")).toHaveValue("+919876543210");
+
+  await form.getByRole("button", { name: "Remove" }).click();
+  await expect(form.getByRole("button", { name: "Remove" })).toBeHidden();
+});

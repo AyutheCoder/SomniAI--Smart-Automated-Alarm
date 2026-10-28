@@ -58,7 +58,7 @@ describe("push through Firebase Cloud Messaging", () => {
     const { fn, calls } = fakeFetch(() => ({ status: 200, body: { name: "projects/demo-project/messages/1" } }));
     const sender = fcmFromEnv(ENV, fn);
     expect(sender.configured).toBe(true);
-    expect(await sender.send("device-token", { type: "buddy_alert", name: "Sam" })).toEqual({ ok: true });
+    expect(await sender.send("device-token", { type: "buddy_alert", name: "Sam" })).toEqual({ ok: true, messageId: "projects/demo-project/messages/1" });
 
     const tokenCall = calls[0];
     expect(tokenCall.url).toBe("https://oauth2.googleapis.com/token");
@@ -74,9 +74,14 @@ describe("push through Firebase Cloud Messaging", () => {
     });
   });
 
+  it("counts as sent only with Firebase's message id", async () => {
+    const { fn } = fakeFetch(() => ({ status: 200, body: {} }));
+    expect(await fcmFromEnv(ENV, fn).send("t", {})).toEqual({ ok: false, error: "Firebase answered without a message id" });
+  });
+
   it("reuses the access token until it nearly expires", async () => {
     let t = 1_800_000_000_000;
-    const { fn, calls } = fakeFetch(() => ({ status: 200, body: {} }));
+    const { fn, calls } = fakeFetch(() => ({ status: 200, body: { name: "projects/demo-project/messages/2" } }));
     const sender = fcmFromEnv(ENV, fn, () => t);
     await sender.send("a", {});
     await sender.send("b", {});

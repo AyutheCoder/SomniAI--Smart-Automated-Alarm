@@ -26,7 +26,7 @@ public class SyncCallsTest {
     public void aVerifiedDismissalSendsFireVerifyEscalateDismissInOrder() throws Exception {
         Verification v = new Verification(true, true, 1.0, 9_000, 3, 1, List.of("math"), 88, RANG + 40_000);
         List<SyncCalls.Call> calls = SyncCalls.forRing(ID, RANG, "dismissed", RANG + 42_000, v, 5,
-            Backups.tryAll(EscalationLadder.BACKUP_KINDS));
+            Backups.failedAll(EscalationLadder.BACKUP_KINDS, "couldn't reach the server").outcomes);
         assertEquals(List.of("/api/alarms/" + ID + "/fire", "/api/alarms/" + ID + "/verify", "/api/alarms/" + ID + "/escalate", "/api/alarms/" + ID + "/dismiss"), paths(calls));
 
         assertEquals("2026-10-26T06:40:00Z", calls.get(0).body.getString("at"));
@@ -42,7 +42,7 @@ public class SyncCallsTest {
         JSONObject escalate = calls.get(2).body;
         assertEquals(5, escalate.getInt("level"));
         assertEquals(3, escalate.getJSONArray("backups").length());
-        assertEquals("not_configured", escalate.getJSONArray("backups").getJSONObject(0).getString("status"));
+        assertEquals("failed", escalate.getJSONArray("backups").getJSONObject(0).getString("status"));
         assertEquals("secondaryAlarm", escalate.getJSONArray("backups").getJSONObject(0).getString("kind"));
         assertEquals("2026-10-26T06:40:42Z", escalate.getString("at"));
         JSONObject dismiss = calls.get(3).body;

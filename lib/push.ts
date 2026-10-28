@@ -9,6 +9,8 @@ import { createSign } from "node:crypto";
 
 export interface PushResult {
   ok: boolean;
+  /** Firebase's own id for an accepted message ("projects/…/messages/…"): the delivery receipt. */
+  messageId?: string;
   /** The token no longer reaches an app (uninstalled, or a new token): forget it. */
   unregistered?: boolean;
   error?: string;
@@ -98,7 +100,11 @@ export function fcmFromEnv(
         return { ok: false, error: `push service unreachable: ${e instanceof Error ? e.message : String(e)}` };
       }
       if (res.status === 200) {
-        return { ok: true };
+        const accepted = (await res.json().catch(() => ({}))) as { name?: string };
+        // Accepted only with Firebase's id for it: without one, nothing proves it left.
+        return typeof accepted.name === "string" && accepted.name
+          ? { ok: true, messageId: accepted.name }
+          : { ok: false, error: "Firebase answered without a message id" };
       }
       const body = (await res.json().catch(() => ({}))) as {
         error?: { status?: string; message?: string; details?: { errorCode?: string }[] };

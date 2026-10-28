@@ -177,6 +177,15 @@ export function rateVerdict(history: PastAlert[], occurrence: string, now: Date)
   return { allowed: true };
 }
 
+/**
+ * The text to the emergency contact (3.3): who, which alarm, how long, and
+ * why they're getting it. As with the buddy, it says what is known.
+ */
+export function contactText(name: string, label: string, minutes: number): string {
+  return `SomniAI: ${name} hasn't confirmed they're awake. Their "${label}" alarm went off ${minutes} minutes ago. `
+    + `You're their emergency contact; please check on them. (Automated message.)`;
+}
+
 /** What the buddy's phone shows. The wording says what is known: no confirmation, not "asleep". */
 export function alertText(name: string, label: string, minutes: number): { title: string; body: string } {
   return {

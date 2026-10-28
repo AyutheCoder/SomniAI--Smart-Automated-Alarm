@@ -8,9 +8,12 @@
 // failure. A channel with no target or no transport is "not_configured" and
 // sends nothing.
 //
-// This replaces adapters that printed "Triggered a backup alarm…" for channels
-// that sent nothing. No transport exists in the app yet (prompt 3.3 adds real
-// ones), so today every channel truthfully reports "not set up".
+// This replaced adapters that printed "Triggered a backup alarm…" for channels
+// that sent nothing. The real transports are on the server (prompt 3.3,
+// lib/backupServer.ts): Firebase for the second device, Twilio for the
+// emergency contact's text; ringing devices ask for them through
+// /api/alarms/[id]/backups. createBackupChannels is the generic,
+// transport-injected version the rules below are tested with.
 
 export const BACKUP_KINDS = ["secondaryAlarm", "smartwatch", "emergencyContact"] as const;
 export type BackupKind = (typeof BACKUP_KINDS)[number];
@@ -78,10 +81,22 @@ export const SEND_TIMEOUT_MS = 10_000;
 const notConfigured = (kind: BackupKind, reason: string): BackupOutcome =>
   ({ kind, label: BACKUP_LABELS[kind], status: "not_configured", reason });
 
+/**
+ * The only way to say a backup was delivered: with a receipt that holds up
+ * (the transport's name, its own id for the message, when). Without one, it
+ * failed. The server's channels (lib/backupServer.ts) and the web's reading
+ * of their answer (lib/backupClient.ts) both come through here.
+ */
+export function delivered(kind: BackupKind, receipt: unknown): BackupOutcome {
+  return hasReceipt(receipt)
+    ? { kind, label: BACKUP_LABELS[kind], status: "delivered", receipt }
+    : failed(kind, "reported delivered without a receipt");
+}
+
 const failed = (kind: BackupKind, reason: string): BackupOutcome =>
   ({ kind, label: BACKUP_LABELS[kind], status: "failed", reason });
 
-function hasReceipt(r: unknown): r is DeliveryReceipt {
+export function hasReceipt(r: unknown): r is DeliveryReceipt {
   const x = r as Partial<DeliveryReceipt> | null | undefined;
   return typeof x?.transport === "string" && x.transport.trim() !== ""
     && typeof x.messageId === "string" && x.messageId.trim() !== ""
@@ -100,12 +115,7 @@ async function sendVia(kind: BackupKind, transport: Transport, to: string, messa
     if (!messageId) {
       return failed(kind, `${transport.name} did not confirm the message`);
     }
-    return {
-      kind,
-      label: BACKUP_LABELS[kind],
-      status: "delivered",
-      receipt: { transport: transport.name, messageId, at: new Date().toISOString() },
-    };
+    return delivered(kind, { transport: transport.name, messageId, at: new Date().toISOString() });
   }
   catch (e) {
     return failed(kind, `${transport.name}: ${e instanceof Error ? e.message : "send failed"}`);
@@ -199,4 +209,29 @@ export function describeOutcome(outcome: BackupOutcome): string {
     case "not_configured":
       return "not set up";
   }
+}
+
+/** Someone the server tells after the sleeper's delay (prompt 3.3), and when. */
+export interface LaterAlert {
+  who: "buddy" | "emergencyContact";
+  name: string;
+  /** When they're told if the alarm still isn't answered. */
+  at: string;
+}
+
+/** The backup level's answer: what each channel did, and who is told later. */
+export interface BackupResult {
+  outcomes: BackupOutcome[];
+  later: LaterAlert[];
+}
+
+/** "Your buddy Bo and Mum will be told at 07:15 if you haven't answered." */
+export function laterLine(later: LaterAlert[], clock: (d: Date) => string): string | null {
+  if (later.length === 0) {
+    return null;
+  }
+  const names = later.map((l) => (l.who === "buddy" ? `your buddy ${l.name}` : l.name));
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const first = later.map((l) => Date.parse(l.at)).sort((a, b) => a - b)[0];
+  return `${who.charAt(0).toUpperCase()}${who.slice(1)} will be told at ${clock(new Date(first))} if you haven't answered.`;
 }

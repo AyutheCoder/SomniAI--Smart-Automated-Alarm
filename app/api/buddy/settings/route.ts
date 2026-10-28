@@ -3,7 +3,8 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { ALERT_AFTER_MAX, ALERT_AFTER_MIN, normalizePhone } from "@/lib/buddy";
-import { settingsFor } from "@/lib/buddyServer";
+import { contactFor, settingsFor } from "@/lib/buddyServer";
+import { isE164 } from "@/lib/sms";
 import { User } from "@/models/User";
 
 interface SettingsBody {
@@ -12,6 +13,8 @@ interface SettingsBody {
   /** A number, or null to remove it. */
   phone?: unknown;
   sharePhone?: unknown;
+  /** { name, phone, consent: true } to set, null to remove (3.3). */
+  emergencyContact?: unknown;
 }
 
 /**
@@ -61,6 +64,26 @@ export async function PUT(req: NextRequest) {
         set["preferences.buddy.phone"] = phone;
       }
     }
+    if (body.emergencyContact !== undefined) {
+      const c = body.emergencyContact as { name?: unknown; phone?: unknown; consent?: unknown } | null;
+      if (c === null) {
+        unset["preferences.emergencyContact"] = "";
+      }
+      else {
+        const name = typeof c?.name === "string" ? c.name.trim() : "";
+        const phone = typeof c?.phone === "string" ? c.phone.replace(/[\s().-]/g, "") : "";
+        if (!name || name.length > 60) {
+          return jsonError("emergencyContact.name is required (up to 60 characters)", 422);
+        }
+        if (!isE164(phone)) {
+          return jsonError("emergencyContact.phone must be in international format: + and the country code, e.g. +919876543210", 422);
+        }
+        if (c?.consent !== true) {
+          return jsonError("Confirm that they agreed to get these texts (emergencyContact.consent: true)", 422);
+        }
+        set["preferences.emergencyContact"] = { name, channel: "sms", value: phone, consentAt: new Date() };
+      }
+    }
     const current = await settingsFor(userId);
     const willHavePhone = "preferences.buddy.phone" in set || (current.phone !== null && !("preferences.buddy.phone" in unset));
     if (set["preferences.buddy.sharePhone"] === true && !willHavePhone) {
@@ -72,6 +95,6 @@ export async function PUT(req: NextRequest) {
     if (Object.keys(update).length) {
       await User.updateOne({ _id: userId }, update);
     }
-    return jsonOk(await settingsFor(userId));
+    return jsonOk({ ...(await settingsFor(userId)), emergencyContact: await contactFor(userId) });
   });
 }

@@ -153,6 +153,8 @@ public class OutboxSyncTest {
     static final class Stub implements AutoCloseable {
         final ServerSocket socket = new ServerSocket(0);
         final Deque<Integer> answers = new ArrayDeque<>();
+        /** The body of every answer. */
+        volatile String reply = "{}";
         private final List<String> received = Collections.synchronizedList(new ArrayList<>());
         private final Thread thread;
 
@@ -194,7 +196,10 @@ public class OutboxSyncTest {
                     received.add(requestLine + " " + new String(body, 0, read));
                     int status = answers.isEmpty() ? 200 : answers.poll();
                     OutputStream out = s.getOutputStream();
-                    out.write(("HTTP/1.1 " + status + " X\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").getBytes(StandardCharsets.UTF_8));
+                    byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
+                    out.write(("HTTP/1.1 " + status + " X\r\nContent-Type: application/json\r\nContent-Length: " + bytes.length
+                        + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    out.write(bytes);
                     out.flush();
                 }
                 catch (Exception e) {

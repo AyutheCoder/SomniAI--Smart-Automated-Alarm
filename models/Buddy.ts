@@ -58,28 +58,37 @@ const PushTokenSchema = new Schema<PushTokenDocument>({
 export const PushToken = models.PushToken || model<PushTokenDocument>("PushToken", PushTokenSchema);
 
 /**
- * Every alert attempt, sent or not: the rate limit reads it, and the sleeper
- * can see when their buddy was told.
+ * Every alert attempt to a person, sent or not: the rate limit reads it, and
+ * the sleeper can see who was told when. The buddy by push (3.2), the
+ * emergency contact by SMS (3.3).
  */
+export type AlertChannel = "buddy" | "emergencyContact";
 export interface BuddyAlertDocument {
-  pairId: string;
+  channel: AlertChannel;
+  /** The pairing, for a buddy alert. */
+  pairId?: string;
   sleeperId: string;
-  buddyId: string;
+  buddyId?: string;
   alarmId: string;
   /** lib/buddy.ts occurrenceKey: which ring. */
   occurrence: string;
   status: AlertStatus;
   detail?: string;
+  /** The transport's own id for it (Firebase message name, Twilio SID): the receipt. */
+  messageId?: string;
   at: Date;
 }
 const BuddyAlertSchema = new Schema<BuddyAlertDocument>({
-  pairId: { type: String, required: true, index: true },
+  // Records from before 3.3 have none: they were all buddy alerts.
+  channel: { type: String, enum: ["buddy", "emergencyContact"], default: "buddy" },
+  pairId: { type: String, index: true },
   sleeperId: { type: String, required: true, index: true },
-  buddyId: { type: String, required: true },
+  buddyId: { type: String },
   alarmId: { type: String, required: true },
   occurrence: { type: String, required: true },
   status: { type: String, enum: ["sent", "failed", "no_device", "not_configured"], required: true },
   detail: { type: String },
+  messageId: { type: String },
   at: { type: Date, required: true, index: true },
 });
 export const BuddyAlert = models.BuddyAlert || model<BuddyAlertDocument>("BuddyAlert", BuddyAlertSchema);

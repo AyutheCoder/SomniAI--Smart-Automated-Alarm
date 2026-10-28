@@ -21,9 +21,10 @@ import {
 import {
   BACKUP_LABELS,
   describeOutcome,
-  dispatchBackups,
+  laterLine,
   type BackupKind,
   type BackupOutcome,
+  type BackupResult,
 } from "@/lib/backupAdapters";
 import { accumulateWakeEvidence, meetsThreshold } from "@/lib/wakeConfidence";
 import { resolveRingPlan } from "@/lib/ringPlan";
@@ -59,6 +60,12 @@ export interface ResolveResult {
 interface RingingOverlayProps {
   alarm: Alarm;
   onResolved: (result: ResolveResult) => void;
+  /**
+   * The backup level (3.3): the page's way to ask the server. Fired and never
+   * awaited here, so the ring can't wait on it, and this screen stays free of
+   * network code (tests/ui/ring-time-offline.test.ts).
+   */
+  requestBackups: (kinds: BackupKind[]) => Promise<BackupResult>;
 }
 
 type View = "ringing" | "challenge" | "result" | "done";
@@ -68,7 +75,7 @@ type View = "ringing" | "challenge" | "result" | "done";
  * escalation ladder and the challenge, so nothing here calls the server. An
  * alarm stored before plans existed gets one built on the device.
  */
-export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProps) {
+export default function RingingOverlay({ alarm, onResolved, requestBackups }: RingingOverlayProps) {
   const ringPlan = useMemo(() => resolveRingPlan(alarm), [alarm]);
   const plan = ringPlan.escalation;
   const methods = ringPlan.challenge.methods;
@@ -83,6 +90,13 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
   const [backupsTrying, setBackupsTrying] = useState<BackupKind[]>([]);
   const [backups, setBackups] = useState<BackupOutcome[]>([]);
   const backupsRef = useRef<BackupOutcome[]>([]);
+  // People told after the delay, by the server: who and when (3.3).
+  const [laterNote, setLaterNote] = useState<string | null>(null);
+  // The page's function is new on each render; held here, it doesn't restart the ladder's timer.
+  const requestBackupsRef = useRef(requestBackups);
+  useEffect(() => {
+    requestBackupsRef.current = requestBackups;
+  }, [requestBackups]);
   const [results, setResults] = useState<ChallengeResult[]>([]);
   const [confidence, setConfidence] = useState(0);
   const [retryNote, setRetryNote] = useState("");
@@ -110,15 +124,16 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
     if (backupsFiredRef.current || !kinds.length) return;
     backupsFiredRef.current = true;
     setBackupsTrying(kinds);
-    void dispatchBackups(kinds, {
-      alarmLabel: alarm.label,
-      text: `SomniAI: "${alarm.label}" has been ringing and has not been answered.`,
-    }).then((outcomes) => {
+    // The page passes the request (it goes to the server, which has the
+    // transports: lib/backupServer.ts). Fired, never awaited: this screen and
+    // everything it imports make no network request of their own.
+    void requestBackupsRef.current(kinds).then(({ outcomes, later }) => {
       backupsRef.current = outcomes;
       setBackups(outcomes);
       setBackupsTrying([]);
+      setLaterNote(laterLine(later, (d) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })));
     });
-  }, [alarm.label]);
+  }, []);
 
   // Elapsed time is measured from startedAt and the current level lives in a
   // ref, so restarting the timer when the plan changes (a profile arriving
@@ -356,6 +371,7 @@ export default function RingingOverlay({ alarm, onResolved }: RingingOverlayProp
                   </li>
                 ))}
             </ul>
+            {laterNote && <p className="mt-2 text-xs text-rose-100">{laterNote}</p>}
           </section>
         )}
       </div>

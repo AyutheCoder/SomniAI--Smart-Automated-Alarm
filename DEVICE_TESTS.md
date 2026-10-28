@@ -619,3 +619,22 @@ both phones reach it, and installed on both.
 | 7 | A sets another critical alarm and answers it within the 5 minutes | No alert |
 | 8 | An ordinary alarm on A, not answered | No alert. Turn on "Ordinary alarms too", repeat: an alert (once 30 minutes have passed since the last) |
 | 9 | Phone B: "Unpair" | Both show no buddy; an unanswered critical alarm on A alerts nobody |
+
+## 3.3 Backups
+
+The channels' decisions and the server are tested without a phone
+(`BUDDY.md`, "Tests"); the on-device test checks the ring asks for backups
+without waiting and stops a rung device. What only devices show: a second
+device really rings, and stops; a real text arrives.
+
+**Not run yet.** The second device needs two devices signed in to **the same
+account**; the text needs Twilio (`BUDDY.md`, "Twilio setup").
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Two devices (a phone and the emulator, or two phones) signed in to the same account on `npm run dev:phone`, both with "This phone receives your buddy's alerts". On device A, an alarm 2 minutes ahead; don't answer it | At the backup level (75 s; 40 s for a critical alarm) device B rings, "… (from your other device)", louder in steps; A keeps ringing; A's ring log says `secondaryAlarm: delivered` |
+| 2 | Stop the alarm on A | B stops within a minute (the stop goes through A's queue) |
+| 3 | On B, Stop instead | B stops; A keeps ringing until answered |
+| 4 | Twilio set up; an emergency contact (your own second number, verified on a trial) with agreement ticked; delay 5 minutes; a critical alarm, not answered | At the backup level A's ring screen says "Mum will be told at …"; at that time the text arrives; the panel lists "your emergency contact was texted"; `buddy:cron` prints `emergencyContact` sent |
+| 5 | The same, answered within the delay | No text |
+

@@ -183,7 +183,7 @@ describe("settings", () => {
     let r = await read(await putSettings(request("PUT", "/x", { alertAfterMinutes: 30 })));
     expect(r.body.data.alertAfterMinutes).toBe(30);
     r = await read(await putSettings(request("PUT", "/x", { phone: "+44 7700 900-123", sharePhone: true })));
-    expect(r.body.data).toEqual({ alertAfterMinutes: 30, ordinaryAlarms: false, phone: "+447700900123", sharePhone: true });
+    expect(r.body.data).toEqual({ alertAfterMinutes: 30, ordinaryAlarms: false, phone: "+447700900123", sharePhone: true, emergencyContact: null });
     r = await read(await putSettings(request("PUT", "/x", { phone: null })));
     expect(r.body.data).toMatchObject({ phone: null, sharePhone: false });
     for (const bad of [{ alertAfterMinutes: 4 }, { alertAfterMinutes: 61 }, { alertAfterMinutes: 10.5 }, { ordinaryAlarms: "yes" },
@@ -373,7 +373,7 @@ describe("the alert: rate limit and delivery", () => {
     const s = sender();
     await runBuddyAlerts(s, at(15));
     const run = await runBuddyAlerts(s, at(25));
-    expect(run.skipped.too_soon).toBe(1);
+    expect(run.skipped["buddy:too_soon"]).toBe(1);
     expect(s.send).toHaveBeenCalledTimes(1);
     await runBuddyAlerts(s, at(45));
     expect(s.send).toHaveBeenCalledTimes(2);

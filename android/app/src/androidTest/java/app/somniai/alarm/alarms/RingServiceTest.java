@@ -59,12 +59,16 @@ public class RingServiceTest {
             shell("pm grant " + context.getPackageName() + " android.permission.POST_NOTIFICATIONS");
         }
         stopAnyRing();
+        // The backup level asks the server (3.3). Nothing listens here: it can't be
+        // reached, at once, and says so. Tests that want an answer start a stub.
+        Outbox.baseUrlOverride = "http://127.0.0.1:9";
         startedAt = System.currentTimeMillis();
     }
 
     @After
     public void tearDown() throws Exception {
         stopAnyRing();
+        Outbox.baseUrlOverride = null;
         for (String cmd : restore) {
             shell(cmd);
         }
@@ -96,7 +100,9 @@ public class RingServiceTest {
 
         RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null && ringNotification() == null && !alarmPlaying());
-        assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-basic"));
+        // One ring, one dismissal. Ladder entries are left out: on a slow emulator the setup
+        // above can outlast level 2 (10 s), and the ladder's timing has its own test.
+        assertEquals(List.of("ringing", "dismissed"), ringAndEnd("t-basic"));
     }
 
     @Test
@@ -239,7 +245,7 @@ public class RingServiceTest {
         Thread.sleep(12_000);
         assertNotNull("still alive and ringing", RingService.current);
         assertTrue(alarmPlaying());
-        assertEquals(List.of("ringing", "dismissed"), outcomesFor("t-race-1"));
+        assertEquals(List.of("ringing", "dismissed"), ringAndEnd("t-race-1"));
     }
 
     @Test
@@ -279,7 +285,7 @@ public class RingServiceTest {
             assertEquals("the top level turns the alarm stream all the way up", max, audio.getStreamVolume(AudioManager.STREAM_ALARM));
             waitFor("backups recorded", () -> detailOrEmpty("t-ladder", "backups").length() > 0);
             String backups = lastDetail("t-ladder", "backups");
-            assertTrue(backups, backups.contains("emergencyContact: not_configured"));
+            assertTrue(backups, backups.contains("emergencyContact: failed (couldn't reach the server)"));
 
             WakeCheck check = new WakeCheck(RingService.current.check, new java.util.Random(4), System.currentTimeMillis());
             assertEquals(WakeCheck.Step.PASSED, solveAll(check, System.currentTimeMillis() + 2_000));
@@ -304,6 +310,56 @@ public class RingServiceTest {
         }
     }
 
+    /**
+     * The backup level on a device (3.3): it asks the server in the background,
+     * the ring goes on, the answer is recorded, and a device it rang is stopped
+     * through the queue once this ring is.
+     */
+    @Test
+    public void theBackupLevelAsksTheServerAndAnotherDeviceRungIsStoppedAfter() throws Exception {
+        try (OutboxSyncTest.Stub server = new OutboxSyncTest.Stub(200)) {
+            server.reply = "{\"ok\":true,\"data\":{\"outcomes\":["
+                + "{\"kind\":\"secondaryAlarm\",\"status\":\"delivered\",\"receipt\":{\"transport\":\"fcm\",\"messageId\":\"projects/p/messages/9\",\"at\":\"2026-10-28T07:01:15Z\"}},"
+                + "{\"kind\":\"smartwatch\",\"status\":\"not_configured\",\"reason\":\"no watch app\"}],"
+                + "\"later\":[{\"who\":\"buddy\",\"name\":\"Bo\",\"at\":\"2026-10-28T07:15:00Z\"}]}}";
+            Outbox.baseUrlOverride = server.url();
+            // Its own id each run: the alarm log outlives a run, and an old entry must not count.
+            String id = "t-backup-" + System.currentTimeMillis();
+            AlarmSpec spec = new AlarmSpec(id, "Flight", 7, 0, EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true,
+                fastPlan(false, false, new int[] { 0, 1, 2, 3, 4 }, true));
+            assertTrue(RingService.start(context, spec, System.currentTimeMillis()));
+            waitFor("ringing", () -> RingService.current != null && RingService.current.ids.contains(id));
+            waitFor("backups recorded", () -> detailOrEmpty(id, "backups").length() > 0);
+            assertNotNull("still ringing: it never waited for the server", RingService.current);
+            String said = lastDetail(id, "backups");
+            assertTrue(said, said.contains("secondaryAlarm: delivered"));
+            assertTrue(said, said.contains("buddy: later"));
+            assertTrue(RingService.backupNote, RingService.backupNote.startsWith("Your buddy Bo will be told at "));
+            // Among whatever else the queue sends the same server (earlier tests' rings).
+            assertTrue(String.join("\n", server.received()),
+                server.received().stream().anyMatch(r -> r.startsWith("POST /api/alarms/" + id + "/backups ") && r.contains("\"kinds\":[\"secondaryAlarm\"")));
+
+            RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
+            waitFor("stopped", () -> RingService.current == null);
+            waitFor("the other device told to stop", () -> stopQueuedOrSent(server, id));
+        }
+    }
+
+    private boolean stopQueuedOrSent(OutboxSyncTest.Stub server, String id) {
+        for (String r : server.received()) {
+            if (r.startsWith("POST /api/alarms/" + id + "/backups/stop ")) {
+                return true;
+            }
+        }
+        JSONArray pending = Outbox.queue(context).pending();
+        for (int i = 0; i < pending.length(); i++) {
+            if (pending.optJSONObject(i).optString("path").equals("/api/alarms/" + id + "/backups/stop")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Test
     public void anUnmissableAlarmGetsTheFullLadderOnTheDevice() throws Exception {
         // Its personal ladder is slow and has no backups; unmissable, it climbs the
@@ -317,7 +373,7 @@ public class RingServiceTest {
         long at = System.currentTimeMillis() - t0;
         assertTrue("about 40 s, was " + at, at >= 39_500 && at < 43_000);
         waitFor("backups recorded", () -> detailOrEmpty("t-unmissable", "backups").length() > 0);
-        assertTrue(lastDetail("t-unmissable", "backups").contains("secondaryAlarm: not_configured"));
+        assertTrue(lastDetail("t-unmissable", "backups").contains("secondaryAlarm: failed (couldn't reach the server)"));
         String ringing = lastDetail("t-unmissable", "ringing");
         assertTrue(ringing, ringing.contains("full ladder (unmissable)"));
     }

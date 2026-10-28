@@ -557,6 +557,19 @@ Every stopped ring reports the level it had reached (escalate, with `at`):
 | Vitest and API | Every dismissed ring reports its level; escalate takes `at`; late reports are recorded in order |
 | On the device | `theLadderClimbsOnTheDevice`: levels on time, vibration from level 3, the check prompted, the stream full at the top, backups recorded, volume put back, escalate queued at level 5. `anUnmissableAlarmGetsTheFullLadderOnTheDevice`: a slow personal ladder with no backups reaches the backups at the standard 40 s. `atTheChallengeLevelTheCheckOpensByItself` |
 
+## Backups (prompt 3.3)
+
+At the ladder's backup level the ring service asks the server, on a
+background thread, with this device's push token so it isn't rung itself
+(`RingService.requestBackups`, `Outbox.request`). The ring never waits: the
+answer (or "couldn't reach the server") comes back to
+`RingController.onBackups`, is checked by `Backups.fromResponse` (a delivery
+needs a receipt, a missing channel has failed), recorded, and sent with the
+ring's report. The ring screen shows who will be told later, and when. A
+push of type `backup_ring` makes another device ring (`BackupRing`), and
+`backup_stop`, queued when the first device's ring ends, stops it.
+`BUDDY.md`, "Backups", has the channels.
+
 ## The bedtime check (prompt 3.1)
 
 Before bed, the phone checks everything that can silently stop tomorrow's

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HeartHandshake } from "lucide-react";
 import { ALERT_AFTER_DEFAULT, RATE } from "@/lib/buddy";
 import type { PushRegistration } from "@/lib/nativeBuddy";
@@ -11,17 +11,26 @@ interface BuddyStatus {
   incoming: { requestId: string; name: string; at: string }[];
   outgoing: { requestId: string; name: string; at: string }[];
   settings: { alertAfterMinutes: number; ordinaryAlarms: boolean; phone: string | null; sharePhone: boolean };
+  emergencyContact: { name: string; phone: string } | null;
+  channels: { push: boolean; sms: boolean };
   hasDevice: boolean;
-  alerts: { status: string; at: string }[];
+  alerts: { channel: "buddy" | "emergencyContact"; status: string; at: string }[];
 }
 
 const DELAYS = [5, 10, 15, 20, 30, 45, 60];
 
-const ALERT_WORDS: Record<string, string> = {
-  sent: "your buddy was told",
-  failed: "the push service failed",
-  no_device: "your buddy had no phone set up for alerts",
-  not_configured: "push isn't set up on the server",
+const ALERT_WORDS: Record<string, Record<string, string>> = {
+  buddy: {
+    sent: "your buddy was told",
+    failed: "the push to your buddy failed",
+    no_device: "your buddy had no phone set up for alerts",
+    not_configured: "push isn't set up on the server",
+  },
+  emergencyContact: {
+    sent: "your emergency contact was texted",
+    failed: "the text to your emergency contact failed",
+    not_configured: "texts aren't set up on the server",
+  },
 };
 
 async function call(path: string, method: string, body?: unknown): Promise<{ ok: boolean; error?: string }> {
@@ -49,7 +58,11 @@ export default function BuddyPanel({ push }: { push: PushRegistration | null }) 
   const [error, setError] = useState("");
   const [code, setCode] = useState("");
   const [phone, setPhone] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactConsent, setContactConsent] = useState(false);
 
+  const filled = useRef(false);
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/buddy");
@@ -58,7 +71,16 @@ export default function BuddyPanel({ push }: { push: PushRegistration | null }) 
       }
       const data = (await res.json()).data as BuddyStatus;
       setStatus(data);
-      setPhone(data.settings.phone ?? "");
+      // The fields take the saved values once: a later load (React runs the
+      // first one twice in development; a slow answer anywhere) must not
+      // overwrite what is being typed.
+      if (!filled.current) {
+        filled.current = true;
+        setPhone(data.settings.phone ?? "");
+        setContactName(data.emergencyContact?.name ?? "");
+        setContactPhone(data.emergencyContact?.phone ?? "");
+        setContactConsent(data.emergencyContact !== null);
+      }
     }
     catch {
       setError("Couldn't load your wake buddy. It will show when the server is back.");
@@ -209,12 +231,57 @@ export default function BuddyPanel({ push }: { push: PushRegistration | null }) 
             : `This phone can't receive alerts yet: ${push.reason}`}
       </p>
 
+      <form
+        aria-label="Emergency contact"
+        className="mt-4 rounded-xl bg-white/5 p-4 text-sm text-slate-300"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void act("/api/buddy/settings", "PUT", { emergencyContact: { name: contactName, phone: contactPhone, consent: contactConsent } });
+        }}
+      >
+        <p className="mb-1 font-medium text-white">Emergency contact</p>
+        <p className="mb-3 text-xs text-slate-400">
+          Someone without SomniAI, texted at the same time as your buddy, under the same rules: {s.ordinaryAlarms ? "any" : "a critical"} alarm
+          not answered after {s.alertAfterMinutes} minutes, at most once per alarm. SomniAI&apos;s server texts them, so it works even
+          if your phone is off.
+          {!status.channels.sms && " Texts aren't set up on this server yet, so they wouldn't go out."}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input aria-label="Contact's name" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Name"
+            className="w-32 rounded-lg border border-white/10 bg-slate-900 px-2 py-1 text-white" />
+          <input aria-label="Contact's number" type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+91 98765 43210"
+            className="w-44 rounded-lg border border-white/10 bg-slate-900 px-2 py-1 text-white" />
+        </div>
+        <label className="mt-2 flex items-start gap-2 text-xs">
+          <input type="checkbox" checked={contactConsent} onChange={(e) => setContactConsent(e.target.checked)} className="mt-0.5" />
+          They&apos;ve agreed to get these texts from SomniAI.
+        </label>
+        <div className="mt-2 flex gap-2">
+          <button type="submit" className="rounded-lg border border-white/20 px-3 py-1 text-xs">Save contact</button>
+          {status.emergencyContact && (
+            <button
+              type="button"
+              onClick={() => void act("/api/buddy/settings", "PUT", { emergencyContact: null }).then((ok) => {
+                if (ok) {
+                  setContactName("");
+                  setContactPhone("");
+                  setContactConsent(false);
+                }
+              })}
+              className="text-xs text-slate-400 underline"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </form>
+
       {status.alerts.length > 0 && (
         <div className="mt-3 text-xs text-slate-400">
           <p className="font-medium text-slate-300">Recent alerts about you</p>
           <ul className="list-disc pl-5">
             {status.alerts.map((a, i) => (
-              <li key={i}>{new Date(a.at).toLocaleString()}: {ALERT_WORDS[a.status] ?? a.status}</li>
+              <li key={i}>{new Date(a.at).toLocaleString()}: {ALERT_WORDS[a.channel]?.[a.status] ?? a.status}</li>
             ))}
           </ul>
         </div>

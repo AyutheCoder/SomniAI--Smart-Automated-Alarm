@@ -9,27 +9,78 @@ import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
 import app.somniai.alarm.MainActivity;
+import com.google.android.gms.tasks.Tasks;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Receives wake-buddy alerts (prompt 3.2) and shows them, with a button that
- * opens the dialler on the sleeper's number when they shared one. The server
- * sends data messages, so this builds the notification itself, call button
- * and all, whether or not the app is open.
+ * Every push SomniAI gets. The server sends data messages, so this decides
+ * what each one does, whether or not the app is open:
+ * <ul>
+ *   <li>buddy_alert (3.2): shows "… hasn't confirmed they're awake", with a
+ *       button that opens the dialler on their number when they shared one.</li>
+ *   <li>backup_ring (3.3): another of the user's devices reached its backup
+ *       level; this one rings ({@link BackupRing}).</li>
+ *   <li>backup_stop (3.3): the alarm was stopped there; stop it here.</li>
+ * </ul>
  */
-public class BuddyMessagingService extends FirebaseMessagingService {
+public class SomniMessagingService extends FirebaseMessagingService {
 
     static final String CHANNEL = "buddy_alerts";
 
     @Override
     public void onMessageReceived(RemoteMessage message) {
-        BuddyAlertMessage alert = BuddyAlertMessage.from(message.getData());
+        Map<String, String> data = message.getData();
+        String type = data.get("type");
+        if ("backup_ring".equals(type)) {
+            String alarmId = data.get("alarmId");
+            if (alarmId == null || alarmId.isEmpty()) {
+                return;
+            }
+            AlarmSpec spec = BackupRing.spec(alarmId, data.get("label"), LocalDateTime.now(ZoneId.systemDefault()));
+            boolean started = RingService.start(this, spec, System.currentTimeMillis());
+            Log.i(AlarmScheduler.TAG, "backup ring for " + alarmId + (started ? " started" : " refused by Android"));
+            return;
+        }
+        if ("backup_stop".equals(type)) {
+            RingService.Snapshot now = RingService.current;
+            String alarmId = data.get("alarmId");
+            // Only the backup ring for that alarm: never an alarm of this device's own.
+            if (now != null && now.ids.size() == 1 && BackupRing.stops(now.ids.get(0), alarmId)) {
+                RingService.dismiss(this, Verification.none(System.currentTimeMillis()));
+                Log.i(AlarmScheduler.TAG, "backup ring for " + alarmId + " stopped: stopped on the other device");
+            }
+            return;
+        }
+        BuddyAlertMessage alert = BuddyAlertMessage.from(data);
         if (alert == null) {
-            Log.w(AlarmScheduler.TAG, "push ignored: not a buddy alert");
+            Log.w(AlarmScheduler.TAG, "push ignored: type " + type);
             return;
         }
         show(this, alert);
+    }
+
+    /**
+     * This device's push token, waiting up to timeoutMs; null without Firebase
+     * in this build or without an answer. Never on the main thread.
+     */
+    static String ownToken(Context context, long timeoutMs) {
+        if (FirebaseApp.getApps(context).isEmpty()) {
+            return null;
+        }
+        try {
+            return Tasks.await(FirebaseMessaging.getInstance().getToken(), timeoutMs, TimeUnit.MILLISECONDS);
+        }
+        catch (Exception e) {
+            Log.w(AlarmScheduler.TAG, "no push token: " + e);
+            return null;
+        }
     }
 
     /** A new token: the web app sends it to the server the next time it opens (lib/nativeBuddy.ts). */

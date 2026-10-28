@@ -2,7 +2,9 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { formatCode, sharedPhone } from "@/lib/buddy";
-import { activePairFor, otherSide, publicName, settingsFor } from "@/lib/buddyServer";
+import { activePairFor, contactFor, otherSide, publicName, settingsFor } from "@/lib/buddyServer";
+import { fcmFromEnv } from "@/lib/push";
+import { twilioFromEnv } from "@/lib/sms";
 import { BuddyAlert, BuddyInvite, BuddyPair, PushToken } from "@/models/Buddy";
 
 /**
@@ -26,7 +28,7 @@ export async function GET() {
       BuddyPair.find({ requesterId: userId, status: "requested" }).sort({ requestedAt: -1 }).lean<{ _id: unknown; ownerId: string; requestedAt: Date }[]>(),
       settingsFor(userId),
       PushToken.countDocuments({ userId }),
-      BuddyAlert.find({ sleeperId: userId }).sort({ at: -1 }).limit(10).lean<{ status: string; at: Date; alarmId: string }[]>(),
+      BuddyAlert.find({ sleeperId: userId }).sort({ at: -1 }).limit(10).lean<{ channel?: string; status: string; at: Date; alarmId: string }[]>(),
     ]);
     let buddy = null;
     if (pair) {
@@ -47,8 +49,11 @@ export async function GET() {
       incoming: await Promise.all(incoming.map(async (r) => ({ requestId: String(r._id), name: await publicName(r.requesterId), at: r.requestedAt }))),
       outgoing: await Promise.all(outgoing.map(async (r) => ({ requestId: String(r._id), name: await publicName(r.ownerId), at: r.requestedAt }))),
       settings,
+      emergencyContact: await contactFor(userId),
+      // Whether this server can send at all: said, so the panel doesn't promise what it can't do.
+      channels: { push: fcmFromEnv().configured, sms: twilioFromEnv().configured },
       hasDevice: devices > 0,
-      alerts: alerts.map((a) => ({ status: a.status, at: a.at, alarmId: a.alarmId })),
+      alerts: alerts.map((a) => ({ channel: a.channel ?? "buddy", status: a.status, at: a.at, alarmId: a.alarmId })),
     });
   });
 }

@@ -134,16 +134,39 @@ final class Outbox {
 
     /** The HTTP status, or -1 when the server couldn't be reached. */
     private static int post(String base, String path, String body) {
+        return request(base, path, body, 15_000).status;
+    }
+
+    /** A server answer: the status (-1: not reached) and the body, if any. */
+    static final class Response {
+        final int status;
+        final String body;
+
+        Response(int status, String body) {
+            this.status = status;
+            this.body = body;
+        }
+    }
+
+    /**
+     * POSTs JSON to the server the web view loads, signed in with its session
+     * cookie, and reads the answer. Never on the main thread.
+     */
+    static Response request(Context context, String path, String body, int timeoutMs) {
+        return request(baseUrl(context), path, body, timeoutMs);
+    }
+
+    private static Response request(String base, String path, String body, int timeoutMs) {
         if (base == null) {
-            return -1;
+            return new Response(-1, null);
         }
         HttpURLConnection c = null;
         try {
             String url = base.replaceAll("/+$", "") + path;
             c = (HttpURLConnection) new URL(url).openConnection();
             c.setRequestMethod("POST");
-            c.setConnectTimeout(15_000);
-            c.setReadTimeout(15_000);
+            c.setConnectTimeout(timeoutMs);
+            c.setReadTimeout(timeoutMs);
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/json");
             String cookie = sessionCookie(url);
@@ -155,11 +178,24 @@ final class Outbox {
             try (OutputStream out = c.getOutputStream()) {
                 out.write(bytes);
             }
-            return c.getResponseCode();
+            int status = c.getResponseCode();
+            InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();
+            String answer = null;
+            if (in != null) {
+                try (InputStream stream = in) {
+                    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                    byte[] chunk = new byte[4096];
+                    for (int n; (n = stream.read(chunk)) > 0; ) {
+                        buf.write(chunk, 0, n);
+                    }
+                    answer = buf.toString("UTF-8");
+                }
+            }
+            return new Response(status, answer);
         }
         catch (IOException | RuntimeException e) {
-            Log.w(AlarmScheduler.TAG, "sync: " + path + " not sent: " + e);
-            return -1;
+            Log.w(AlarmScheduler.TAG, "server: " + path + " not reached: " + e);
+            return new Response(-1, null);
         }
         finally {
             if (c != null) {

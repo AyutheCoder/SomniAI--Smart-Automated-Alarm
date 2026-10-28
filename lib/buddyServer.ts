@@ -36,3 +36,11 @@ export async function settingsFor(userId: string): Promise<BuddySettings> {
     sharePhone: b.sharePhone === true,
   };
 }
+
+/** The emergency contact (3.3), if one is set with the user's confirmation that they agreed. */
+export async function contactFor(userId: string): Promise<{ name: string; phone: string } | null> {
+  const u = await User.findById(userId).select("preferences.emergencyContact")
+    .lean<{ preferences?: { emergencyContact?: { name?: string; channel?: string; value?: string; consentAt?: Date } } }>();
+  const c = u?.preferences?.emergencyContact;
+  return c?.channel === "sms" && c.value && c.name && c.consentAt ? { name: c.name, phone: c.value } : null;
+}

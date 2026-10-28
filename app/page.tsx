@@ -13,6 +13,7 @@ import { connectNative, type NativeConnection, type NativeSyncStatus } from "@/l
 import { SomniAlarm } from "@/lib/nativeAlarm";
 import { hasPreflight, preflightLine } from "@/lib/nativePreflight";
 import { hasPush, registerPush, type PushRegistration } from "@/lib/nativeBuddy";
+import { requestBackupsFromServer } from "@/lib/backupClient";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
@@ -474,7 +475,14 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      {ringingAlarm && <RingingOverlay key={ringingAlarm._id} alarm={ringingAlarm} onResolved={resolveAlarm} />}
+      {ringingAlarm && (
+        <RingingOverlay
+          key={ringingAlarm._id}
+          alarm={ringingAlarm}
+          onResolved={resolveAlarm}
+          requestBackups={(kinds) => requestBackupsFromServer(ringingAlarm._id, kinds)}
+        />
+      )}
 
       <header className="mb-8 flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20">

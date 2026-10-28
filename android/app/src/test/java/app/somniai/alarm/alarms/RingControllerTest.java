@@ -44,7 +44,10 @@ public class RingControllerTest {
         @Override public void pulse() { pulses++; }
         @Override public void showLevel(EscalationLadder.Level l) { levels.add(l.level); }
         @Override public void promptChallenge() { challenges++; }
-        @Override public List<Backups.Outcome> tryBackups(List<String> kinds) { backupsTried.add(kinds); return Backups.tryAll(kinds); }
+        final List<String> backupsFor = new ArrayList<>();
+        final List<String> backupStops = new ArrayList<>();
+        @Override public void requestBackups(RingController.Alarm a, List<String> kinds) { backupsTried.add(kinds); backupsFor.add(a.id); }
+        @Override public void stopBackupRing(RingController.Alarm a) { backupStops.add(a.id); }
         @Override public void restoreAlarmVolume() { calls.add("restoreAlarmVolume"); raised = false; }
         @Override public boolean startSound(Source s) { calls.add("startSound " + s); sound = playable.contains(s); return sound; }
         @Override public void setVolume(float v) { volumes.add(v); }
@@ -159,8 +162,10 @@ public class RingControllerTest {
         assertEquals(State.STOPPED, c.state());
         fx.assertNothingHeld();
         assertFalse(fx.serviceRunning);
-        // Its first tick was already past every level: straight to the top, backups tried once.
-        assertEquals(List.of("a ringing", "a backups", "a escalated", "a unanswered"), fx.records);
+        // Its first tick was already past every level: straight to the top, backups asked for once
+        // (recorded when the server answers, which it hasn't here).
+        assertEquals(List.of("a ringing", "a escalated", "a unanswered"), fx.records);
+        assertEquals(1, fx.backupsTried.size());
     }
 
     @Test
@@ -413,6 +418,8 @@ public class RingControllerTest {
         c.tick(75_000);
         assertEquals(5, c.level().level);
         assertEquals("every channel, once", List.of(EscalationLadder.BACKUP_KINDS), fx.backupsTried);
+        assertFalse("asked, not yet answered: nothing claimed", fx.records.contains("a backups"));
+        c.onBackups(Backups.failedAll(EscalationLadder.BACKUP_KINDS, "couldn't reach the server"), 76_000);
         assertTrue(fx.records.contains("a backups"));
 
         tickTo(c, 75_500, 300_000);
@@ -458,8 +465,65 @@ public class RingControllerTest {
         assertEquals(1, fx.backupsTried.size());
         c.escalateToTop(4_000);
         assertEquals("not again", 1, fx.backupsTried.size());
+        c.onBackups(Backups.failedAll(EscalationLadder.BACKUP_KINDS, "couldn't reach the server"), 4_500);
         c.dismiss(5_000, passed(1, 90));
         assertEquals(List.of("a dismissed rang 0 ended 5000 checked level 5 backups 3"), fx.queued);
+    }
+
+    static Backups.Answer rangTablet() {
+        return Backups.fromResponse(List.of("secondaryAlarm", "smartwatch"), 200,
+            "{\"data\":{\"outcomes\":["
+            + "{\"kind\":\"secondaryAlarm\",\"status\":\"delivered\",\"receipt\":{\"transport\":\"fcm\",\"messageId\":\"projects/p/messages/1\",\"at\":\"2026-10-28T07:01:15Z\"}},"
+            + "{\"kind\":\"smartwatch\",\"status\":\"not_configured\",\"reason\":\"no watch app\"}],\"later\":[]}}");
+    }
+
+    @Test
+    public void theBackupsAreAskedForTheRingingAlarmAndTheirAnswerGoesWithTheReport() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.escalateToTop(1_000);
+        assertEquals(List.of("a"), fx.backupsFor);
+        c.onBackups(rangTablet(), 2_000);
+        assertTrue(fx.records.contains("a backups"));
+        c.dismiss(3_000, Verification.none(3_000));
+        assertEquals(List.of("a dismissed rang 0 ended 3000 unchecked level 5 backups 2"), fx.queued);
+    }
+
+    @Test
+    public void aDeviceRungAsABackupIsStoppedWhenThisRingStops() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.escalateToTop(1_000);
+        c.onBackups(rangTablet(), 2_000);
+        assertTrue("still ringing here: nothing stopped yet", fx.backupStops.isEmpty());
+        c.dismiss(3_000, Verification.none(3_000));
+        assertEquals(List.of("a"), fx.backupStops);
+    }
+
+    @Test
+    public void anAnswerAfterTheRingEndedIsRecordedAndItsDeviceStopped() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.escalateToTop(1_000);
+        c.dismiss(2_000, Verification.none(2_000));
+        assertEquals("the report went without it", List.of("a dismissed rang 0 ended 2000 unchecked level 5"), fx.queued);
+        c.onBackups(rangTablet(), 9_000);
+        assertTrue(fx.records.contains("a backups"));
+        assertEquals("rung after the user was up: stopped at once", List.of("a"), fx.backupStops);
+    }
+
+    @Test
+    public void nothingIsStoppedWhenNoOtherDeviceWasRung() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.escalateToTop(1_000);
+        c.onBackups(Backups.failedAll(List.of("secondaryAlarm"), "couldn't reach the server"), 2_000);
+        c.dismiss(3_000, Verification.none(3_000));
+        assertTrue(fx.backupStops.isEmpty());
     }
 
     @Test

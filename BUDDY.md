@@ -1,4 +1,4 @@
-# Wake buddy (prompt 3.2)
+# Wake buddy and backups (prompts 3.2 and 3.3)
 
 Two SomniAI users pair up. If one of them doesn't confirm they're awake a set
 number of minutes after a **critical** alarm, the other gets a push on their
@@ -27,7 +27,7 @@ dialler on Sam's number (if Sam chose to share it).
   or not, and the sleeper sees the recent ones in the panel.
 - **The push** (`lib/push.ts`) is a Firebase Cloud Messaging data message, so
   the phone builds the notification itself, call button included
-  (`BuddyMessagingService.java`). The button opens the dialler with the number
+  (`SomniMessagingService.java`). The button opens the dialler with the number
   filled in; the buddy presses call. No call permission.
 
 ## What is shared, and what isn't
@@ -99,4 +99,62 @@ dialler on Sam's number (if Sam chose to share it).
 | `lib/nativeBuddy.test.ts` | The phone's token sent to the server, or why not |
 | `e2e/buddy.spec.ts` | Two browsers: code, ask, accept, both see each other, unpair |
 | JVM, `BuddyAlertMessageTest` | The push read on the phone; only a number ever reaches the dialler |
+| `lib/sms.test.ts` | Twilio: not configured sends nothing; basic auth and the form; sent only with a SID; Twilio's refusal in its own words; international format only |
+| `tests/api/backups.test.ts` | The backup level per channel: second device delivered (with Firebase's id, never to the asking device), failed, not_configured, a gone token forgotten, the stop; smartwatch never; people "later" at the delay, delivered once texted, not_configured otherwise; the emergency contact in the server's check (after the delay, once, not when answered or ordinary, its own rate limit, retries, no text without consent); the routes and the contact settings |
+| `lib/backupClient.test.ts` | The web's check of the server's answer |
+| JVM, `BackupsTest`, `BackupRingTest`, `RingControllerTest` | The phone's check of the answer; the backup ring (no check, no backups of its own, stopped only for its alarm); the controller asks without waiting, records the answer during or after the ring, stops a device it rang |
+| On the device, `RingServiceTest` | The backup level asks a server on the device while still ringing, records "delivered" and "later", shows who will be told, and queues the stop |
+| `e2e/buddy.spec.ts` | The emergency contact needs their agreement, says when texts aren't set up, and can be removed |
 | Two phones | `DEVICE_TESTS.md`, 3.2 |
+
+## Backups (prompt 3.3)
+
+When a ringing alarm reaches its backup level (the ladder's last step), the
+ringing device asks the server, in the background, and keeps ringing whatever
+the answer (`POST /api/alarms/[id]/backups`, `lib/backupServer.ts`). Every
+channel reports exactly one of **delivered** (a transport accepted it and gave
+its own id: Firebase's message name, Twilio's SID), **failed** (with the reason),
+or **not_configured**; `dispatchBackups` turns a "delivered" without a receipt
+into a failure, and the phone and the web check the answer again on arrival.
+
+| Channel | When | How |
+| --- | --- | --- |
+| **Second device** | At the backup level, at once | Every other phone or tablet the user is signed in on gets a push and **rings** like an alarm (`BackupRing.java`): louder in steps, stopped with Stop, no wake check of its own and **no backup level of its own**, so two devices can't keep ringing each other. When the alarm is stopped on the first device, the others are stopped too (`/backups/stop`, through the phone's queue) |
+| **Wake buddy** (3.2) | After the sleeper's delay | Push, as in 3.2. At the backup level it's reported as "later", with the time |
+| **Emergency contact** | After the sleeper's delay, same rules as the buddy | A **text through Twilio**, sent by the server's check, so it goes even if the phone is dead. Only to a contact the user confirmed agreed to it |
+| Smartwatch | Never | SomniAI has no watch app; a watch paired with the phone already shows the alarm's notification. Always "not set up" |
+
+People are told only after the delay, by decision (2026-10-28): the second
+device bothers nobody else, so it rings at once; a person is woken only once the
+sleeper's own delay has passed, and only for critical alarms (or ordinary ones
+if they opted in). The ring screen says when ("Your buddy Bo and Mum will be
+told at 7:15 if you haven't answered").
+
+### Why Twilio for the emergency contact
+
+The options compared before building it (the user chose Twilio):
+
+- **Twilio SMS from the server** (built): works when the phone is dead or
+  offline; no Play-restricted permission. Costs per message plus a number;
+  for India, Twilio's domestic route needs DLT registration (a registered
+  company and sender ID), the international route doesn't but costs more and
+  shows a random sender. A trial account texts verified numbers only.
+- **The phone's own SMS**: `SEND_SMS` is limited by Google Play to default SMS
+  apps and rare approved exceptions, so an alarm app would very likely be
+  refused; without it the app can only open the SMS app, which someone asleep
+  can't press Send in. Doesn't work when the phone is dead.
+- **A call**: `ACTION_DIAL` needs a tap; `ACTION_CALL` (CALL_PHONE) places it,
+  but takes the phone's audio away from the alarm and the contact hears silence.
+
+### Twilio setup (for a real text)
+
+1. Sign up at <https://www.twilio.com/try-twilio> (a free trial is enough to
+   test). Verify **your contact's number** under Phone Numbers > Verified Caller
+   IDs: a trial account can only text verified numbers.
+2. Get a number to send from (Phone Numbers > Buy a number; the trial gives
+   credit), or create a Messaging Service.
+3. Put three values in `.env.local`, never in the repository:
+   `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` (Console home page), and
+   `TWILIO_FROM` (the number, as `+1…`, or the Messaging Service SID, `MG…`).
+4. Restart the server. The panel stops saying "Texts aren't set up on this
+   server yet". Numbers must be in international format (`+91…`).

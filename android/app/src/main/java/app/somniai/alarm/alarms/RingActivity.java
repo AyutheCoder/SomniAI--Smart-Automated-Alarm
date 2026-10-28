@@ -60,6 +60,14 @@ public class RingActivity extends Activity {
     private TextView question;
     private EditText answer;
     private TextView message;
+    /** "Your buddy … will be told at 7:15 if you haven't answered" (3.3). */
+    private TextView backupNote;
+    private final BroadcastReceiver backups = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            showBackupNote();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,6 +83,7 @@ public class RingActivity extends Activity {
         setContentView(ringView());
         ContextCompat.registerReceiver(this, stopped, new IntentFilter(RingService.ACTION_STOPPED), ContextCompat.RECEIVER_NOT_EXPORTED);
         ContextCompat.registerReceiver(this, challenge, new IntentFilter(RingService.ACTION_CHALLENGE), ContextCompat.RECEIVER_NOT_EXPORTED);
+        ContextCompat.registerReceiver(this, backups, new IntentFilter(RingService.ACTION_BACKUPS), ContextCompat.RECEIVER_NOT_EXPORTED);
     }
 
     @Override
@@ -100,6 +109,7 @@ public class RingActivity extends Activity {
     protected void onDestroy() {
         unregisterReceiver(stopped);
         unregisterReceiver(challenge);
+        unregisterReceiver(backups);
         super.onDestroy();
     }
 
@@ -161,8 +171,27 @@ public class RingActivity extends Activity {
         root.addView(text(time, 56, Typeface.BOLD));
         root.addView(name);
         root.addView(button("Stop alarm", v -> stopPressed()), fill());
+        root.addView(backupNote());
         clearOfKeyboardAndBars(root);
         return root;
+    }
+
+    /** Above the check rather than below it, so it never pushes Check under the keyboard. */
+    private TextView backupNote() {
+        backupNote = text("", 14, Typeface.NORMAL);
+        backupNote.setPadding(0, dp(12), 0, dp(12));
+        backupNote.setContentDescription("Backups");
+        showBackupNote();
+        return backupNote;
+    }
+
+    private void showBackupNote() {
+        if (backupNote == null) {
+            return;
+        }
+        String note = RingService.backupNote;
+        backupNote.setText(note == null ? "" : note);
+        backupNote.setVisibility(note == null ? View.GONE : View.VISIBLE);
     }
 
     /**
@@ -172,6 +201,7 @@ public class RingActivity extends Activity {
      */
     private View checkView() {
         LinearLayout root = column();
+        root.addView(backupNote());
         root.addView(text("Solve to stop the alarm", 22, Typeface.BOLD));
         progress = text("", 16, Typeface.NORMAL);
         // "9 × 12 + 9 × 12 = ?" on one line on a phone: at 48 sp it wrapped and
