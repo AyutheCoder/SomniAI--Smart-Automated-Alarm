@@ -627,8 +627,24 @@ The channels' decisions and the server are tested without a phone
 without waiting and stops a rung device. What only devices show: a second
 device really rings, and stops; a real text arrives.
 
-**Not run yet.** The second device needs two devices signed in to **the same
-account**; the text needs Twilio (`BUDDY.md`, "Twilio setup").
+Device A: phone, POCO M8 5G (Xiaomi), HyperOS 3.0, Android 16 (API 36).
+Device B: emulator, Medium Phone AVD, Android 17 (API 37). Both on
+`npm run dev:phone` through `adb reverse`, signed in to the same account,
+debug APK built from `6fdd2d1`, 2026-10-29. Steps 1-3 pass; 4 and 5 (the text)
+not run yet: they need Twilio (`BUDDY.md`, "Twilio setup").
+
+| # | Result |
+| --- | --- |
+| 1 | Pass. Critical alarm: A at the backup level 45 s in, logs `secondaryAlarm: delivered; smartwatch: not_configured (…no watch app…); emergencyContact: not_configured (No emergency contact is set)` 2.3 s later; B logs `backup ring for … started` 4 s after A's backup level, rings `backup-…` as "… (from your other device)", louder in steps (levels 1-4, no wake check); A keeps ringing |
+| 2 | Pass. A answered (wake check passed); A's queue sent the stop 18 s later, B logged `stopped: stopped on the other device` and was dismissed 19 s after A |
+| 3 | Pass. B unlocked, so its ring showed as a heads-up notification ("Tap to stop", as for any alarm on an unlocked screen); tapped, "Stop alarm": B dismissed, A kept ringing until answered |
+
+**First attempt failed, truthfully.** The first time, A's backups request ran
+out its 20 s: the dev server was compiling the new route on that first request
+(8.4 s, then 5.9 s more) with 0.6 GB of memory free, and the request was still
+unfinished when A gave up. A reported all three backups `failed (couldn't reach
+the server)`, and B didn't ring. Once compiled, the route answered in 2.3 s. A
+production server is built ahead, so it doesn't compile on a request.
 
 | # | Do this | Pass when |
 | --- | --- | --- |

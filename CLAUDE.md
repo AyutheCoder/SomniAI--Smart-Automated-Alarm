@@ -31,7 +31,7 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **3.3, finish on devices**: a second device ringing and stopping (same account on two devices), and a real text once Twilio is set up (`DEVICE_TESTS.md`, 3.3; `BUDDY.md`, "Twilio setup"). 3.4 after that |
+| **Next prompt** | **3.3, finish on devices**: a real text once Twilio is set up (`DEVICE_TESTS.md`, 3.3 steps 4-5; `BUDDY.md`, "Twilio setup"). The second device rings and stops on the POCO + emulator (steps 1-3 pass, 2026-10-29). 3.4 after that |
 | Last completed | 3.3 (real backups, `BUDDY.md` "Backups": the ringing device asks `/api/alarms/[id]/backups` in the background (never waits); the second device rings at once by FCM (`BackupRing`, no check and no backups of its own) and is stopped when the first is; the wake buddy and the emergency contact are told only after the sleeper's delay, by the server's check (user's choice), the contact by Twilio SMS (user's choice after comparing Twilio / phone SMS / call: cost, Play's SEND_SMS restriction, works when the phone is dead), only with recorded consent; smartwatch always not_configured (no watch app); every channel delivered/failed/not_configured, delivered only with a transport id. Found: the panel's fields were overwritten by a late load. 3.2 before that |
 | Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 can now use `npm run dev:phone`), and 3.1's by-hand checklist. The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
