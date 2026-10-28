@@ -94,6 +94,14 @@ describe("push through Firebase Cloud Messaging", () => {
     expect(r.error).toContain("UNREGISTERED");
   });
 
+  it("forgets a token Google says was never valid, but not for other bad requests", async () => {
+    // The real service's answer to a malformed token (2026-10-28).
+    const invalid = fakeFetch(() => ({ status: 400, body: { error: { code: 400, status: "INVALID_ARGUMENT", message: "The registration token is not a valid FCM registration token" } } }));
+    expect((await fcmFromEnv(ENV, invalid.fn).send("t", {})).unregistered).toBe(true);
+    const otherBad = fakeFetch(() => ({ status: 400, body: { error: { status: "INVALID_ARGUMENT", message: "Invalid value at 'message.data'" } } }));
+    expect((await fcmFromEnv(ENV, otherBad.fn).send("t", {})).unregistered).toBe(false);
+  });
+
   it("reports other failures without forgetting the token", async () => {
     const { fn } = fakeFetch(() => ({ status: 503, body: { error: { status: "UNAVAILABLE", message: "try later" } } }));
     expect(await fcmFromEnv(ENV, fn).send("t", {})).toEqual({ ok: false, unregistered: false, error: "503 UNAVAILABLE try later" });

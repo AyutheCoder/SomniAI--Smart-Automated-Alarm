@@ -78,12 +78,16 @@ dialler on Sam's number (if Sam chose to share it).
 ### What I (or anyone with the repo) do after that
 
 5. Add `CRON_SECRET` to `.env.local` (`.env.local.example` shows how to make
-   one), and restart `npm run dev`.
-6. Rebuild the app with Firebase in it, `npm run android:build`, and install
-   it on both phones (`npm run android:run`, or `adb install` the APK).
-7. Run `npm run buddy:cron` next to `npm run dev`. Each minute it prints what
-   the check did.
-8. The two-phone test in `DEVICE_TESTS.md`, 3.2.
+   one).
+6. Start the server for phones, `npm run dev:phone` (a local MongoDB, no
+   install), and on each phone or emulator `adb reverse tcp:3000 tcp:3000`.
+7. Build the app with Firebase in it and that server,
+   `CAP_SERVER_URL=http://localhost:3000 npm run android:build`, and install it
+   on both (`adb -s <device> install -r` the APK).
+8. Run `npm run buddy:cron` alongside. Each minute it prints what the check did.
+9. The two-device test in `DEVICE_TESTS.md`, 3.2. A second phone, or the
+   emulator with a Google Play image, can be the buddy. A critical alarm is one
+   made with "Critical: must not miss" ticked, or from a task marked critical.
 
 ## Tests
 

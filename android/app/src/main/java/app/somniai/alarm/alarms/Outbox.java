@@ -70,7 +70,17 @@ final class Outbox {
     static void enqueue(Context context, List<SyncCalls.Call> calls) {
         queue(context).enqueue(calls, System.currentTimeMillis());
         Log.i(AlarmScheduler.TAG, "queued " + calls.size() + " call(s) for the server; " + queue(context).size() + " waiting");
-        scheduleSync(context);
+        // REPLACE, not KEEP: a sync that failed earlier waits out an exponential
+        // back-off (up to hours), and a fresh "I'm awake" waited behind it, long
+        // enough for a wake buddy to be told the opposite (found 2026-10-28).
+        // Safe: flush is synchronized and removes each call only once sent, so
+        // a replaced sync still running and the new one never send one twice.
+        scheduleSync(context, ExistingWorkPolicy.REPLACE);
+    }
+
+    /** At app start and boot: keep a sync already waiting. */
+    static void scheduleSync(Context context) {
+        scheduleSync(context, ExistingWorkPolicy.KEEP);
     }
 
     /**
@@ -78,7 +88,7 @@ final class Outbox {
      * first unlock WorkManager isn't available; the queue then waits for the
      * next app start or BOOT_COMPLETED, which call this again.
      */
-    static void scheduleSync(Context context) {
+    static void scheduleSync(Context context, ExistingWorkPolicy policy) {
         if (!autoSync) {
             return;
         }
@@ -87,8 +97,7 @@ final class Outbox {
                 .setConstraints(new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build();
-            // KEEP: a sync already waiting sends everything, including what was just added.
-            WorkManager.getInstance(context.getApplicationContext()).enqueueUniqueWork(WORK, ExistingWorkPolicy.KEEP, work);
+            WorkManager.getInstance(context.getApplicationContext()).enqueueUniqueWork(WORK, policy, work);
         }
         catch (IllegalStateException e) {
             Log.w(AlarmScheduler.TAG, "sync not scheduled yet (" + e.getMessage() + "); will retry at app start or after unlock");

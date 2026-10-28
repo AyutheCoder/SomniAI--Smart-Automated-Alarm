@@ -104,9 +104,12 @@ export function fcmFromEnv(
         error?: { status?: string; message?: string; details?: { errorCode?: string }[] };
       };
       const code = body.error?.details?.find((d) => d.errorCode)?.errorCode ?? body.error?.status ?? "";
+      // A token that was never valid is answered 400 INVALID_ARGUMENT, "The registration
+      // token is not a valid FCM registration token" (seen against the real service).
+      const badToken = code === "INVALID_ARGUMENT" && /registration token/i.test(body.error?.message ?? "");
       return {
         ok: false,
-        unregistered: res.status === 404 || code === "UNREGISTERED",
+        unregistered: res.status === 404 || code === "UNREGISTERED" || badToken,
         error: `${res.status} ${code} ${body.error?.message ?? ""}`.trim(),
       };
     },

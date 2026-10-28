@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "buddy:cron": "node scripts/buddy-cron.mjs",
+    "dev:phone": "node scripts/dev-phone.mjs",
     "android:doctor": "node scripts/android.mjs doctor",
     "android:test": "node scripts/android.mjs test",
     "android:build": "node scripts/android.mjs build",

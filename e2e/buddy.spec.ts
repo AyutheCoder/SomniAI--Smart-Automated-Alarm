@@ -3,7 +3,31 @@
 // tests/api/buddy.test.ts; its push needs Firebase and two phones
 // (DEVICE_TESTS.md, 3.2).
 import { expect, test } from "@playwright/test";
-import { signUp } from "./helpers";
+import { alarmRow, signUp } from "./helpers";
+
+// Found in the two-device test: the form had no way to make an alarm critical,
+// so a hand-made alarm could never alert a buddy.
+test("the alarm form can make an alarm critical, which is what alerts a buddy", async ({ page }) => {
+  await signUp(page);
+  const form = page.locator("form", { has: page.getByPlaceholder(/Alarm label/) });
+  const at = await page.evaluate(() => {
+    const d = new Date(Date.now() + 3 * 3_600_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+  for (const [label, critical] of [["Ordinary one", false], ["Exam", true]] as const) {
+    await form.getByPlaceholder(/Alarm label/).fill(label);
+    await form.locator('input[type="datetime-local"]').fill(at);
+    await form.getByLabel("Critical: must not miss").setChecked(critical);
+    await form.getByRole("button", { name: "Add alarm" }).click();
+    await expect(alarmRow(page, label)).toContainText("scheduled");
+  }
+  const alarms = (await (await page.request.get("/api/alarms")).json()).data.items as
+    { label: string; minConfidence: number; verificationRequired: boolean; ringPlan: { critical: boolean } }[];
+  const byLabel = Object.fromEntries(alarms.map((a) => [a.label, a]));
+  expect(byLabel.Exam).toMatchObject({ minConfidence: 85, verificationRequired: true, ringPlan: { critical: true } });
+  expect(byLabel["Ordinary one"].ringPlan.critical).toBe(false);
+});
 
 test("two people pair with consent on both sides, and either can unpair", async ({ browser }) => {
   const alice = await (await browser.newContext()).newPage();

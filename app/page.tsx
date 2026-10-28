@@ -21,6 +21,9 @@ import WakePlanPanel from "./_components/WakePlanPanel";
 import BedtimeReminder from "./_components/BedtimeReminder";
 import BuddyPanel from "./_components/BuddyPanel";
 
+/** A critical alarm's wake check: 80 % or more makes its ring plan critical (lib/ringPlanServer.ts). */
+const CRITICAL_MIN_CONFIDENCE = 85;
+
 const PRIORITY_COLORS: Record<Priority, string> = {
   low: "text-slate-400 bg-slate-500/10",
   medium: "text-sky-300 bg-sky-500/10",
@@ -70,6 +73,9 @@ export default function Home() {
   const [alarmStrategy, setAlarmStrategy] = useState<WakeStrategy>("adaptive");
   const [alarmIntensity, setAlarmIntensity] = useState(60);
   const [alarmVerify, setAlarmVerify] = useState(true);
+  // Critical: a wake check at 85 %, which makes the ring plan critical
+  // (lib/ringPlanServer.ts): the full ladder, and wake-buddy alerts.
+  const [alarmCritical, setAlarmCritical] = useState(false);
   const [alarmMethods, setAlarmMethods] = useState<string[]>(["math"]);
 
   const userId = session?.user?.id ?? null;
@@ -363,9 +369,10 @@ export default function Home() {
         scheduledTime: new Date(alarmTime).toISOString(),
         wakeStrategy: alarmStrategy,
         intensity: alarmIntensity,
-        verificationRequired: alarmVerify,
-        verificationMethod: alarmVerify ? alarmMethods[0] ?? "math" : "none",
-        verificationMethods: alarmVerify
+        verificationRequired: alarmVerify || alarmCritical,
+        verificationMethod: alarmVerify || alarmCritical ? alarmMethods[0] ?? "math" : "none",
+        ...(alarmCritical ? { minConfidence: CRITICAL_MIN_CONFIDENCE } : {}),
+        verificationMethods: alarmVerify || alarmCritical
           ? alarmMethods.length > 0
             ? alarmMethods
             : ["math"]
@@ -557,8 +564,12 @@ border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white outline-none
     <option value="aggressive">Aggressive</option>
   </select>
   <label className="flex items-center gap-2 text-sm text-slate-300">
-    <input type="checkbox" checked={alarmVerify} onChange={(e) => setAlarmVerify(e.target.checked)} />
+    <input type="checkbox" checked={alarmVerify || alarmCritical} disabled={alarmCritical} onChange={(e) => setAlarmVerify(e.target.checked)} />
     Verify
+  </label>
+  <label className="flex items-center gap-2 text-sm text-slate-300" title="A stricter wake check, the full escalation ladder, and an alert to your wake buddy if you don't answer">
+    <input type="checkbox" checked={alarmCritical} onChange={(e) => setAlarmCritical(e.target.checked)} />
+    Critical: must not miss
   </label>
 </div>
 <div className="flex items-center gap-3">

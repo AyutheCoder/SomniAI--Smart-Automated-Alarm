@@ -565,7 +565,42 @@ The pairing, the trigger timing and the rate limit are tested without a phone
 calls. This needs Firebase set up (`BUDDY.md`, "Setup") and two phones signed
 in to two accounts on the same dev server.
 
-**Not run yet: waiting for the Firebase setup.**
+### Phone and emulator, 2026-10-28
+
+POCO M8 5G (HyperOS 3.0, Android 16) as the sleeper (account name left out here); the
+Android 17 emulator (Google Play image) as the buddy, account "Buddy". Both on
+`npm run dev:phone` through `adb reverse`, `npm run buddy:cron` running,
+Firebase project set up as in `BUDDY.md`.
+
+| # | Step | Result |
+| --- | --- | --- |
+| 1-2 | Code on the POCO, asked on the emulator, accepted on the POCO | Paired, both ways; both phones registered a real FCM token |
+| 3-4 | Critical alarm "Buddy test" at 16:44, alert after 5 min, number shared; not answered | Checks at 16:45-16:48: "not yet". At **16:49:43: sent**; on the emulator at 16:49:57: "<name> hasn't confirmed they're awake", "Their "Buddy test" alarm went off 6 minutes ago and SomniAI hasn't heard back.", actions **Call <name>** and **Open SomniAI** |
+| 5 | "Call <name>" tapped on the emulator | The dialler opened (`ACTION_DIAL`, `tel:` with the number); no call placed |
+| 6 | Kept ringing | Every later check: "already"; no second alert |
+| 7 | Critical alarm "Answered" at 16:55, solved at once | **No alert**, but only because the result was sent by hand at 16:59: see below |
+| 8 | Ordinary alarm at 17:00, not answered | **No alert**: every check "ordinary", through and past 17:05 |
+| 9 | Unpaired on the POCO | Pairing "ended"; every check after: 0 pairs |
+
+**Found and fixed:**
+
+- **A fresh "I'm awake" waited behind an old failed sync** (step 7). The
+  phone's queue scheduled its sync with KEEP, and a sync that had failed
+  earlier (the previous build's server address, 2.7's test alarms) was in an
+  exponential back-off; the new result waited behind it. Sent by hand at 16:59,
+  a minute before the alert was due. A new result now replaces a waiting sync
+  (`ANDROID.md`, "The offline queue"); the on-device test for it failed with
+  the old policy and passes with the new.
+- **The app's alarm form couldn't make an alarm critical**: only an alarm from
+  a task marked critical, or one with a wake check of 80 % or more, was. The
+  form now has "Critical: must not miss" (a wake check at 85 %).
+- **Google answers a malformed token with 400 INVALID_ARGUMENT**, not
+  UNREGISTERED (seen against the real service); such a token is now forgotten
+  at once instead of retried.
+
+Not exercised on the devices: an ordinary alarm with the opt-in on (it needed
+30 minutes since the last alert, the rate limit) and the daily limit. Both are
+covered against the database in `tests/api/buddy.test.ts`.
 
 ### On two phones: checklist
 

@@ -31,9 +31,9 @@ fixes it natively on Android.
 
 | | |
 | --- | --- |
-| **Next prompt** | **3.2, finish on two phones** once Firebase is set up (`BUDDY.md`, steps 1-4; then `DEVICE_TESTS.md`, 3.2). 3.3 after that, or alongside if the setup waits |
-| Last completed | 3.2 (wake buddy, `BUDDY.md`: pairing by invite code with consent on both sides (code, request, accept), one buddy at a time, unpair from either side; `lib/buddy.ts` decides the alert (critical alarm, or ordinary if opted in, not verified or stopped N min after it rang, 5-60, default 15; stale after 2 h) and the rate limit (once per ring, 3 tries on push failure, 30 min apart, 3 a day); `lib/buddyAlerts.ts` runs it from `/api/cron/buddy-alerts` (CRON_SECRET; `npm run buddy:cron` locally); FCM HTTP v1 signed with Node crypto (`lib/push.ts`), "not configured" without credentials; phone: `BuddyMessagingService` shows it with a dialler "Call" button, plugin API 4 `pushToken`. Tests: 19 + 7 + 32 + 4 vitest, 1 e2e, 5 JVM. Not yet on two phones: needs the Firebase setup in `BUDDY.md`). 3.1 before that |
-| Waiting on the human | **Firebase setup for 3.2** (`BUDDY.md`, steps 1-4), then the two-phone check (`DEVICE_TESTS.md`, 3.2). Phone checks for 2.1-2.6 (2.4 history and 2.5 need the dev server and a signed-in phone), and 3.1's by-hand checklist. The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
+| **Next prompt** | **3.3** |
+| Last completed | 3.2 (wake buddy, `BUDDY.md`: pairing by invite code with consent on both sides (code, request, accept), one buddy at a time, unpair from either side; `lib/buddy.ts` decides the alert (critical alarm, or ordinary if opted in, not verified or stopped N min after it rang, 5-60, default 15; stale after 2 h) and the rate limit (once per ring, 3 tries on push failure, 30 min apart, 3 a day); `lib/buddyAlerts.ts` runs it from `/api/cron/buddy-alerts` (CRON_SECRET; `npm run buddy:cron` locally); FCM HTTP v1 signed with Node crypto (`lib/push.ts`), "not configured" without credentials; phone: `BuddyMessagingService` shows it with a dialler "Call" button, plugin API 4 `pushToken`. Tests: 19 + 7 + 32 + 4 vitest, 1 e2e, 5 JVM. On the POCO and the emulator as buddy, 2026-10-28: paired, a missed critical alarm alerted the buddy 5 min after with a working Call button, no repeat, none for an answered or an ordinary alarm, none after unpairing. Found and fixed there: the phone's queue held a fresh "I'm awake" behind an old sync's back-off (now REPLACE), the alarm form had no way to make an alarm critical (now a checkbox), a malformed FCM token was retried). 3.1 before that |
+| Waiting on the human | Phone checks for 2.1-2.6 in `DEVICE_TESTS.md` (2.4 history and 2.5 can now use `npm run dev:phone`), and 3.1's by-hand checklist. The 2.2 gate's "fires with the app force-stopped" can't be met by any app (`ANDROID.md`) |
 | Open finding for 7.1 | `middleware.ts` answers signed-out `/api/*` calls with a redirect to the sign-in page, not a JSON 401. Routes enforce auth themselves (0.3 tests). |
 | Open (scoring) | The server ignores `interactions`, which both clients score with, so its score can sit a few points under the client's. Fixed in 2.5: web outbox now keeps a 401; web verify now sends time on task like the phone |
 | Wake check (after 2.7, tester's request) | Three sums in a row, each a × b + c × d (2-9 times 3-12), the same on web and phone (`lib/mathChallenge.ts`, `MathChallenge.java`). Speed is now judged per answer (`steps`), on both clients and the server: this also raised the scores of existing multi-challenge sequences, which had been judged as one slow answer. On the phone 2026-10-28: three sums in 33 s, score 96, `steps: 3` queued; the tester says the difficulty is right |
@@ -89,6 +89,7 @@ routes with **no tests** (0.3).
 | Anonymity guard | `node scripts/check-anonymity.mjs` |
 | Full gate | `npm run verify` / `npm run verify:all` (`scripts/verify.mjs`; red on any failure, warning, or empty run) |
 | Android | `npm run android:doctor` (what is installed and missing), `android:test`, `android:build`, `android:run`; see `ANDROID.md` |
+| Server for phone tests | `npm run dev:phone` (`next dev` on :3000 with a local MongoDB that needs no install, data in `.data/`); per device `adb reverse tcp:3000 tcp:3000`, and an app built with `CAP_SERVER_URL=http://localhost:3000` |
 | Wake-buddy scheduler | `npm run buddy:cron` (calls `/api/cron/buddy-alerts` every minute; needs `CRON_SECRET`) |
 | End-to-end | `npm run e2e` (Playwright, headless; own `next dev` on :3100 + in-memory Mongo; ~5 min locally; don't run alongside `verify`, both use `.next`) |
 
@@ -157,6 +158,12 @@ routes with **no tests** (0.3).
   for 40+ seconds, which looked like an app bug and wasn't. Locally `npm run e2e`
   runs one browser at a time (`workers: CI ? 2 : 1`). If e2e suddenly times out
   everywhere at once, check free memory before debugging the app.
+- **There is no MongoDB installed here**, and `.env.local` points at
+  `localhost`. Use `npm run dev:phone`, not `npm run dev`, for anything that
+  needs the server.
+- **Stopping a background task stops only its shell on Windows**: `npm run`'s
+  node children (`next dev`, MongoDB, `buddy-cron`) keep running. Afterwards,
+  check port 3000 and `node.exe` processes, and stop the leftovers.
 - Lint is `eslint .` (flat config in `eslint.config.mjs`), not the deprecated
   `next lint`. It covers the whole repo, not only `app/` and `lib/`, and ignores
   `ai-brain/` because its virtualenv contains vendored JavaScript.

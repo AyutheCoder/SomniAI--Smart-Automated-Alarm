@@ -94,6 +94,52 @@ public class OutboxSyncTest {
         assertEquals("2026-10-26T06:40:40Z", verify.getString("at"));
     }
 
+    /**
+     * Found with the wake buddy (3.2): a sync that had failed was backing off,
+     * and a new "I'm awake" waited behind it, so the buddy was nearly told the
+     * opposite. A new result now replaces the waiting sync.
+     */
+    @Test
+    public void aNewRingResultGoesOutAtOnceNotAfterAnOldSyncsBackOff() throws Exception {
+        androidx.work.WorkManager wm = androidx.work.WorkManager.getInstance(context);
+        Outbox.autoSync = true;
+        // An earlier ring, with the server unreachable: the sync fails and backs off (30 s first).
+        Outbox.baseUrlOverride = "http://127.0.0.1:9";
+        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_000, "unanswered", 2_000, null, 1, java.util.List.of()));
+        long until = System.currentTimeMillis() + 30_000;
+        while (attempts(wm) < 1) {
+            assertTrue("the first sync ran and failed", System.currentTimeMillis() < until);
+            Thread.sleep(200);
+        }
+
+        // The server is back, and a new ring is stopped: it must not wait out the back-off.
+        server = new Stub(200);
+        for (int i = 0; i < 7; i++) {
+            server.answers.add(200);
+        }
+        Outbox.baseUrlOverride = server.url();
+        long queuedAt = System.currentTimeMillis();
+        Verification passed = new Verification(true, true, 1, 7_000, 3, 0, List.of("math"), 92, 3_000);
+        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234568", 3_000, "dismissed", 4_000, passed, 4, java.util.List.of()));
+        while (Outbox.queue(context).size() > 0) {
+            assertTrue("sent within 10 s, not after the old sync's 30 s back-off; still waiting: " + Outbox.queue(context).size(),
+                System.currentTimeMillis() - queuedAt < 10_000);
+            Thread.sleep(200);
+        }
+        List<String> got = server.received();
+        assertTrue(got.stream().anyMatch(r -> r.startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234568/verify ")));
+        assertEquals("each call once", got.size(), got.stream().distinct().count());
+        wm.cancelUniqueWork(Outbox.WORK).getResult().get();
+    }
+
+    private static int attempts(androidx.work.WorkManager wm) throws Exception {
+        int n = 0;
+        for (androidx.work.WorkInfo w : wm.getWorkInfosForUniqueWork(Outbox.WORK).get()) {
+            n = Math.max(n, w.getRunAttemptCount());
+        }
+        return n;
+    }
+
     @Test
     public void notSignedInKeepsItForLater() throws Exception {
         Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_000, "unanswered", 2_000, null, 1, java.util.List.of()));

@@ -371,6 +371,13 @@ there was a check, then `dismiss`. An unanswered ring queues only `fire`.
   (`NetworkType.CONNECTED`), with exponential backoff while the server can't
   take it. It is also scheduled at app start and after unlock at boot. It posts
   to the server the web view loads, with the web view's own session cookie.
+  **A new ring result replaces a sync that is waiting** (`ExistingWorkPolicy.REPLACE`):
+  with KEEP, a fresh "I'm awake" waited out an old failed sync's back-off,
+  which can reach hours, and in the 3.2 two-device test a wake buddy was
+  minutes from being told the opposite. Replacing never sends a call twice:
+  `flush` is synchronized and removes each call only once the server took it.
+  `OutboxSyncTest.aNewRingResultGoesOutAtOnceNotAfterAnOldSyncsBackOff`, checked
+  to fail with KEEP. App start and boot still KEEP a waiting sync.
 - **When a call is kept or dropped** (`OutboxQueue`):
   - 2xx: sent.
   - 5xx, a timeout, no network, 408, 425 or 429: kept, with everything after it,
