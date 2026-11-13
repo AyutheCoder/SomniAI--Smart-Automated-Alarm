@@ -630,8 +630,9 @@ device really rings, and stops; a real text arrives.
 Device A: phone, POCO M8 5G (Xiaomi), HyperOS 3.0, Android 16 (API 36).
 Device B: emulator, Medium Phone AVD, Android 17 (API 37). Both on
 `npm run dev:phone` through `adb reverse`, signed in to the same account,
-debug APK built from `6fdd2d1`, 2026-10-29. Steps 1-3 pass; 4 and 5 (the text)
-not run yet: they need Twilio (`BUDDY.md`, "Twilio setup").
+debug APK built from `6fdd2d1`, 2026-10-29. Steps 1-3 pass. Step 4 ran on A
+alone on 2026-11-14 and got as far as Twilio, which refused the text (below):
+**no real text has been received yet**. Step 5 not run.
 
 | # | Result |
 | --- | --- |
@@ -645,6 +646,27 @@ out its 20 s: the dev server was compiling the new route on that first request
 unfinished when A gave up. A reported all three backups `failed (couldn't reach
 the server)`, and B didn't ring. Once compiled, the route answered in 2.3 s. A
 production server is built ahead, so it doesn't compile on a request.
+
+**Step 4, the text: blocked by the Twilio account, reported truthfully.**
+A only (the emulator off), Twilio **Limited trial** with a US trial number,
+`npm run buddy:cron` running, an emergency contact with agreement recorded,
+delay 5 minutes, critical alarms not answered. Twilio's own test SMS from the
+console reached the verified Indian number, so the route to India works.
+
+- What worked, both times: the alarm fired on time (25 ms, 9 ms late); at the
+  backup level A's log said `emergencyContact: later, at <alarm + 5 min>`; the
+  check skipped it as `not_yet` until then and tried at that minute.
+- Run 1: the contact's number wasn't the one verified on the trial. Twilio
+  `422 572002 … add the 'to' number as a verified recipient`; reported
+  `failed` with those words, 3 tries, then `emergencyContact:gave_up`.
+- Run 2, the verified number: Twilio `400 572006: Invalid template name. Trial
+  accounts can only use predefined SMS templates`. Reported `failed`; the
+  check stopped once the alarm was answered. The Limited trial only sends
+  Twilio's sample texts, so this needs a Full access account (`BUDDY.md`,
+  "Twilio setup"), which wasn't available to the tester.
+- In both runs A also logged `secondaryAlarm: delivered` while the emulator was
+  off: Firebase accepted the push for its registration (a message id), which
+  is what "delivered" means for this channel. It doesn't mean B rang.
 
 | # | Do this | Pass when |
 | --- | --- | --- |

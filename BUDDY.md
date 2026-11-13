@@ -148,9 +148,14 @@ The options compared before building it (the user chose Twilio):
 
 ### Twilio setup (for a real text)
 
-1. Sign up at <https://www.twilio.com/try-twilio> (a free trial is enough to
-   test). Verify **your contact's number** under Phone Numbers > Verified Caller
-   IDs: a trial account can only text verified numbers.
+1. Sign up at <https://www.twilio.com/try-twilio> and choose **Full access**
+   (pay as you go, with bonus trial credit; it asks for a card). The
+   **Limited trial** (no card) can't send SomniAI's texts: it only sends
+   Twilio's predefined sample templates and refuses any other message with
+   `400 572006: Invalid template name` (seen 2026-11-14). Verify **your
+   contact's number** under Phone Numbers > Verified Caller IDs while the
+   account is still a trial: a trial account can only text verified numbers
+   (`422 572002` otherwise).
 2. Get a number to send from (Phone Numbers > Buy a number; the trial gives
    credit), or create a Messaging Service.
 3. Put three values in `.env.local`, never in the repository:
