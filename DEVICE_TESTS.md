@@ -632,7 +632,7 @@ Device B: emulator, Medium Phone AVD, Android 17 (API 37). Both on
 `npm run dev:phone` through `adb reverse`, signed in to the same account,
 debug APK built from `6fdd2d1`, 2026-10-29. Steps 1-3 pass. Step 4 ran on A
 alone on 2026-11-14 and got as far as Twilio, which refused the text (below):
-**no real text has been received yet**. Step 5 not run.
+**no real text has been received yet**. Step 5 passes (2026-11-14, below).
 
 | # | Result |
 | --- | --- |
@@ -667,6 +667,12 @@ console reached the verified Indian number, so the route to India works.
 - In both runs A also logged `secondaryAlarm: delivered` while the emulator was
   off: Firebase accepted the push for its registration (a message id), which
   is what "delivered" means for this channel. It doesn't mean B rang.
+
+**Step 5: pass.** Same setup, a critical alarm answered within the delay: rang
+at 00:56:00, verified on the server at 00:57:35. The check skipped it as
+`not_yet` once while it rang, then counted nothing for it; no try at 01:01 and
+no alert record for that ring. (A's log had been cleared by the time it was
+read; the server's record and the check's output are the evidence.)
 
 | # | Do this | Pass when |
 | --- | --- | --- |
