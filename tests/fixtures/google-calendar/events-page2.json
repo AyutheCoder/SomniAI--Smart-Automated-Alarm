@@ -1,0 +1,43 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p32cfixturepage2\"",
+  "summary": "sleeper@example.com",
+  "updated": "2026-11-15T18:00:00.000Z",
+  "timeZone": "Asia/Kolkata",
+  "accessRole": "owner",
+  "defaultReminders": [{ "method": "popup", "minutes": 30 }],
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "gym_20261119T003000Z",
+      "status": "confirmed",
+      "summary": "Gym",
+      "updated": "2026-10-01T08:00:00.000Z",
+      "eventType": "default",
+      "recurringEventId": "gym",
+      "originalStartTime": { "dateTime": "2026-11-19T06:00:00+05:30" },
+      "start": { "dateTime": "2026-11-19T06:00:00+05:30", "timeZone": "Asia/Kolkata" },
+      "end": { "dateTime": "2026-11-19T07:00:00+05:30", "timeZone": "Asia/Kolkata" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "flight20261120",
+      "status": "confirmed",
+      "summary": "Flight to Delhi",
+      "description": "PNR ABC123. Check-in closes 45 minutes before departure.",
+      "updated": "2026-11-12T08:00:00.000Z",
+      "eventType": "default",
+      "start": { "dateTime": "2026-11-20T06:10:00+05:30", "timeZone": "Asia/Kolkata" },
+      "end": { "dateTime": "2026-11-20T08:40:00+05:30", "timeZone": "Asia/Kolkata" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "untitled20261121",
+      "status": "tentative",
+      "updated": "2026-11-12T08:00:00.000Z",
+      "eventType": "default",
+      "start": { "dateTime": "2026-11-21T15:00:00+05:30" },
+      "end": { "dateTime": "2026-11-21T16:00:00+05:30" }
+    }
+  ]
+}

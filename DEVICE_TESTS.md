@@ -719,3 +719,19 @@ older rings' escalation records too (`lib/wakeHistory.ts`).
 | 1 | `npm run dev:phone`, the app built with `CAP_SERVER_URL`. An alarm 2 minutes ahead; answer it at once | Within a minute of the sync, a quiet "Morning report: <label>, <time>" notification: "Gentle wake: you were up at level 1 of 5…", the check's time, "No plan was set for last night.", "Streak: …"; the app's home page shows the same card |
 | 2 | In the app, set a bedtime reminder from the wake planner for the next alarm; then let that alarm ring and answer it | The report's plan line names the planned bedtime and says no bedtime was recorded; typing one into the card's "When did you go to bed?" changes it to kept or late |
 | 3 | An alarm left to ring unanswered (it gives up after 20 minutes) | Once synced, "Missed: nothing stopped it…" and "Streak reset…"; the alarm stays as it was on the server (a wake buddy is still told) |
+
+## 4.1 Google Calendar
+
+Everything Google says is tested on fixtures (`CALENDAR.md`, "Tests"). What
+only a real account shows: Google's consent screen, a real event arriving as a
+task, and access removed in the Google account being noticed.
+
+**Not run yet.** Needs the Google Cloud setup in `CALENDAR.md`.
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | `npm run dev:phone`; in a browser on the laptop, sign in at `http://localhost:3000`; Data sources > **Connect Google Calendar** | Google's screen names SomniAI and asks to "View events on all your calendars"; after allowing, the page says "Google Calendar connected: N upcoming events…" and Calendar shows connected, with the Google account |
+| 2 | A real event in the next 7 days, then **Sync now** | It appears in Tasks with the calendar's date and time, category Calendar, and a priority suggestion |
+| 3 | Move the event in Google Calendar; **Sync now**. Then delete it; **Sync now** | The task's time follows; then the task is gone |
+| 4 | Remove SomniAI at myaccount.google.com/permissions; **Sync now** | Calendar shows "Google no longer lets SomniAI read this calendar…" and **Connect again** |
+| 5 | **Disconnect** | Calendar not connected; the calendar's tasks that weren't done are gone |

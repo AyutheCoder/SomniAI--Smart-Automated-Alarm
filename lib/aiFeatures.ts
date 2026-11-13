@@ -3,6 +3,8 @@ import { SleepLog } from "@/models/SleepLog";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { ContextSnapshot } from "@/models/ContextSnapshot";
 import { User } from "@/models/User";
+import { CalendarConnection } from "@/models/CalendarConnection";
+import { Task } from "@/models/Task";
 import { computeMetrics, type BehavioralMetrics, type BehaviorEventInput, type SleepLogInput, } from "@/lib/features";
 import type { ModelFeatures } from "@/lib/aiClient";
 import {
@@ -142,10 +144,12 @@ export interface DataSources {
 
 export async function describeDataSources(userId: string): Promise<DataSources> {
   await connectToDatabase();
-  const [snapshot, realNights, simulatedNights] = await Promise.all([
+  const [snapshot, realNights, simulatedNights, calendarConn, calendarTasks] = await Promise.all([
     ContextSnapshot.findOne({ userId }).sort({ at: -1 }).lean<{ sources?: Partial<ContextSources>; at?: Date }>(),
     SleepLog.countDocuments({ userId, source: { $ne: "simulated" } }),
     SleepLog.countDocuments({ userId, source: "simulated" }),
+    CalendarConnection.findOne({ userId }).lean<{ status: string; email?: string | null; lastError?: string | null }>(),
+    Task.countDocuments({ userId, source: "google_calendar", completed: false }),
   ]);
   const sources = snapshotSources(snapshot);
   const simulatedNote = simulatedInputsAllowed()
@@ -164,7 +168,16 @@ export async function describeDataSources(userId: string): Promise<DataSources> 
       ? { source: "live", detail: `${realNights} ${realNights === 1 ? "night" : "nights"} logged${unused}` }
       : { source: "missing", detail: `No nights logged yet${unused}` },
     weather: describe(sources.weather, "Live, from your location", "Not connected: allow location for live weather"),
-    calendar: describe(sources.calendar, "Connected", "Not connected"),
+    // Google Calendar, once connected (prompt 4.1); else what the snapshot says.
+    calendar: calendarConn?.status === "connected"
+      ? {
+        source: "live",
+        detail: `Google Calendar${calendarConn.email ? `, ${calendarConn.email}` : ""}: ${calendarTasks} upcoming ${calendarTasks === 1 ? "event" : "events"} as tasks`
+          + (calendarConn.lastError ? `; last sync failed: ${calendarConn.lastError}` : ""),
+      }
+      : calendarConn?.status === "revoked"
+        ? { source: "missing", detail: calendarConn.lastError ?? "Google Calendar access was removed: connect it again" }
+        : describe(sources.calendar, "Connected", "Not connected"),
     wearable: describe(sources.wearable, "Connected", "Not connected"),
   };
 }

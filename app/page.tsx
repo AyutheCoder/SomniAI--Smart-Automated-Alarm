@@ -557,7 +557,7 @@ export default function Home() {
 
       <InsightsPanel />
 
-      <DataSourcesPanel />
+      <DataSourcesPanel onTasksChanged={loadData} />
 
       <SmartSchedulePanel onChange={loadData} />
 

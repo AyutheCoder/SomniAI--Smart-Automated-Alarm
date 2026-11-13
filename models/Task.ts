@@ -17,6 +17,12 @@ export interface TaskDocument {
   emotion?: string;
   completed: boolean;
   completedAt?: Date;
+  /** Where it came from: an event in the user's Google Calendar (prompt 4.1), or typed in. */
+  source?: "manual" | "google_calendar";
+  /** The calendar event's id, so a resync updates its task instead of adding one. */
+  externalId?: string;
+  /** The event's last change, as Google reported it. */
+  externalUpdated?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +46,10 @@ const TaskSchema = new Schema<TaskDocument>({
   emotion: { type: String },
   completed: { type: Boolean, default: false, index: true },
   completedAt: { type: Date },
+  source: { type: String, enum: ["manual", "google_calendar"], default: "manual" },
+  externalId: { type: String },
+  externalUpdated: { type: String },
 }, { timestamps: true });
 TaskSchema.index({ title: "text", description: "text", category: "text" });
+TaskSchema.index({ userId: 1, source: 1, externalId: 1 }, { unique: true, partialFilterExpression: { externalId: { $type: "string" } } });
 export const Task = models.Task || model<TaskDocument>("Task", TaskSchema);

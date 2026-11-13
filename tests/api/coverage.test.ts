@@ -49,11 +49,12 @@ for (const file of walk(join(ROOT, "tests", "api"), (f) => f.endsWith(".test.ts"
 
 describe("API route coverage", () => {
   // DEVELOPMENT_PLAN.md says 22; there were 23 route files, 3.2 (wake buddy)
-  // added 7, 3.3 (backups) 2 and 3.4 (morning report: missed, wake-reports,
-  // night-plans) 3. Update this count deliberately when adding or removing a
-  // route, alongside its tests.
-  it("finds all 35 route files", () => {
-    expect(routes).toHaveLength(35);
+  // added 7, 3.3 (backups) 2, 3.4 (morning report: missed, wake-reports,
+  // night-plans) 3 and 4.1 (Google Calendar: calendar, connect, callback, sync)
+  // 4. Update this count deliberately when adding or removing a route,
+  // alongside its tests.
+  it("finds all 39 route files", () => {
+    expect(routes).toHaveLength(39);
   });
 
   it.each(routes.flatMap((r) => r.methods.map((m) => [`${m} /api/${r.key}`, r.key, m] as const)))(

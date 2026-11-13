@@ -1,0 +1,62 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p32cfixturepage1\"",
+  "summary": "sleeper@example.com",
+  "updated": "2026-11-15T18:00:00.000Z",
+  "timeZone": "Asia/Kolkata",
+  "accessRole": "owner",
+  "defaultReminders": [{ "method": "popup", "minutes": 30 }],
+  "nextPageToken": "fixture-page-2",
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "exam20261117",
+      "status": "confirmed",
+      "summary": "Final exam",
+      "description": "Hall B<br>Bring ID &amp; two pens",
+      "updated": "2026-11-10T08:00:00.000Z",
+      "eventType": "default",
+      "start": { "dateTime": "2026-11-17T09:00:00+05:30", "timeZone": "Asia/Kolkata" },
+      "end": { "dateTime": "2026-11-17T12:00:00+05:30", "timeZone": "Asia/Kolkata" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "passport20261118",
+      "status": "confirmed",
+      "summary": "Passport renewal appointment",
+      "updated": "2026-11-09T08:00:00.000Z",
+      "eventType": "default",
+      "start": { "date": "2026-11-18" },
+      "end": { "date": "2026-11-19" }
+    },
+    {
+      "kind": "calendar#event",
+      "id": "dentist20261118",
+      "status": "cancelled"
+    },
+    {
+      "kind": "calendar#event",
+      "id": "standup20261117",
+      "status": "confirmed",
+      "summary": "Team standup",
+      "updated": "2026-11-01T08:00:00.000Z",
+      "eventType": "default",
+      "start": { "dateTime": "2026-11-17T10:00:00+05:30" },
+      "end": { "dateTime": "2026-11-17T10:15:00+05:30" },
+      "attendees": [
+        { "email": "lead@example.com", "organizer": true, "responseStatus": "accepted" },
+        { "email": "sleeper@example.com", "self": true, "responseStatus": "declined" }
+      ]
+    },
+    {
+      "kind": "calendar#event",
+      "id": "office20261118",
+      "status": "confirmed",
+      "summary": "Office",
+      "updated": "2026-11-01T08:00:00.000Z",
+      "eventType": "workingLocation",
+      "start": { "date": "2026-11-18" },
+      "end": { "date": "2026-11-19" }
+    }
+  ]
+}
