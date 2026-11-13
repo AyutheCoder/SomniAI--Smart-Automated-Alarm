@@ -11,6 +11,7 @@ import { recordFeedback } from "@/lib/rlFeedback";
 import type { FeedbackOutcome, RlContext } from "@/lib/aiClient";
 import { isNum, isOccurredAt } from "@/lib/validate";
 import { nextOccurrence } from "@/lib/recurrence";
+import { recordWakeReport, ringAtOf, type CheckRecord } from "@/lib/wakeReportServer";
 
 interface DismissBody {
   responseMs?: number;
@@ -65,12 +66,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       type: { $in: ["verify_pass", "verify_fail"] },
       "meta.alarmId": id,
       at: { $gte: new Date(dismissedAt.getTime() - VERIFY_WINDOW_MS), $lte: new Date(dismissedAt.getTime() + 60_000) },
-    }).sort({ at: -1 }).lean<{ type: string; value?: number }>();
+    }).sort({ at: -1 }).lean<CheckRecord>();
     const verified = verdict?.type === "verify_pass";
     const confidence = verdict?.value;
     const verificationRequired = existing.verificationRequired && existing.verificationMethod !== "none";
 
     const priorSnoozes = existing.lastSnoozeCount ?? 0;
+    const ringAt = ringAtOf(existing);
     const next = nextOccurrence(existing.snoozedFrom ?? existing.scheduledTime, existing.repeat, new Date());
     existing.snoozedFrom = undefined;
     if (next) {
@@ -100,6 +102,15 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // No verify_pass/verify_fail here: the verify route already recorded the
     // one verdict, and logging it again double-counted every wake.
 
+    // The morning report, which the escalation profile learns from (prompt 3.4).
+    // The dismissal stands even if it can't be written.
+    try {
+      await recordWakeReport(userId, existing, ringAt, { outcome: "woke", endedAt: dismissedAt, rang: true, check: verdict });
+    }
+    catch (e) {
+      console.error("morning report not recorded:", e);
+    }
+
     await recordWakeFeedback(userId, id, existing, {
       // An alarm with no challenge to fail cannot have been "missed" by failing it.
       woke: verified || !verificationRequired,
@@ -108,7 +119,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       responseMs: body.responseMs,
     });
 
-    return jsonOk(existing.toObject());
+    // Read back: the report may have replanned this alarm's next ring.
+    return jsonOk((await Alarm.findOne({ _id: id, userId }).lean()) ?? existing.toObject());
   });
 }
 

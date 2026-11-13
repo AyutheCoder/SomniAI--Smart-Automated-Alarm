@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bedtimeBefore, clockTime, loadReminder, nextWakeAt, reminderDue, saveReminder, type BedtimeReminder } from "./bedtime";
+import { bedtimeBefore, clockBefore, clockTime, loadReminder, localDate, nextWakeAt, reminderDue, saveReminder, type BedtimeReminder } from "./bedtime";
 import type { KeyValueStore } from "./outbox";
 
 const at = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo - 1, d, h, mi, 0, 0);
@@ -56,5 +56,16 @@ describe("the reminder", () => {
     const blocked: KeyValueStore = { getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("blocked"); } };
     expect(() => saveReminder(blocked, "u1", r)).not.toThrow();
     expect(loadReminder(blocked, "u1")).toBeNull();
+  });
+});
+
+describe("a bedtime typed the morning after", () => {
+  it("is the last time the clock read it before the alarm", () => {
+    const ring = at(2026, 11, 14, 7, 0);
+    expect(clockBefore("23:15", ring)).toEqual(at(2026, 11, 13, 23, 15));
+    expect(clockBefore("00:40", ring)).toEqual(at(2026, 11, 14, 0, 40));
+    expect(clockBefore("07:00", ring)).toEqual(at(2026, 11, 13, 7, 0));
+    expect(localDate(ring)).toBe("2026-11-14");
+    expect(localDate(at(2026, 1, 5, 0, 1))).toBe("2026-01-05");
   });
 });

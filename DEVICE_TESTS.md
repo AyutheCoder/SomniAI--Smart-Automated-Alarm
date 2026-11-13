@@ -682,3 +682,40 @@ read; the server's record and the check's output are the evidence.)
 | 4 | Twilio set up; an emergency contact (your own second number, verified on a trial) with agreement ticked; delay 5 minutes; a critical alarm, not answered | At the backup level A's ring screen says "Mum will be told at …"; at that time the text arrives; the panel lists "your emergency contact was texted"; `buddy:cron` prints `emergencyContact` sent |
 | 5 | The same, answered within the delay | No text |
 
+
+## 3.4 Morning report
+
+The report's contents (a gentle wake, a fully escalated one, a missed alarm),
+the plan verdict, the streak and the profile update are tested without a
+phone (`lib/morningReport.test.ts`, `tests/api/wakeReports.test.ts`); the
+phone's notice and its missed call in `MorningNoticeTest` and `SyncCallsTest`;
+the web card in `e2e/alarm.spec.ts`. What only a phone shows: the report
+arrives as a notification after a native ring, in the phone's time zone.
+
+Phone, POCO M8 5G (Xiaomi), HyperOS 3.0, Android 16 (API 36), on
+`npm run dev:phone` through `adb reverse`, 2026-11-14. Step 1 passes; steps 2
+(a plan, which needs the AI Brain running for the planner) and 3 (a missed
+alarm, 20 minutes of ringing) not run yet, at the tester's choice; both are
+covered off the phone (`tests/api/wakeReports.test.ts`, `SyncCallsTest`).
+
+**Step 1: pass.** An ordinary alarm, answered: fired 23 ms late, dismissed
+after 34 s at level 4 (the profile, from 9 past rings mostly at level 5, paces
+the ladder sooner), check passed. The queue sent its 4 calls 14 s later; the
+phone asked for the report (`tz=Asia/Calcutta`) and 0.9 s after the sync showed
+a quiet notification (channel "Morning reports", importance low):
+
+> **Morning report: Alarm -2, 01:42**
+> Escalated: you were up at level 4 of 5, Wake challenge (verify you're awake).
+> Wake check passed in 29 s (3 answers).
+> No plan was set for last night.
+> Streak: 1 alarm answered in a row.
+> Escalation profile, from 9 alarms: you usually wake at level 5, so your alarms now climb sooner.
+
+The streak is 1 because reports began with this ring; the profile counts the
+older rings' escalation records too (`lib/wakeHistory.ts`).
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | `npm run dev:phone`, the app built with `CAP_SERVER_URL`. An alarm 2 minutes ahead; answer it at once | Within a minute of the sync, a quiet "Morning report: <label>, <time>" notification: "Gentle wake: you were up at level 1 of 5…", the check's time, "No plan was set for last night.", "Streak: …"; the app's home page shows the same card |
+| 2 | In the app, set a bedtime reminder from the wake planner for the next alarm; then let that alarm ring and answer it | The report's plan line names the planned bedtime and says no bedtime was recorded; typing one into the card's "When did you go to bed?" changes it to kept or late |
+| 3 | An alarm left to ring unanswered (it gives up after 20 minutes) | Once synced, "Missed: nothing stopped it…" and "Streak reset…"; the alarm stays as it was on the server (a wake buddy is still told) |

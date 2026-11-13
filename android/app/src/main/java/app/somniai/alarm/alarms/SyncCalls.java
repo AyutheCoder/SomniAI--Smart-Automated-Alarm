@@ -11,7 +11,8 @@ import org.json.JSONObject;
  * The server calls that record one native ring, in the order they must
  * arrive: the same calls as lib/ringFlow.ts syncCalls (fire, verify, escalate, dismiss),
  * each with "at", when it happened on the phone, since they may be sent hours
- * later. Pure; tested in SyncCallsTest.
+ * later. A ring nobody answered sends fire and missed (prompt 3.4), for its
+ * morning report. Pure; tested in SyncCallsTest.
  */
 final class SyncCalls {
 
@@ -40,6 +41,15 @@ final class SyncCalls {
         String base = "/api/alarms/" + alarmId;
         List<Call> calls = new ArrayList<>();
         calls.add(new Call(alarmId, base + "/fire", body("at", iso(rangAt))));
+        if ("unanswered".equals(outcome)) {
+            // It rang until it gave up: missed, at the level it reached. The
+            // server leaves the alarm as it is, so a wake buddy is still told.
+            JSONObject m = body("at", iso(endedAt));
+            put(m, "level", level);
+            put(m, "rang", true);
+            calls.add(new Call(alarmId, base + "/missed", m));
+            return calls;
+        }
         if (!"dismissed".equals(outcome) || verification == null) {
             // Rang and nobody stopped it: the server keeps it as ringing, which is the truth.
             return calls;

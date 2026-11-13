@@ -101,8 +101,12 @@ test("feasible: the latest bedtime, a reminder that fires at it, and the alarm",
   await expect(tonight).toContainText(new RegExp(`The latest bedtime that still reaches 85%:\\s*Asleep by\\s*${t.bedtime}`));
   await expect(tonight).not.toContainText("isn't reachable");
 
+  // The plan goes to the account too, for the morning report (prompt 3.4).
+  const planSaved = page.waitForResponse((r) => r.url().endsWith("/api/night-plans") && r.request().method() === "POST");
   await tonight.getByRole("button", { name: `Remind me at ${t.bedtime}` }).click();
+  expect((await planSaved).status()).toBe(201);
   await expect(tonight.getByRole("status")).toContainText(`You'll get a notification at ${t.bedtime}`);
+  await expect(tonight.getByRole("alert")).toHaveCount(0);
   await tonight.getByRole("button", { name: `Set my ${t.wakeTime} alarm` }).click();
   await expect(alarmRow(page, `Must be up at ${t.wakeTime}`)).toContainText("scheduled");
 

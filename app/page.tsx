@@ -16,6 +16,7 @@ import { hasPush, registerPush, type PushRegistration } from "@/lib/nativeBuddy"
 import { requestBackupsFromServer } from "@/lib/backupClient";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
 import InsightsPanel from "./_components/InsightsPanel";
+import MorningReportCard, { REPORT_CHANGED } from "./_components/MorningReportCard";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
@@ -247,6 +248,10 @@ export default function Home() {
         )));
       }
       setOffline(result.stalled);
+      // A ring's result may have arrived: its morning report can be read now.
+      if (result.sent > 0) {
+        window.dispatchEvent(new Event(REPORT_CHANGED));
+      }
     }
     finally {
       flushingRef.current = false;
@@ -280,7 +285,11 @@ export default function Home() {
 
   const markMissed = useCallback((alarm: Alarm) => {
     editAlarms((prev) => prev.map((a) => (a._id === alarm._id ? { ...a, status: "missed", enabled: false } : a)));
-    outbox?.enqueue([{ alarmId: alarm._id, method: "PATCH", path: `/api/alarms/${alarm._id}`, body: { status: "missed", enabled: false } }]);
+    outbox?.enqueue([
+      { alarmId: alarm._id, method: "PATCH", path: `/api/alarms/${alarm._id}`, body: { status: "missed", enabled: false } },
+      // Its morning report: missed, and it never rang (this page was closed).
+      { alarmId: alarm._id, method: "POST", path: `/api/alarms/${alarm._id}/missed`, body: { rang: false } },
+    ]);
     setPendingSync(outbox?.pending().length ?? 0);
     void flushOutbox();
   }, [outbox, flushOutbox, editAlarms]);
@@ -533,6 +542,8 @@ export default function Home() {
       )}
 
       <BedtimeReminder userId={userId} />
+
+      {userId && <MorningReportCard />}
 
       {/* The evening starts here: when you must be up, and what tonight takes. */}
       <WakePlanPanel userId={userId} onAlarmsChanged={loadData} />

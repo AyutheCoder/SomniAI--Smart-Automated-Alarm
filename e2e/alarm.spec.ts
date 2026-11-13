@@ -98,8 +98,19 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   // the history shows it, including after a reload.
   await expect.poll(() => alarmStatus(page, label), SERVER).toBe("verified");
   await expect(alarmRow(page, label)).toContainText("verified");
+
+  // The morning report (prompt 3.4), once the ring's result reached the server.
+  const report = page.getByRole("region", { name: "Morning report" });
+  await expect(report).toContainText(label, SERVER);
+  await expect(report).toContainText(/you were up at level [1-4] of 5|it took level 5 of 5/);
+  await expect(report).toContainText(/Wake check passed in \d+ s \(3 answers\)\./);
+  await expect(report).toContainText("No plan was set for last night.");
+  await expect(report).toContainText("Streak: 1 alarm answered in a row.");
+  await expect(report).toContainText("Escalation profile: learning, 1 of the 3 alarms");
+
   await page.reload();
   await expect(alarmRow(page, label)).toContainText("verified");
+  await expect(page.getByRole("region", { name: "Morning report" })).toContainText(label);
 });
 
 test("a wrong answer does not turn the alarm off, and unset backups say so", async ({ page }) => {

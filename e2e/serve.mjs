@@ -22,6 +22,14 @@ const env = {
   GOOGLE_CLIENT_SECRET: "",
   NEXT_PUBLIC_GOOGLE_ENABLED: "false",
   NEXT_TELEMETRY_DISABLED: "1",
+  // Never real texts or pushes from a test, whatever .env.local holds: the
+  // flows use made-up numbers, and expect both channels to say they're off.
+  TWILIO_ACCOUNT_SID: "",
+  TWILIO_AUTH_TOKEN: "",
+  TWILIO_FROM: "",
+  FIREBASE_PROJECT_ID: "",
+  FIREBASE_CLIENT_EMAIL: "",
+  FIREBASE_PRIVATE_KEY: "",
 };
 
 const next = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", port], {

@@ -5,6 +5,7 @@ import { AlarmClock, ArrowRight, BellRing, CalendarClock, Loader2, ShieldAlert, 
 import type { WakePlan } from "@/lib/aiClient";
 import { bedtimeBefore, clockTime, loadReminder, nextWakeAt, saveReminder, type BedtimeReminder } from "@/lib/bedtime";
 import { shareBedtime } from "@/lib/nativePreflight";
+import { cancelNightPlan, saveNightPlan } from "@/lib/nightPlan";
 import { browserStore } from "@/lib/outbox";
 import { MODEL_CAVEAT, REGULARITY_LABEL, type ConfidenceText } from "@/lib/predictionCopy";
 import PredictionOrigin from "./PredictionOrigin";
@@ -80,6 +81,7 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [planNote, setPlanNote] = useState("");
   const [reminder, setReminder] = useState<BedtimeReminder | null>(null);
 
   useEffect(() => {
@@ -137,6 +139,10 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
     saveReminder(browserStore(), userId, next);
     setReminder(next);
     window.dispatchEvent(new Event(REMINDER_CHANGED));
+    // The morning report compares this with when you went to bed.
+    setPlanNote(await saveNightPlan(next) === "saved"
+      ? ""
+      : "Couldn't save tonight's plan to your account, so tomorrow's report won't know it. The reminder still works.");
     // In the app, the phone checks its alarm settings half an hour before.
     if (await shareBedtime(next.at) === "shared") {
       setNotice(`Your phone will check its alarm settings at ${clockTime(new Date(bedtime.getTime() - 30 * 60_000))}, half an hour before bed, and tell you if anything needs fixing.`);
@@ -157,6 +163,8 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
       window.dispatchEvent(new Event(REMINDER_CHANGED));
     }
     void shareBedtime(null);
+    void cancelNightPlan();
+    setPlanNote("");
     setReminder(null);
     setNotice("");
   }
@@ -267,6 +275,7 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
       )}
 
       {notice && <p role="status" className="mt-3 text-sm text-emerald-200">{notice}</p>}
+      {planNote && <p role="alert" className="mt-2 text-sm text-amber-200">{planNote}</p>}
       {reminder && (
         <p className="mt-2 flex items-center gap-2 text-xs text-slate-400">
           <BellRing className="h-3.5 w-3.5" />

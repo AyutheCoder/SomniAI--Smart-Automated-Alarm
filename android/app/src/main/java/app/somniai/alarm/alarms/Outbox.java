@@ -17,7 +17,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -104,11 +107,33 @@ final class Outbox {
         }
     }
 
-    /** Sends the queue now, on this thread. Never call it on the main thread. */
+    /**
+     * Sends the queue now, on this thread, then shows the morning report of
+     * each ring it finished sending (prompt 3.4). Never call it on the main
+     * thread.
+     */
     static OutboxQueue.Flush flushNow(Context context) {
         String base = baseUrl(context);
-        OutboxQueue.Flush f = queue(context).flush((path, body) -> post(base, path, body));
+        Set<String> ended = new LinkedHashSet<>();
+        OutboxQueue.Flush f = queue(context).flush((path, body) -> {
+            int status = post(base, path, body);
+            String id = MorningNotice.endedAlarm(path, status);
+            if (id != null) {
+                ended.add(id);
+            }
+            return status;
+        });
         Log.i(AlarmScheduler.TAG, "sync: sent " + f.sent + ", dropped " + f.dropped + (f.stalled ? ", waiting (last status " + f.lastStatus + ")" : ", queue empty"));
+        for (String id : ended) {
+            Response r = request(base, MorningNotice.reportPath(id, ZoneId.systemDefault().getId()), null, 15_000);
+            MorningNotice notice = MorningNotice.fromResponse(id, r.status, r.body);
+            if (notice == null) {
+                Log.w(AlarmScheduler.TAG, "no morning report for " + id + " (status " + r.status + ")");
+            }
+            else {
+                AlarmNotifier.showReport(context, notice);
+            }
+        }
         return f;
     }
 
@@ -150,7 +175,8 @@ final class Outbox {
 
     /**
      * POSTs JSON to the server the web view loads, signed in with its session
-     * cookie, and reads the answer. Never on the main thread.
+     * cookie, and reads the answer; with no body, it GETs. Never on the main
+     * thread.
      */
     static Response request(Context context, String path, String body, int timeoutMs) {
         return request(baseUrl(context), path, body, timeoutMs);
@@ -164,19 +190,21 @@ final class Outbox {
         try {
             String url = base.replaceAll("/+$", "") + path;
             c = (HttpURLConnection) new URL(url).openConnection();
-            c.setRequestMethod("POST");
+            c.setRequestMethod(body == null ? "GET" : "POST");
             c.setConnectTimeout(timeoutMs);
             c.setReadTimeout(timeoutMs);
-            c.setDoOutput(true);
-            c.setRequestProperty("Content-Type", "application/json");
             String cookie = sessionCookie(url);
             if (cookie != null) {
                 c.setRequestProperty("Cookie", cookie);
             }
-            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-            c.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream out = c.getOutputStream()) {
-                out.write(bytes);
+            if (body != null) {
+                c.setDoOutput(true);
+                c.setRequestProperty("Content-Type", "application/json");
+                byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                c.setFixedLengthStreamingMode(bytes.length);
+                try (OutputStream out = c.getOutputStream()) {
+                    out.write(bytes);
+                }
             }
             int status = c.getResponseCode();
             InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();

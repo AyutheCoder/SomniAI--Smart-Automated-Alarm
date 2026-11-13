@@ -27,6 +27,22 @@ export function bedtimeBefore(wakeAt: Date, bedtimeHour: number): Date | null {
   return bedtime.getTime() < wakeAt.getTime() ? bedtime : null;
 }
 
+/** The last time before `before` that the clock read "HH:MM": a bedtime typed the morning after. */
+export function clockBefore(hhmm: string, before: Date): Date {
+  const [h, m] = hhmm.split(":").map(Number);
+  const at = new Date(before);
+  at.setHours(h, m, 0, 0);
+  if (at.getTime() >= before.getTime()) {
+    at.setDate(at.getDate() - 1);
+  }
+  return at;
+}
+
+/** The local calendar date, as the sleep log keys a night by its morning. */
+export function localDate(at: Date): string {
+  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
+}
+
 export function clockTime(at: Date): string {
   return `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
 }

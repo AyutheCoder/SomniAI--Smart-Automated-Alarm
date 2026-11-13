@@ -2,6 +2,7 @@ package app.somniai.alarm.alarms;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -60,8 +61,21 @@ public class SyncCallsTest {
     }
 
     @Test
-    public void anUnansweredRingSendsOnlyTheFire() {
-        // Nobody woke, so there is no wake level to learn from.
-        assertEquals(List.of("/api/alarms/" + ID + "/fire"), paths(SyncCalls.forRing(ID, RANG, "unanswered", RANG + 1_200_000, null, 5, List.of())));
+    public void anUnansweredRingSendsTheFireAndThatItWasMissed() throws Exception {
+        // Prompt 3.4: a missed alarm has a morning report, and the escalation
+        // profile learns that the whole ladder wasn't enough. It used to send
+        // only the fire, as there was no wake level to learn from.
+        List<SyncCalls.Call> calls = SyncCalls.forRing(ID, RANG, "unanswered", RANG + 1_200_000, null, 5, List.of());
+        assertEquals(List.of("/api/alarms/" + ID + "/fire", "/api/alarms/" + ID + "/missed"), paths(calls));
+        JSONObject missed = calls.get(1).body;
+        assertEquals(SyncCalls.iso(RANG + 1_200_000), missed.getString("at"));
+        assertEquals(5, missed.getInt("level"));
+        assertTrue(missed.getBoolean("rang"));
+    }
+
+    @Test
+    public void anInterruptedRingSendsOnlyTheFire() {
+        // The service was stopped mid-ring: nobody knows whether it was heard.
+        assertEquals(List.of("/api/alarms/" + ID + "/fire"), paths(SyncCalls.forRing(ID, RANG, "interrupted", RANG + 60_000, null, 2, List.of())));
     }
 }

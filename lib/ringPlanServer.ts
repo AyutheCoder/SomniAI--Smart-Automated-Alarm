@@ -1,15 +1,16 @@
 // Gathers what an alarm's ring plan needs, when the alarm is created or
-// changed: the user's escalation history, the predicted chance of waking off
-// their usual time (from the AI Brain, or the rule-based fallback when it can't
-// be reached), and whether the alarm is critical. Server-only.
+// changed, or when a morning report changes the escalation profile
+// (refreshRingPlans): the user's escalation history (lib/wakeHistory.ts), the
+// predicted chance of waking off their usual time (from the AI Brain, or the
+// rule-based fallback when it can't be reached), and whether the alarm is
+// critical. Server-only.
 
 import mongoose from "mongoose";
 import { buildUserSignals } from "@/lib/aiFeatures";
 import { aiBrainConfigured, predictWakeSuccess } from "@/lib/aiClient";
-import { deriveEscalationProfile } from "@/lib/escalation";
-import { modelEventFilter } from "@/lib/provenance";
 import { buildRingPlan, type AlarmSettings, type BrainStatus, type RingPlan } from "@/lib/ringPlan";
-import { BehaviorEvent } from "@/models/BehaviorEvent";
+import { currentProfile } from "@/lib/wakeHistory";
+import { Alarm } from "@/models/Alarm";
 import { Task } from "@/models/Task";
 
 export interface PlanContext extends AlarmSettings {
@@ -21,16 +22,6 @@ export interface KnownPrediction {
   source: "ai" | "fallback";
 }
 
-async function escalationProfile(userId: string) {
-  const events = await BehaviorEvent.find({ userId, type: "escalation", ...modelEventFilter() })
-    .sort({ at: -1 })
-    .limit(40)
-    .lean<{ value?: number }[]>();
-  const effectiveLevels = events
-    .map((e) => Number(e.value))
-    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 5);
-  return deriveEscalationProfile({ effectiveLevels });
-}
 
 async function criticality(userId: string, ctx: PlanContext): Promise<{ value: boolean; reason: string | null }> {
   if (ctx.linkedTaskId && mongoose.Types.ObjectId.isValid(ctx.linkedTaskId)) {
@@ -46,7 +37,7 @@ async function criticality(userId: string, ctx: PlanContext): Promise<{ value: b
   return { value: false, reason: null };
 }
 
-async function predict(userId: string): Promise<{ prediction: KnownPrediction | null; brain: BrainStatus }> {
+export async function predict(userId: string): Promise<{ prediction: KnownPrediction | null; brain: BrainStatus }> {
   const configured = aiBrainConfigured();
   try {
     const { features } = await buildUserSignals(userId);
@@ -66,7 +57,7 @@ async function predict(userId: string): Promise<{ prediction: KnownPrediction | 
 export async function computeRingPlan(
   userId: string,
   ctx: PlanContext,
-  known?: { prediction: KnownPrediction; brain: BrainStatus },
+  known?: { prediction: KnownPrediction | null; brain: BrainStatus },
 ): Promise<RingPlan> {
   // Read field by field: `ctx` may be a Mongoose document, whose values are
   // getters that a spread does not copy (that left plans with no sound).
@@ -79,7 +70,7 @@ export async function computeRingPlan(
     minConfidence: ctx.minConfidence,
   };
   const [profile, critical, predicted] = await Promise.all([
-    escalationProfile(userId),
+    currentProfile(userId),
     criticality(userId, { ...settings, linkedTaskId: ctx.linkedTaskId }),
     known ? Promise.resolve(known) : predict(userId),
   ]);
@@ -90,4 +81,22 @@ export async function computeRingPlan(
     prediction: predicted.prediction,
     brain: predicted.brain,
   });
+}
+
+/**
+ * Works out the ring plan again for every alarm still to ring, after the
+ * escalation profile changed. The phone picks the new plans up when it next
+ * reconciles; nothing changes at ring time. Returns how many were replanned.
+ */
+export async function refreshRingPlans(userId: string): Promise<number> {
+  const alarms = await Alarm.find({ userId, enabled: true, status: { $in: ["scheduled", "snoozed"] } });
+  if (alarms.length === 0) {
+    return 0;
+  }
+  const known = await predict(userId);
+  for (const alarm of alarms) {
+    alarm.ringPlan = await computeRingPlan(userId, alarm as unknown as PlanContext, known);
+    await alarm.save();
+  }
+  return alarms.length;
 }
