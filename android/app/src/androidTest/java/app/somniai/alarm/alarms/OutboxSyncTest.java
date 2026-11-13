@@ -83,7 +83,9 @@ public class OutboxSyncTest {
         assertEquals(0, Outbox.queue(context).size());
 
         List<String> got = server.received();
-        assertEquals("the 503 one, then the four", 5, got.size());
+        // Then, once the dismiss is in, the ring's morning report (prompt 3.4).
+        assertEquals("the 503 one, the four, then the report", 6, got.size());
+        assertTrue(got.get(5), got.get(5).startsWith("GET /api/wake-reports?limit=1&alarmId=64f0a1b2c3d4e5f601234567&tz="));
         assertTrue(got.get(1).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/fire "));
         assertTrue(got.get(2).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/verify "));
         assertTrue(got.get(3).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234567/escalate "));
@@ -146,7 +148,9 @@ public class OutboxSyncTest {
         server = new Stub(401);
         Outbox.baseUrlOverride = server.url();
         assertTrue(Outbox.flushNow(context).stalled);
-        assertEquals(1, Outbox.queue(context).size());
+        // Fire and missed (an unanswered ring, prompt 3.4), both kept; no report asked for.
+        assertEquals(2, Outbox.queue(context).size());
+        assertEquals(1, server.received().size());
     }
 
     /** A one-request-per-connection HTTP server on the phone. */
