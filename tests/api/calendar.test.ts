@@ -125,7 +125,7 @@ describe("connecting Google Calendar", () => {
     const s = await read(await state());
     expect(s.body.data).toMatchObject({ configured: true, connection: { status: "connected", email: "sleeper@example.com", upcomingTasks: 5, lastError: null } });
     const sources = (await read(await context(request("GET", "/api/context")))).body.data.sources;
-    expect(sources.calendar).toEqual({ source: "live", detail: "Google Calendar, sleeper@example.com: 5 upcoming events as tasks" });
+    expect(sources.calendar).toEqual({ source: "live", detail: "Google Calendar, sleeper@example.com: 5 upcoming events in Tasks" });
   });
 
   it("an empty calendar connects with no tasks", async () => {

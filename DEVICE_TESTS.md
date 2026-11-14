@@ -726,7 +726,25 @@ Everything Google says is tested on fixtures (`CALENDAR.md`, "Tests"). What
 only a real account shows: Google's consent screen, a real event arriving as a
 task, and access removed in the Google account being noticed.
 
-**Not run yet.** Needs the Google Cloud setup in `CALENDAR.md`.
+A real Google account (personal, a test user of the app in Testing), Chrome on
+the laptop at `http://localhost:3000` on `npm run dev:phone`, signed in with
+email and password, 2026-11-14. **All five pass.**
+
+| # | Result |
+| --- | --- |
+| 1 | Pass. Google's screen, then "Google Calendar connected: 1 upcoming event this week, added as tasks."; Calendar connected, naming the Google account. The stored grant: `calendar.events.readonly`, `openid`, `userinfo.email`, plus `userinfo.profile` the account had granted before (`include_granted_scopes` merging them: the incremental part); the refresh token sealed (`v1:…`) |
+| 2 | Pass. A real event, tomorrow 10:00, became a task: 2026-11-15 10:00, category Calendar, scored by the semantic engine (importance 65, suggested priority high, intent routine) |
+| 3 | Pass. Moved in Google Calendar, Sync now: "0 added, 1 updated, 0 removed". Deleted, Sync now: "0 added, 0 updated, 1 removed", 0 upcoming |
+| 4 | Pass. SomniAI removed at the Google account's third-party connections, Sync now: Google answered `400 invalid_grant: Token has been expired or revoked`; Calendar not connected, "Google no longer lets SomniAI read this calendar (access was removed, or it expired). Connect it again.", with **Connect again** |
+| 5 | Pass. Reconnected ("0 upcoming events this week", an empty week), then Disconnect: "Disconnected. 0 calendar tasks removed.", Google confirming the revoke; Calendar back to not connected |
+
+Found on the way, both behaving as designed: after access was removed,
+Google's consent screen showed the calendar box **unticked**, so the first
+reconnect came back without calendar access and was reported as
+`no_calendar_access` (nothing kept, the grant handed back). Going back in the
+browser to Google's screen and continuing reused that attempt's one-time
+state, which the callback refused ("Couldn't connect"). `CALENDAR.md` now says
+to tick the box. The panel said "1 upcoming event as tasks"; now "in Tasks".
 
 | # | Do this | Pass when |
 | --- | --- | --- |

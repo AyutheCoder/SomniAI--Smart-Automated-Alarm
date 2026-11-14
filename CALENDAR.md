@@ -32,6 +32,10 @@ like a task typed in. The scheduler then treats them like any other task.
   Calendar API refuses the token or the permission, the connection is marked
   **revoked**: the panel says so and offers **Connect again**, and Google isn't
   asked again until then. An outage only records the error and tries next time.
+- **Connecting again** after access was removed: Google's screen shows the
+  calendar box unticked; tick it (or "Select all"). Without it SomniAI keeps
+  nothing and says calendar access wasn't ticked. Each attempt's state is
+  single-use, so start again with the button rather than the browser's back.
 - **Disconnecting** asks Google to revoke the grant, deletes it here, and
   removes the calendar's tasks that aren't done.
 - **In the Android app:** Google doesn't allow its consent screen inside an

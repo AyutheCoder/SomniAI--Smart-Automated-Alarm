@@ -172,7 +172,7 @@ export async function describeDataSources(userId: string): Promise<DataSources> 
     calendar: calendarConn?.status === "connected"
       ? {
         source: "live",
-        detail: `Google Calendar${calendarConn.email ? `, ${calendarConn.email}` : ""}: ${calendarTasks} upcoming ${calendarTasks === 1 ? "event" : "events"} as tasks`
+        detail: `Google Calendar${calendarConn.email ? `, ${calendarConn.email}` : ""}: ${calendarTasks} upcoming ${calendarTasks === 1 ? "event" : "events"} in Tasks`
           + (calendarConn.lastError ? `; last sync failed: ${calendarConn.lastError}` : ""),
       }
       : calendarConn?.status === "revoked"
