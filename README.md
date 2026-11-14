@@ -55,7 +55,7 @@ docker run -d --name somniai-mongo -p 27017:27017 mongo:7
 # 3. AI Brain
 cd ai-brain
 pip install -r requirements.txt
-python main.py                          # trains models on first boot
+python main.py                          # serves the committed models
 
 # 4. Web app (from the project root, in a second terminal)
 npm install
@@ -66,9 +66,14 @@ npm run dev
 Open <http://localhost:3000>. The seed script creates `demo@somniai.app` with the
 password `demo1234`.
 
-> **Note:** trained model artifacts (`ai-brain/models/*.joblib`) are not committed.
-> They are regenerated automatically from `ai-brain/data/enhanced_sleep_dataset.csv`
-> the first time the AI Brain starts.
+> **The models are trained on real people.** The AI Brain serves forests trained on
+> the LifeSnaps study (69 people, 3,551 nights) through the paper's own pipeline,
+> committed in `ai-brain/models/real/` with their model card
+> ([`ai-brain/MODEL_CARD.md`](ai-brain/MODEL_CARD.md)): what they use, what they
+> can't, and how well they do on people they never saw. The app shows the same card
+> under "How the AI Brain's predictions are made". To retrain them, fetch the data
+> (`ai-brain/fetch_datasets.py`) and run `ai-brain/training/train_shipped.py`. They
+> replaced forests trained on a synthetic panel, which are no longer served.
 
 ## Scripts
 

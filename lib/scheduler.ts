@@ -37,7 +37,7 @@ export interface SchedulableTask {
 }
 export interface SchedulerPrediction {
   predictedSleepDuration: number;
-  wakeupConsistency: number;
+  wakeupConsistency: number | null;
   oversleepProbability: number;
   wakeSuccessProbability: number;
 }
@@ -443,7 +443,7 @@ function buildScheduleExplanation(input: {
       const confidence = clamp(0.45 +
         score * 0.3 +
         prediction.wakeSuccessProbability * 0.15 +
-        prediction.wakeupConsistency * 0.1, 0, 1);
+        (prediction.wakeupConsistency ?? 0) * 0.1, 0, 1);
       const explanation = buildScheduleExplanation({
         task,
         label,

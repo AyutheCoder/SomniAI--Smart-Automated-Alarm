@@ -13,18 +13,18 @@ from __future__ import annotations
 
 _PRIORITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 
-# Thresholds on model probabilities, set from the score distribution the trained
-# model actually produces rather than from round numbers.
+# Thresholds on model probabilities, set from the score distribution the shipped
+# model actually produces rather than from round numbers: the 75th percentiles of
+# its held-out predictions (models/real/model_card.json "thresholds", written by
+# training/train_shipped.py; tests/test_shipped_models.py keeps these in step).
 #
-# The wake-success classifier is calibrated against a ~50% base rate, so
-# oversleep probability has its median at 0.47: the old `> 0.5` test fired on
-# 46.7% of nights and told half of all users their risk was "elevated". 0.70 is
-# the 75th percentile, so the warning now means the top quartile of risk.
-OVERSLEEP_ALERT = 0.70
-# Mirror on the other side: 0.75 is roughly the top quartile of wake reliability.
-# The previous 0.80 sat near the 12th percentile, so the encouraging message was
-# effectively unreachable for ordinary users.
-WAKE_RELIABLE = 0.75
+# The real-data regularity model (prompt 5.2) is trained on a label that is
+# regular on 75% of nights, with balanced class weights, so its scores sit lower
+# than the synthetic model's did (whose thresholds were 0.70 and 0.75). The
+# warning still means the top quartile of predicted off-schedule risk, and the
+# encouraging message the top quartile of predicted regularity.
+OVERSLEEP_ALERT = 0.488
+WAKE_RELIABLE = 0.704
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:

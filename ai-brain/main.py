@@ -4,7 +4,8 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
@@ -25,6 +26,13 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SomniAI AI Brain", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(predict_mod.ModelsUnavailable)
+async def models_unavailable(_request: Request, exc: predict_mod.ModelsUnavailable) -> JSONResponse:
+    # No models, no prediction: the app falls back to its own rules and says so.
+    # Never a synthetic stand-in (prompt 5.2).
+    return JSONResponse(status_code=503, content={"error": "models unavailable", "detail": str(exc)})
 
 _origins = os.environ.get("AI_BRAIN_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(
@@ -88,6 +96,7 @@ def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "modelsLoaded": predict_mod.models_loaded(),
+        # The model card (MODEL_CARD.md): what they were trained on and how well they do.
         "meta": predict_mod.get_meta(),
     }
 

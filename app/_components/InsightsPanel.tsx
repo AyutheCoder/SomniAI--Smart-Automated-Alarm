@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import PredictionOrigin from "./PredictionOrigin";
+import ModelCardDetails from "./ModelCardDetails";
 import {
   REGULARITY_HINT,
   REGULARITY_LABEL,
@@ -49,7 +50,8 @@ export interface Insights {
   recommendations: Recommendation[];
   prediction: {
     predictedSleepDuration: number;
-    wakeupConsistency: number;
+    /** Measured from your sleep log, not predicted (prompt 5.2); null when there's nothing to measure. */
+    wakeupConsistency: number | null;
     wakeSuccessProbability: number;
     oversleepProbability: number;
     confidence: number;
@@ -198,8 +200,8 @@ export function InsightsView({ insights }: { insights: Insights }) {
           />
           <Metric
             icon={Repeat}
-            label="Consistency"
-            value={`${Math.round(insights.prediction.wakeupConsistency)}%`}
+            label="Sleep consistency (measured)"
+            value={insights.prediction.wakeupConsistency === null ? "—" : `${Math.round(insights.prediction.wakeupConsistency)}%`}
           />
         </div>
         <p className="-mt-2 text-xs text-slate-500">
@@ -210,6 +212,7 @@ export function InsightsView({ insights }: { insights: Insights }) {
           origin={insights.predictionSource}
           confidence={describeConfidence(insights.predictionSource, insights.prediction.confidence)}
         />
+        <ModelCardDetails />
 
         <div className="space-y-2">
           <PredictionOrigin what="Coaching" origin={insights.reportSource} confidence={COACHING_CONFIDENCE} />

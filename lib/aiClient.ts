@@ -9,7 +9,8 @@ export type AISource = "ai" | "fallback";
 export type ModelFeatures = Record<string, number>;
 export interface SleepPrediction {
   predictedSleepDuration: number;
-  wakeupConsistency: number;
+  /** The user's measured sleep consistency (0-100), passed back; not a prediction since 5.2. Null if unknown. */
+  wakeupConsistency: number | null;
   confidence: number;
 }
 export interface WakePrediction {
@@ -102,12 +103,12 @@ const num = (v: unknown, d: number) => typeof v === "number" && Number.isFinite(
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
-// Kept in step with ai-brain/recommend.py. The wake-success model is calibrated
-// against a ~50% base rate, so oversleep probability has its median at 0.47 -
-// a `> 0.5` alert fired on 46.7% of nights. 0.70 is the 75th percentile, and
-// 0.75 wake reliability is roughly the top quartile on the other side.
-const OVERSLEEP_ALERT = 0.70;
-const WAKE_RELIABLE = 0.75;
+// Kept in step with ai-brain/recommend.py, which sets them from the shipped
+// model's held-out scores (ai-brain/MODEL_CARD.md, prompt 5.2): the top quartile
+// of predicted off-schedule risk, and of predicted regularity.
+// lib/modelCard.test.ts checks they match the model card.
+export const OVERSLEEP_ALERT = 0.488;
+export const WAKE_RELIABLE = 0.704;
 
 const PRIORITY_WEIGHT: Record<Recommendation["priority"], number> = {
   high: 3,
@@ -134,7 +135,8 @@ function fallbackSleep(f: ModelFeatures): SleepPrediction {
     loud / 80, 4, 10);
   return {
     predictedSleepDuration: r2(duration),
-    wakeupConsistency: r1(clamp(num(f.sleep_consistency, 60), 0, 100)),
+    // Measured, as the AI Brain now returns it; no made-up 60 when there's nothing to measure.
+    wakeupConsistency: typeof f.sleep_consistency === "number" && Number.isFinite(f.sleep_consistency) ? r1(clamp(f.sleep_consistency, 0, 100)) : null,
     confidence: 0.4,
   };
 }
