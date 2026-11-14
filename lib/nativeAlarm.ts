@@ -114,6 +114,38 @@ export interface SomniAlarmPlugin {
   setBedtime(options: { at: string | null }): Promise<{ bedtime: string | null }>;
   /** API 4: this phone's push token for wake-buddy alerts, or why there isn't one. */
   pushToken(): Promise<{ available: boolean; token?: string; reason?: string }>;
+  /** API 5: Health Connect on this phone, and which read permissions are granted (lib/nativeHealth.ts). */
+  healthStatus(): Promise<HealthState>;
+  /** API 5: Health Connect's permission screen for sleep and resting heart rate. */
+  requestHealthPermissions(): Promise<HealthState>;
+  /** API 5: the last two weeks of nights, folded one per wake date, longest session kept. */
+  readSleep(): Promise<{ status: HealthAvailability; nights: HealthNight[]; skipped: string[] }>;
+  /** API 5: Health Connect itself, or its Play Store page when it isn't installed. */
+  openHealthConnect(): Promise<{ opened: boolean }>;
+}
+
+export type HealthAvailability = "available" | "not_installed" | "update_required";
+
+export interface HealthState {
+  status: HealthAvailability;
+  /** Health Connect permission names, of SomniAI's two. */
+  granted: string[];
+  allGranted: boolean;
+  error?: string;
+}
+
+/** One night as HealthNights.java folds it; the server's import takes it as is. */
+export interface HealthNight {
+  date: string;
+  sleepTime: string;
+  wakeTime: string;
+  asleepMinutes: number;
+  inBedMinutes: number;
+  stagesRecorded: boolean;
+  sessions: number;
+  sessionId: string;
+  origin?: string;
+  restingHr?: number;
 }
 
 export interface PreflightCheck {

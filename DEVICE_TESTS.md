@@ -753,3 +753,29 @@ to tick the box. The panel said "1 upcoming event as tasks"; now "in Tasks".
 | 3 | Move the event in Google Calendar; **Sync now**. Then delete it; **Sync now** | The task's time follows; then the task is gone |
 | 4 | Remove SomniAI at myaccount.google.com/permissions; **Sync now** | Calendar shows "Google no longer lets SomniAI read this calendar…" and **Connect again** |
 | 5 | **Disconnect** | Calendar not connected; the calendar's tasks that weren't done are gone |
+
+## 4.2 Health Connect
+
+Folding, the import and the page's handling are tested on fixtures
+(`ANDROID.md`, "Health Connect"). What only a phone shows: Health Connect's
+permission screen, and a real night arriving in the sleep log.
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | The app on the phone (Android 14+, or Health Connect installed), Data sources > Sleep log > **Connect Health Connect** | Health Connect's screen names SomniAI and lists Sleep and Resting heart rate, read only; its "privacy policy" link opens "SomniAI and your sleep data" |
+| 2 | Allow both | Sleep log: "N nights logged, N from Health Connect"; the note says how many were read |
+| 3 | Compare last night with the app that recorded it | Same wake date, the main sleep's start and end; resting heart rate if that app records it |
+| 4 | Refuse resting heart rate (Manage > SomniAI) and **Sync now** | Nights still read; "Resting heart rate isn't allowed, so it's left out." |
+
+### Run 2026-11-14, POCO (Android 16, Health Connect built in, version 17)
+
+App built from the 4.2 working tree with `CAP_SERVER_URL=http://localhost:3000`,
+`npm run dev:phone`, `adb reverse tcp:3000 tcp:3000`. No app on this phone
+writes sleep or heart rate to Health Connect, so Health Connect was empty.
+
+| # | Result | What was seen |
+| --- | --- | --- |
+| 1 | **Pass** | **Connect Health Connect** started `REQUEST_HEALTH_PERMISSIONS`, Health Connect's own screen. From Health Connect > App permissions > SomniAI, the privacy-policy link opened "SomniAI and your sleep data": Health Connect started `VIEW_PERMISSION_USAGE` / `HEALTH_PERMISSIONS` on `ViewPermissionUsageActivity`, the alias in the manifest |
+| 2 | **Partly: the empty case passes** | Both allowed (`dumpsys package`: `READ_SLEEP` and `READ_RESTING_HEART_RATE` granted, `USER_SET`). The plugin logged `health permissions: [READ_SLEEP, READ_RESTING_HEART_RATE]`, then read at once: `health: 0 night(s) read, skipped []`. The note said "No sleep recorded in Health Connect in the last two weeks.", nothing was sent to `/api/sleep-logs/import` (the server log has no request), and Sleep log stayed "No nights logged yet". A night arriving with "N from Health Connect" is **not run**: nothing records sleep on this phone |
+| 3 | **Not run** | No recorded night to compare. Needs a sleep app or watch that writes to Health Connect |
+| 4 | **Pass (with no nights)** | Resting heart rate switched off in Health Connect (`granted=false`, sleep still `granted=true`), **Sync now**: the read ran without an error (`0 night(s) read`) and the note said "No sleep recorded in Health Connect in the last two weeks. Resting heart rate isn't allowed, so it's left out." |

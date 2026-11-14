@@ -71,7 +71,7 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   // page says so rather than showing made-up context.
   const sources = page.getByRole("region", { name: "Data sources" }).getByRole("listitem");
   await expect(sources).toHaveText([
-    /Sleep log\s*not connected\s*No nights logged yet/,
+    /Sleep log\s*not connected\s*No nights logged yet\s*Sleep from Health Connect is read in the Android app/,
     /Weather\s*not connected\s*Not connected: allow location for live weather\s*Use my location/,
     /Calendar\s*not connected\s*Not connected\s*Google isn't set up on this server/,
     /Wearable\s*not connected\s*Not connected/,

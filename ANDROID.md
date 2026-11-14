@@ -625,3 +625,53 @@ reminder in the wake plan passes the bedtime to the phone.
 | JVM, `PreflightScheduleTest` | Planned and default bedtime, another night's plan ignored, an alarm set at bedtime, not within the hour, once per alarm, never in the past |
 | Vitest | Passing the bedtime to the phone, an app without the check, the page's summary line |
 | Device, `scripts/preflight-device.sh` | Each setting made to fail, detected, its fix tapped on the screen, put back; the bedtime notification posted (and not, when all pass). On the phone in `DEVICE_TESTS.md`; in CI on API 26, 32 and 35 |
+
+## Health Connect: sleep and resting heart rate (prompt 4.2)
+
+The app reads two record types from Health Connect, read-only:
+`SleepSessionRecord` and `RestingHeartRateRecord`
+(`READ_SLEEP`, `READ_RESTING_HEART_RATE` in the manifest), with
+`androidx.health.connect:connect-client:1.1.0`. Health Connect is part of
+Android 14 and later; on Android 13 and earlier it's an app from the Play Store
+(the panel's **Install Health Connect** opens its page).
+
+- **Permission flow.** Data sources > Sleep log > **Connect Health Connect**
+  opens Health Connect's own permission screen
+  (`PermissionController.createRequestPermissionResultContract`). Health
+  Connect shows that screen only for an app that explains its use of the data:
+  `HealthRationaleActivity`, reached from the screen's link (Android 13 and
+  earlier, `ACTION_SHOW_PERMISSIONS_RATIONALE`) and from Settings' health
+  permissions (14 and later, the `ViewPermissionUsageActivity` alias with
+  `VIEW_PERMISSION_USAGE`). Either permission can be refused; without sleep
+  nothing is read, without resting heart rate the nights come without it.
+- **Reading.** Each time the app opens, and on **Sync now**, the last 14 days
+  are read (`HealthConnect.java`, on a background thread: the SDK's coroutines
+  run to completion there) and folded into nights by `HealthNights.java`:
+  - a night is keyed by its wake date, in the phone's zone;
+  - several sessions on one date (a split night, a nap, two apps recording the
+    same sleep) fold to the **longest by time asleep**, as the paper did
+    (`ai-brain/datasets/pmdata.py`); the count is kept as `sessions`;
+  - time asleep is the light, deep, REM and plain sleep stages where the app
+    recorded stages, otherwise the session's length (`stagesRecorded`);
+  - resting heart rate is the median of that date's readings, or none;
+  - a session still being recorded is left out and read next time; re-reading
+    two weeks each time also picks up a night a watch synced late.
+- **Into SleepLog.** The page sends the nights to `POST /api/sleep-logs/import`
+  (`lib/sleepImport.ts`): each becomes that date's log, source
+  `health_connect`, with `restingHr`, `inBedHours`, `stagesRecorded`,
+  `sessions`, the kept session's id and the app that wrote it. A night the user
+  entered by hand is kept as written. Unchanged nights aren't written again.
+  The predictions use the latest night's resting heart rate when no wearable
+  feed gives one.
+- **Guava.** connect-client brings Guava at runtime, which replaces the
+  `listenablefuture` artifact WorkManager's API compiles against with an empty
+  one; `build.gradle` adds the same Guava (31.1-android) at compile time.
+
+Tests: `HealthNightsTest` folds the fixtures in
+`app/src/test/resources/health-connect/` (made-up records: a night with
+stages, a split night with a nap, a night two apps recorded one in part, a
+session still recording, heart rate on some dates, an empty fortnight, the
+phone's zone) and checks the phone's output is exactly
+`tests/fixtures/health-connect/fortnight-nights.json`, which the server's
+(`tests/api/sleepImport.test.ts`) and the page's (`lib/nativeHealth.test.ts`)
+tests use.

@@ -108,7 +108,39 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- Health Connect (prompt 4.2) shows its permission screen only for an
+             app that explains its use of the data: this screen, reached from
+             the permission screen's link (Android 13 and earlier) and from
+             Settings' health permissions (14 and later, the alias). -->
+        <activity
+            android:name=".alarms.HealthRationaleActivity"
+            android:exported="true"
+            android:label="SomniAI and your sleep data"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".alarms.HealthRationaleActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
     </application>
+
+    <!-- Health Connect, read-only (prompt 4.2): last night's sleep and resting heart rate. -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <queries>
+        <!-- The Health Connect app, on Android 13 and earlier. -->
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <!-- Permissions -->
 

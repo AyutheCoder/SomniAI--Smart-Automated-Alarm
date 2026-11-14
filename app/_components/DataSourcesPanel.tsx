@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Database, MapPin } from "lucide-react";
+import { CalendarDays, Database, HeartPulse, MapPin } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { DataSources, DataSourceStatus } from "@/lib/aiFeatures";
 import type { CalendarState } from "@/lib/calendarServer";
 import { outcomeFrom, outcomeText, resyncDue } from "@/lib/calendarClient";
+import { SomniAlarm, type HealthState } from "@/lib/nativeAlarm";
+import { hasHealth, importFromHealthConnect, importText } from "@/lib/nativeHealth";
+import type { NativeConnection } from "@/lib/nativeSync";
 
 const ROWS: [keyof DataSources, string][] = [
   ["sleepLogs", "Sleep log"],
@@ -30,13 +33,16 @@ const STATE: Record<DataSourceStatus["source"], string> = {
  * Which of the user's data sources are connected, and so what predictions can
  * use. Only live sources feed predictions; the rest are shown as what they are.
  */
-export default function DataSourcesPanel({ onTasksChanged }: { onTasksChanged?: () => void } = {}) {
+export default function DataSourcesPanel({ onTasksChanged, native = null }: { onTasksChanged?: () => void; native?: NativeConnection | null } = {}) {
   const [sources, setSources] = useState<DataSources | null>(null);
   const [locating, setLocating] = useState(false);
   const [weatherNote, setWeatherNote] = useState("");
   const [calendar, setCalendar] = useState<CalendarState | null>(null);
   const [calendarNote, setCalendarNote] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [health, setHealth] = useState<HealthState | null>(null);
+  const [healthNote, setHealthNote] = useState("");
+  const [reading, setReading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -122,6 +128,51 @@ export default function DataSourcesPanel({ onTasksChanged }: { onTasksChanged?: 
     }
   }, [load, loadCalendar, onTasksChanged]);
 
+  // Health Connect, in the app (prompt 4.2): read on opening, and on Sync now.
+  const readHealth = useCallback(async (quiet: boolean) => {
+    setReading(true);
+    try {
+      const r = await importFromHealthConnect();
+      if (!quiet || r.state === "failed" || (r.state === "imported" && (r.added > 0 || r.updated > 0))) {
+        setHealthNote(importText(r));
+      }
+      setHealth(await SomniAlarm.healthStatus().catch(() => null));
+    }
+    finally {
+      setReading(false);
+      await load();
+    }
+  }, [load]);
+
+  const connectHealth = useCallback(async () => {
+    try {
+      const state = await SomniAlarm.requestHealthPermissions();
+      setHealth(state);
+      if (state.granted.includes("android.permission.health.READ_SLEEP")) {
+        await readHealth(false);
+      }
+      else {
+        setHealthNote("Sleep wasn't allowed in Health Connect, so nothing was read.");
+      }
+    }
+    catch (e) {
+      setHealthNote(`Couldn't open Health Connect: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [readHealth]);
+
+  const nativeHealth = hasHealth(native);
+  useEffect(() => {
+    if (!nativeHealth) {
+      return;
+    }
+    void SomniAlarm.healthStatus().then((state) => {
+      setHealth(state);
+      if (state.status === "available" && state.granted.includes("android.permission.health.READ_SLEEP")) {
+        void readHealth(true);
+      }
+    }).catch(() => setHealth(null));
+  }, [nativeHealth, readHealth]);
+
   async function disconnectCalendar() {
     const json = await (await fetch("/api/calendar", { method: "DELETE" })).json().catch(() => null);
     setCalendarNote(json?.ok
@@ -195,6 +246,9 @@ export default function DataSourcesPanel({ onTasksChanged }: { onTasksChanged?: 
                     <MapPin className="h-3.5 w-3.5" /> {locating ? "Locating…" : "Use my location"}
                   </button>
                 )}
+                {key === "sleepLogs" && (
+                  <HealthControls native={native} state={health} reading={reading} onConnect={() => void connectHealth()} onRead={() => void readHealth(false)} />
+                )}
                 {key === "calendar" && <CalendarControls state={calendar} syncing={syncing} onSync={() => void syncCalendar(false)} onDisconnect={() => void disconnectCalendar()} />}
               </li>
             );
@@ -202,12 +256,56 @@ export default function DataSourcesPanel({ onTasksChanged }: { onTasksChanged?: 
         </ul>
       )}
       {weatherNote && <p className="mt-3 text-xs text-amber-300">{weatherNote}</p>}
+      {healthNote && <p role="status" aria-label="Health Connect" className="mt-3 text-xs text-emerald-200">{healthNote}</p>}
       {calendarNote && <p role="status" aria-label="Calendar" className="mt-3 text-xs text-sky-200">{calendarNote}</p>}
     </section>
   );
 }
 
 const BUTTON = "inline-flex items-center gap-1 rounded-lg border border-white/10 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10 disabled:opacity-50";
+
+/** Health Connect for the sleep log (prompt 4.2): only in the Android app. */
+function HealthControls({ native, state, reading, onConnect, onRead }: {
+  native: NativeConnection | null;
+  state: HealthState | null;
+  reading: boolean;
+  onConnect: () => void;
+  onRead: () => void;
+}) {
+  if (!hasHealth(native)) {
+    const inApp = native !== null && "api" in native;
+    return (
+      <span className="ml-auto text-xs text-slate-500">
+        {inApp ? "Update the app to read Health Connect" : "Sleep from Health Connect is read in the Android app"}
+      </span>
+    );
+  }
+  if (!state) {
+    return null;
+  }
+  if (state.status !== "available") {
+    return (
+      <button type="button" onClick={() => void SomniAlarm.openHealthConnect()} className={`ml-auto ${BUTTON}`}>
+        <HeartPulse className="h-3.5 w-3.5" /> {state.status === "not_installed" ? "Install Health Connect" : "Update Health Connect"}
+      </button>
+    );
+  }
+  if (!state.granted.includes("android.permission.health.READ_SLEEP")) {
+    return (
+      <button type="button" onClick={onConnect} className={`ml-auto ${BUTTON}`}>
+        <HeartPulse className="h-3.5 w-3.5" /> Connect Health Connect
+      </button>
+    );
+  }
+  return (
+    <span className="ml-auto flex gap-2">
+      <button type="button" onClick={onRead} disabled={reading} className={BUTTON}>
+        <HeartPulse className="h-3.5 w-3.5" /> {reading ? "Reading…" : "Sync now"}
+      </button>
+      <button type="button" onClick={() => void SomniAlarm.openHealthConnect()} className={BUTTON}>Manage</button>
+    </span>
+  );
+}
 
 /** Connect, sync or disconnect Google Calendar (prompt 4.1). */
 function CalendarControls({ state, syncing, onSync, onDisconnect }: {

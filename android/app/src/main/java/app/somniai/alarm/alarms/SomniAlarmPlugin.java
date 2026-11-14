@@ -18,9 +18,11 @@ import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -92,7 +94,7 @@ public class SomniAlarmPlugin extends Plugin {
      * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
      * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2).
      */
-    static final int API = 4;
+    static final int API = 5;
 
     @PluginMethod
     public void version(PluginCall call) {
@@ -137,6 +139,109 @@ public class SomniAlarmPlugin extends Plugin {
                     .put("reason", "This phone couldn't get a push token" + (e == null ? "" : ": " + e.getMessage())));
             }
         });
+    }
+
+    /**
+     * API 5: Health Connect on this phone (prompt 4.2): "available",
+     * "not_installed" or "update_required", and which of SomniAI's two read
+     * permissions are granted.
+     */
+    @PluginMethod
+    public void healthStatus(PluginCall call) {
+        new Thread(() -> call.resolve(healthState(null)), "health-status").start();
+    }
+
+    private JSObject healthState(Set<String> justGranted) {
+        String status = HealthConnect.status(getContext());
+        JSObject o = new JSObject().put("status", status);
+        Set<String> granted = justGranted;
+        if ("available".equals(status) && granted == null) {
+            try {
+                granted = HealthConnect.granted(getContext());
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return o.put("granted", new JSArray()).put("allGranted", false).put("error", "interrupted");
+            }
+            catch (RuntimeException e) {
+                return o.put("granted", new JSArray()).put("allGranted", false).put("error", e.toString());
+            }
+        }
+        JSArray list = new JSArray();
+        if (granted != null) {
+            for (String p : granted) {
+                if (HealthConnect.PERMISSIONS.contains(p)) {
+                    list.put(p);
+                }
+            }
+        }
+        return o.put("granted", list).put("allGranted", granted != null && granted.containsAll(HealthConnect.PERMISSIONS));
+    }
+
+    /** API 5: Health Connect's own screen asking for sleep and resting heart rate, read-only. */
+    @PluginMethod
+    public void requestHealthPermissions(PluginCall call) {
+        if (!"available".equals(HealthConnect.status(getContext()))) {
+            call.resolve(healthState(null));
+            return;
+        }
+        startActivityForResult(call, HealthConnect.permissionIntent(getContext()), "healthPermissionsResult");
+    }
+
+    @ActivityCallback
+    private void healthPermissionsResult(PluginCall call, ActivityResult result) {
+        Set<String> granted = HealthConnect.permissionContract().parseResult(result.getResultCode(), result.getData());
+        new Thread(() -> {
+            // What the screen returned, or if it returned nothing, what Health Connect now says.
+            JSObject state = healthState(granted.isEmpty() ? null : granted);
+            android.util.Log.i(AlarmScheduler.TAG, "health permissions: " + state.optJSONArray("granted"));
+            call.resolve(state);
+        }, "health-permissions").start();
+    }
+
+    /**
+     * API 5: the last two weeks of nights from Health Connect, folded as the
+     * paper did (HealthNights), for the page to send to the server. Reads only
+     * what was granted.
+     */
+    @PluginMethod
+    public void readSleep(PluginCall call) {
+        new Thread(() -> {
+            String status = HealthConnect.status(getContext());
+            if (!"available".equals(status)) {
+                call.resolve(new JSObject().put("status", status).put("nights", new JSArray()).put("skipped", new JSArray()));
+                return;
+            }
+            try {
+                HealthNights.Result r = HealthConnect.readNights(getContext(), Instant.now(), ZoneId.systemDefault());
+                JSObject out = JSObject.fromJSONObject(HealthNights.toJson(r));
+                android.util.Log.i(AlarmScheduler.TAG, "health: " + r.nights.size() + " night(s) read, skipped " + r.skipped);
+                call.resolve(out.put("status", status));
+            }
+            catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                call.reject("interrupted");
+            }
+            catch (RuntimeException | JSONException e) {
+                android.util.Log.w(AlarmScheduler.TAG, "health: read failed: " + e);
+                call.reject("Couldn't read Health Connect: " + e.getMessage());
+            }
+        }, "health-read").start();
+    }
+
+    /** API 5: Health Connect itself, to manage access; or its Play Store page if it isn't installed. */
+    @PluginMethod
+    public void openHealthConnect(PluginCall call) {
+        Intent intent = "not_installed".equals(HealthConnect.status(getContext()))
+            ? new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + HealthConnect.PROVIDER))
+            : new Intent(androidx.health.connect.client.HealthConnectClient.Companion.getHealthConnectSettingsAction());
+        try {
+            getActivity().startActivity(intent);
+            call.resolve(new JSObject().put("opened", true));
+        }
+        catch (android.content.ActivityNotFoundException e) {
+            call.resolve(new JSObject().put("opened", false));
+        }
     }
 
     /** Opens "Tonight's alarm check", where each failing setting has its fix. */

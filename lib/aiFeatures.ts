@@ -123,8 +123,12 @@ export async function buildUserSignals(userId: string, days = 30): Promise<UserS
     features.bedtime_hour = bh;
   if (ambientNoise !== null)
     features.ambient_noise_db = Math.round(ambientNoise);
+  // A connected wearable's reading, else the latest night's from Health Connect (4.2).
+  const nightHr = logs.find((l) => typeof l.restingHr === "number")?.restingHr;
   if (wearable?.restingHr)
     features.resting_hr = wearable.restingHr;
+  else if (typeof nightHr === "number")
+    features.resting_hr = nightHr;
   if (typeof wearable?.steps === "number")
     features.steps = wearable.steps;
   return { features, metrics, recentSleepHours, sleepGoalHours };
@@ -144,12 +148,13 @@ export interface DataSources {
 
 export async function describeDataSources(userId: string): Promise<DataSources> {
   await connectToDatabase();
-  const [snapshot, realNights, simulatedNights, calendarConn, calendarTasks] = await Promise.all([
+  const [snapshot, realNights, simulatedNights, calendarConn, calendarTasks, healthNights] = await Promise.all([
     ContextSnapshot.findOne({ userId }).sort({ at: -1 }).lean<{ sources?: Partial<ContextSources>; at?: Date }>(),
     SleepLog.countDocuments({ userId, source: { $ne: "simulated" } }),
     SleepLog.countDocuments({ userId, source: "simulated" }),
     CalendarConnection.findOne({ userId }).lean<{ status: string; email?: string | null; lastError?: string | null }>(),
     Task.countDocuments({ userId, source: "google_calendar", completed: false }),
+    SleepLog.countDocuments({ userId, source: "health_connect" }),
   ]);
   const sources = snapshotSources(snapshot);
   const simulatedNote = simulatedInputsAllowed()
@@ -165,7 +170,7 @@ export async function describeDataSources(userId: string): Promise<DataSources> 
     : "";
   return {
     sleepLogs: realNights > 0
-      ? { source: "live", detail: `${realNights} ${realNights === 1 ? "night" : "nights"} logged${unused}` }
+      ? { source: "live", detail: `${realNights} ${realNights === 1 ? "night" : "nights"} logged${healthNights > 0 ? `, ${healthNights} from Health Connect` : ""}${unused}` }
       : { source: "missing", detail: `No nights logged yet${unused}` },
     weather: describe(sources.weather, "Live, from your location", "Not connected: allow location for live weather"),
     // Google Calendar, once connected (prompt 4.1); else what the snapshot says.
