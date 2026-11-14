@@ -78,4 +78,16 @@ public class SyncCallsTest {
         // The service was stopped mid-ring: nobody knows whether it was heard.
         assertEquals(List.of("/api/alarms/" + ID + "/fire"), paths(SyncCalls.forRing(ID, RANG, "interrupted", RANG + 60_000, null, 2, List.of())));
     }
+
+    @Test
+    public void aSnoozeSendsFireThenSnoozeWithWhenItRingsAgain() throws Exception {
+        // As the web's syncCalls: fire, then the snooze; nothing else until the wake ends.
+        List<SyncCalls.Call> calls = SyncCalls.forRing(ID, RANG, "snoozed", RANG + 20_000, null, 2, List.of());
+        assertEquals(List.of("/api/alarms/" + ID + "/fire", "/api/alarms/" + ID + "/snooze"), paths(calls));
+        JSONObject s = calls.get(1).body;
+        assertEquals(5, s.getInt("snoozeMinutes"));
+        assertEquals("2026-10-26T06:45:20Z", s.getString("until"));
+        assertEquals(20_000, s.getLong("responseMs"));
+        assertEquals("2026-10-26T06:40:20Z", s.getString("at"));
+    }
 }

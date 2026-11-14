@@ -66,6 +66,16 @@ public class AlarmCodecTest {
     }
 
     @Test
+    public void aSnoozeIsKeptAndARecordFromBeforeSnoozesStillReads() throws Exception {
+        AlarmSpec spec = AlarmCodec.specFromJson(input("{\"id\":\"s\",\"hour\":7,\"minute\":0,\"days\":[1]}"));
+        AlarmRecord snoozed = new AlarmRecord(spec, AlarmRecord.Status.SCHEDULED, 1793341800000L, 1793341500000L, 1793341800000L);
+        assertEquals(Long.valueOf(1793341800000L), AlarmCodec.recordFromJson(new JSONObject(AlarmCodec.recordToJson(snoozed).toString())).snoozedUntil);
+        JSONObject old = AlarmCodec.recordToJson(new AlarmRecord(spec, AlarmRecord.Status.SCHEDULED, 1793341800000L, null));
+        old.remove("snoozedUntil");
+        assertNull(AlarmCodec.recordFromJson(old).snoozedUntil);
+    }
+
+    @Test
     public void theSameRingPlanReadsTheSameWhateverItsKeyOrder() throws Exception {
         AlarmSpec one = AlarmCodec.specFromJson(input("{\"id\":\"x\",\"hour\":7,\"minute\":0,\"days\":[1],"
             + "\"ringPlan\":{\"version\":1,\"challenge\":{\"required\":true,\"minConfidence\":70},\"sound\":{\"intensity\":60}}}"));

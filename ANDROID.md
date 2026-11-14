@@ -735,3 +735,57 @@ exactly `tests/fixtures/screen-time/week-nights.json`, which the server's
 (`tests/api/screenTime.test.ts`) and the page's (`lib/nativeScreen.test.ts`)
 tests use. The no-permission path: nothing read, fetched or sent, and the
 feature absent.
+
+## Snooze and alarm telemetry (prompt 5.1)
+
+**Snooze.** The ring screen has **Snooze 5 min** (on the wake check's screen
+too, as on the web), except for an unmissable alarm, which the service also
+refuses (`snooze_refused`). Snoozing ends the ring like a dismissal, without
+the wake check, and sends what the web sends: `fire`, then `snooze` with the
+time it rings again (`SyncCalls`). The alarm is re-armed through its own
+AlarmManager entry (`AlarmPlanner.snoozed`, `AlarmRecord.snoozedUntil`), so
+there is never a second trigger for it; a reschedule (app start, reboot, time
+change) keeps a snooze still to come, and one the phone slept through is
+reported missed like any alarm. The phone always gets an alarm's own time from
+the server (`toNativeAlarm` uses `snoozedFrom`): a snooze time sent at minute
+precision would have replaced the phone's own, or, once that minute had begun,
+read as past and cancelled the snooze's ring. Editing the alarm during a
+snooze ends the snooze.
+
+**Telemetry**, only with consent (`WakeTelemetry.java`, pure, JVM-tested):
+
+- *What*: for each wake (every ring of one occurrence, snoozes included), each
+  ring's time from starting to the first interaction (a touch or key on the
+  ring screen, or opening it from the notification), how it ended, the level
+  and stage it reached, the number of snoozes, and the wake check's result
+  (passed with tries, sums and time on task; not required; or not passed).
+  Nothing about apps, places or content.
+- *Accurate*: the ring's start and the interaction are both on
+  `SystemClock.elapsedRealtime`, and a touch or key is timed by the event's own
+  timestamp (`MotionEvent.getEventTime`, moved from the uptime clock), so a
+  wall-clock change mid-ring or the delay before the service hears about it
+  changes nothing. The full-screen launch is not an interaction; tapping the
+  notification is (a separate PendingIntent).
+- *Consent gate*: the phone holds the consent (device-protected storage, so a
+  ring before the first unlock is covered); a ring that starts without it opens
+  no wake, and withdrawing drops every open and queued wake
+  (`OutboxQueue.removeWhere`). The server stores a wake only if consent is on,
+  under the same version of the text, was given before the wake began, and the
+  wake began after the last deletion (`lib/telemetry.ts`); otherwise 403, which
+  the outbox drops.
+- *Export and delete*: the home page's **Alarm telemetry** panel (also in a
+  browser) allows, stops, downloads everything (`/api/telemetry/export`, the
+  consent's history included) and deletes everything; deleting clears the
+  phone's unsent wakes first.
+
+The alarm's own calls (`fire`, `verify`, `escalate`, `dismiss`, `snooze`,
+`missed`) are unchanged and not telemetry: the morning report and the wake
+buddy need them, and the consent text says so.
+
+Tests: `WakeTelemetryTest` (consent gate, timing on the monotonic clock,
+snoozes across rings, interrupted rings, the phone's output equal to
+`tests/fixtures/telemetry/snoozed-wake.json`), `RingControllerTest`,
+`AlarmPlannerTest`, `SyncCallsTest`, `OutboxQueueTest`, `AlarmCodecTest`; on
+the emulators `RingServiceTest` snoozes a real ring and checks an unmissable
+one can't be. Server: `tests/api/telemetry.test.ts`; page:
+`lib/telemetryClient.test.ts`, `e2e/telemetry.spec.ts`.

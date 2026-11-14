@@ -147,4 +147,21 @@ public class OutboxQueueTest {
         assertEquals(OutboxQueue.MAX, q.size());
         assertTrue(q.pending().optJSONObject(OutboxQueue.MAX - 1).optString("path").contains("/r" + (OutboxQueue.MAX - 1) + "/"));
     }
+
+    @Test
+    public void telemetryCanBeRemovedUnsentLeavingTheRingsCalls() {
+        Mem mem = new Mem();
+        OutboxQueue q = new OutboxQueue(mem);
+        q.enqueue(ring("a"), 0);
+        q.enqueue(List.of(new SyncCalls.Call("a", "/api/telemetry", new org.json.JSONObject())), 1);
+        q.enqueue(ring("b"), 2);
+        q.enqueue(List.of(new SyncCalls.Call("b", "/api/telemetry", new org.json.JSONObject())), 3);
+        int before = q.size();
+        assertEquals(2, q.removeWhere("/api/telemetry"));
+        assertEquals(before - 2, q.size());
+        for (int i = 0; i < q.pending().length(); i++) {
+            assertFalse(q.pending().optJSONObject(i).optString("path").equals("/api/telemetry"));
+        }
+        assertEquals(0, q.removeWhere("/api/telemetry"));
+    }
 }

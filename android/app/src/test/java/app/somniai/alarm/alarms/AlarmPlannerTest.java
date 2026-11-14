@@ -171,4 +171,76 @@ public class AlarmPlannerTest {
         assertEquals(Status.WAITING_FOR_PERMISSION, after.status);
         assertEquals(Long.valueOf(ms(seven)), after.lastFiredAt);
     }
+
+    // --- Snooze (prompt 5.1) ---
+
+    @Test
+    public void aSnoozedOneOffIsScheduledAgainAndEnabled() {
+        Instant seven = local("2026-10-25T07:00", KOLKATA);
+        AlarmRecord rang = AlarmPlanner.afterFiring(scheduled(once("2026-10-25", 7, 0), seven, null), seven, KOLKATA, true);
+        assertEquals(Status.DONE, rang.status);
+        long until = ms(seven) + 20_000 + RingController.SNOOZE_MS;
+        AlarmRecord s = AlarmPlanner.snoozed(rang, until, true);
+        assertEquals(Status.SCHEDULED, s.status);
+        assertTrue(s.spec.enabled);
+        assertEquals(Long.valueOf(until), s.triggerAt);
+        assertEquals(Long.valueOf(until), s.snoozedUntil);
+        assertEquals("the occurrence that rang stays rung", rang.lastFiredAt, s.lastFiredAt);
+        assertTrue(AlarmPlanner.shouldRing(s, until));
+    }
+
+    @Test
+    public void aRescheduleDuringASnoozeKeepsIt() {
+        // App start or a reboot at 07:02, during a snooze until 07:05:20: a one-off past its own
+        // time would otherwise be marked missed, and a repeating one moved to tomorrow.
+        Instant seven = local("2026-10-25T07:00", KOLKATA);
+        long until = ms(seven) + 20_000 + RingController.SNOOZE_MS;
+        for (AlarmSpec spec : new AlarmSpec[] { once("2026-10-25", 7, 0), daily(7, 0) }) {
+            AlarmRecord rang = AlarmPlanner.afterFiring(scheduled(spec, seven, null), seven, KOLKATA, true);
+            AlarmRecord s = AlarmPlanner.snoozed(rang, until, true);
+            AlarmPlanner.Planned p = AlarmPlanner.plan(s, seven.plusSeconds(120), KOLKATA, true);
+            assertEquals(Status.SCHEDULED, p.record.status);
+            assertEquals(Long.valueOf(until), p.record.triggerAt);
+            assertNull(p.missed);
+        }
+    }
+
+    @Test
+    public void whenTheSnoozeRingsTheAlarmMovesOnAsUsual() {
+        Instant seven = local("2026-10-25T07:00", KOLKATA);
+        long until = ms(seven) + RingController.SNOOZE_MS;
+        AlarmRecord daily = AlarmPlanner.snoozed(AlarmPlanner.afterFiring(scheduled(daily(7, 0), seven, null), seven, KOLKATA, true), until, true);
+        AlarmRecord after = AlarmPlanner.afterFiring(daily, Instant.ofEpochMilli(until), KOLKATA, true);
+        assertEquals("2026-10-26T07:00", localOf(Instant.ofEpochMilli(after.triggerAt), KOLKATA));
+        assertNull(after.snoozedUntil);
+        AlarmRecord once = AlarmPlanner.snoozed(AlarmPlanner.afterFiring(scheduled(once("2026-10-25", 7, 0), seven, null), seven, KOLKATA, true), until, true);
+        AlarmRecord done = AlarmPlanner.afterFiring(once, Instant.ofEpochMilli(until), KOLKATA, true);
+        assertEquals(Status.DONE, done.status);
+        assertFalse(done.spec.enabled);
+        assertNull(done.snoozedUntil);
+    }
+
+    @Test
+    public void aSnoozeThePhoneSleptThroughIsMissedNotSilentlyDropped() {
+        // Phone off from 07:01 to 08:00: the 07:05 snooze never rang.
+        Instant seven = local("2026-10-25T07:00", KOLKATA);
+        long until = ms(seven) + RingController.SNOOZE_MS;
+        AlarmRecord s = AlarmPlanner.snoozed(AlarmPlanner.afterFiring(scheduled(once("2026-10-25", 7, 0), seven, null), seven, KOLKATA, true), until, true);
+        AlarmPlanner.Planned p = AlarmPlanner.plan(s, local("2026-10-25T08:00", KOLKATA), KOLKATA, true);
+        assertEquals(Long.valueOf(until), p.missed);
+        assertEquals(Status.MISSED, p.record.status);
+        // Just after it was due (within the grace), it still rings.
+        AlarmPlanner.Planned late = AlarmPlanner.plan(s, Instant.ofEpochMilli(until + 60_000), KOLKATA, true);
+        assertEquals(Long.valueOf(until), late.record.triggerAt);
+        assertNull(late.missed);
+    }
+
+    @Test
+    public void aSnoozeWithoutExactAlarmsWaitsForThePermission() {
+        Instant seven = local("2026-10-25T07:00", KOLKATA);
+        AlarmRecord rang = AlarmPlanner.afterFiring(scheduled(daily(7, 0), seven, null), seven, KOLKATA, true);
+        AlarmRecord s = AlarmPlanner.snoozed(rang, ms(seven) + RingController.SNOOZE_MS, false);
+        assertEquals(Status.WAITING_FOR_PERMISSION, s.status);
+        assertNull(s.triggerAt);
+    }
 }

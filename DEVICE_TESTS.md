@@ -811,3 +811,24 @@ Also seen: the dev build's "1 Issue" badge, a hydration warning because the
 Android shell sets `--safe-area-inset-*` on `<html>` before React loads. Older
 than 4.3 (it showed on the sign-in page with the 4.2 app); `app/layout.tsx` now
 has `suppressHydrationWarning` on `<html>`, and no warning appeared after.
+
+## 5.1 Snooze and alarm telemetry
+
+The timing, the consent gate, snooze scheduling and the server's checks are
+tested on the JVM, the emulators and the server (`ANDROID.md`, "Snooze and
+alarm telemetry"). What only a phone shows: the button on the real ring screen,
+the snooze ringing five minutes later over the lock screen, and a time to first
+interaction that matches a stopwatch.
+
+**Not run yet.**
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Home page > Alarm telemetry, without allowing; an alarm rings and is stopped | Logcat has no `telemetry:` line; the panel still says "Off. Nothing is recorded." |
+| 2 | **Allow telemetry** in the app | "Telemetry is on. It starts with the next alarm that rings on this phone." |
+| 3 | An alarm 2 min ahead; when it rings, wait about 10 s by a stopwatch, touch the screen, **Snooze 5 min** | Ring stops; it rings again 5 min later over the lock screen; the next-alarm icon shows the snooze time |
+| 4 | The second ring: stop it (with the check, if the alarm has one) | Logcat `telemetry: queued the wake … 1 snooze(s), first interaction ~10000 ms`; the panel lists the wake: 1 snooze, first touch ≈ the stopwatch |
+| 5 | An unmissable alarm rings | No Snooze button |
+| 6 | **Download everything** | The file has the wake with both rings, and the consent's history |
+| 7 | **Stop recording**, then an alarm rings | Nothing recorded (no `telemetry:` line) |
+| 8 | **Delete everything** | "Deleted N recorded wakes"; the download is empty of wakes |

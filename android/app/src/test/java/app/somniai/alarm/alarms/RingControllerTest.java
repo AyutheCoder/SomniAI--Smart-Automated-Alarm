@@ -59,6 +59,8 @@ public class RingControllerTest {
         @Override public void closeRingScreen() { calls.add("closeRingScreen"); screenOpen = false; }
         @Override public void stopService() { calls.add("stopService"); serviceRunning = false; foreground = false; }
         @Override public void record(RingController.Alarm a, String outcome, long at, String detail) { records.add(a.id + " " + outcome); }
+        final List<String> snoozes = new ArrayList<>();
+        @Override public void snooze(RingController.Alarm a, long until) { snoozes.add(a.id + " until " + until); }
         final List<String> queued = new ArrayList<>();
         @Override public void queueSync(RingController.Alarm a, long rangAt, String outcome, long endedAt, Verification v, int level, List<Backups.Outcome> b) {
             queued.add(a.id + " " + outcome + " rang " + rangAt + " ended " + endedAt + (v == null ? "" : v.challenged ? " checked" : " unchecked")
@@ -595,5 +597,85 @@ public class RingControllerTest {
         c.soundFailed(1_600);
         assertEquals(volumes, fx.volumes.size());
         fx.assertNothingHeld();
+    }
+
+    // --- Snooze (prompt 5.1) ---
+
+    static RingController.Alarm unmissable(String id) throws Exception {
+        return new RingController.Alarm(id, "Flight", 1_000, NO_CHECK,
+            EscalationLadder.fromRingPlan(EscalationLadderTest.plan("aggressive", true, null)));
+    }
+
+    @Test
+    public void snoozeStopsCleanlyAndRingsAgainFiveMinutesLater() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        assertTrue(c.canSnooze());
+        assertTrue(c.snooze(20_000));
+        assertEquals(State.STOPPED, c.state());
+        fx.assertNothingHeld();
+        assertFalse(fx.serviceRunning);
+        assertFalse(fx.screenOpen);
+        assertEquals(List.of("a ringing", "a snoozed"), fx.records);
+        assertEquals(List.of("a until " + (20_000 + RingController.SNOOZE_MS)), fx.snoozes);
+        assertEquals(List.of("a snoozed rang 0 ended 20000 level 1"), fx.queued);
+        assertEquals(5 * 60_000L, RingController.SNOOZE_MS);
+    }
+
+    @Test
+    public void snoozeNeedsNoWakeCheck() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(checked("a", 3, 70), TUNING, 0);
+        assertTrue("as on the web, snoozing doesn't ask for the check", c.snooze(5_000));
+        assertEquals(1, fx.snoozes.size());
+    }
+
+    @Test
+    public void anUnmissableAlarmCantBeSnoozed() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(unmissable("a"), TUNING, 0);
+        assertFalse(c.canSnooze());
+        assertFalse(c.snooze(5_000));
+        assertEquals(State.RINGING, c.state());
+        assertTrue("still ringing", fx.sound);
+        assertTrue(fx.snoozes.isEmpty());
+        assertTrue(fx.queued.isEmpty());
+        assertEquals(List.of("a ringing", "a snooze_refused"), fx.records);
+    }
+
+    @Test
+    public void anUnmissableAlarmJoiningMakesTheWholeRingUnsnoozable() throws Exception {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.start(unmissable("b"), TUNING, 1_000);
+        assertFalse(c.canSnooze());
+        assertFalse(c.snooze(2_000));
+    }
+
+    @Test
+    public void snoozingTwoAlarmsRingingTogetherSnoozesBoth() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        c.start(alarm("a"), TUNING, 0);
+        c.start(alarm("b"), TUNING, 1_000);
+        assertTrue(c.snooze(10_000));
+        assertEquals(List.of("a until " + (10_000 + RingController.SNOOZE_MS), "b until " + (10_000 + RingController.SNOOZE_MS)), fx.snoozes);
+        assertEquals(2, fx.queued.size());
+    }
+
+    @Test
+    public void nothingToSnoozeWhenNothingRings() {
+        Fake fx = new Fake();
+        RingController c = new RingController(fx);
+        assertFalse(c.canSnooze());
+        assertFalse(c.snooze(0));
+        c.start(alarm("a"), TUNING, 0);
+        c.dismiss(1_000, Verification.none(1_000));
+        assertFalse(c.snooze(2_000));
+        assertTrue(fx.snoozes.isEmpty());
     }
 }

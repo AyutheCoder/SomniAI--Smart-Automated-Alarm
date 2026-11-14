@@ -100,6 +100,29 @@ final class OutboxQueue {
     }
 
     /**
+     * Removes every waiting call to this path, unsent: telemetry when consent
+     * is withdrawn or the user deletes it (prompt 5.1). Returns how many.
+     */
+    synchronized int removeWhere(String path) {
+        JSONArray all = pending();
+        JSONArray kept = new JSONArray();
+        int removed = 0;
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject e = all.optJSONObject(i);
+            if (e != null && path.equals(e.optString("path"))) {
+                removed++;
+            }
+            else {
+                kept.put(e);
+            }
+        }
+        if (removed > 0) {
+            store.write(kept.toString());
+        }
+        return removed;
+    }
+
+    /**
      * Sends what is waiting, oldest first, stopping at the first call that
      * can't be sent now. The queue is saved after every call, so a crash
      * mid-flush neither loses one nor sends one twice that the server accepted.

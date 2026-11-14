@@ -124,6 +124,12 @@ export interface SomniAlarmPlugin {
   openHealthConnect(): Promise<{ opened: boolean }>;
   /** API 6: whether Usage access is on, for screen time before bed (4.3). */
   screenTimeStatus(): Promise<{ allowed: boolean }>;
+  /** API 7: telemetry on the phone (5.1): the consent it holds, wakes open between rings, and queued. */
+  telemetryStatus(): Promise<PhoneTelemetry>;
+  /** API 7: the consent the server holds; withdrawing drops everything not yet sent. */
+  setTelemetryConsent(options: { granted: boolean; version?: string }): Promise<PhoneTelemetry & { dropped: number }>;
+  /** API 7: drops every wake not yet sent (the user deleted their telemetry). */
+  clearTelemetry(): Promise<PhoneTelemetry & { dropped: number }>;
   /** API 6: Settings' Usage access page. */
   openUsageAccess(): Promise<{ opened: boolean }>;
   /**
@@ -132,6 +138,13 @@ export interface SomniAlarmPlugin {
    * reading of bed. Without Usage access nothing is read (allowed: false).
    */
   readScreenTime(options: { bedtimes: Record<string, string> }): Promise<{ allowed: boolean; nights: ScreenNightReading[]; skipped: string[] }>;
+}
+
+export interface PhoneTelemetry {
+  granted: boolean;
+  version: string | null;
+  openWakes: number;
+  queued: number;
 }
 
 /** One night as ScreenNights.java measures it; the server's import takes it as is. */
@@ -190,11 +203,13 @@ function localDate(d: Date): string {
  * repeat with no days rings once, as nextOccurrence treats it.
  */
 export function toNativeAlarm(alarm: Pick<Alarm, "_id" | "label" | "scheduledTime" | "repeat" | "enabled" | "ringPlan" | "snoozedFrom">): NativeAlarm {
-  const repeating = alarm.repeat !== undefined && alarm.repeat.type !== "none";
-  // A repeating alarm snoozed in a browser has the snooze as its scheduledTime;
-  // its own time is snoozedFrom. The phone keeps the alarm's own time (it has
-  // no snooze of its own yet), rather than moving every later morning.
-  const at = new Date(repeating && alarm.snoozedFrom ? alarm.snoozedFrom : alarm.scheduledTime);
+  // A snoozed alarm has the snooze as its scheduledTime; its own time is
+  // snoozedFrom. The phone always gets the alarm's own time: it keeps its own
+  // snooze (prompt 5.1, AlarmRecord.snoozedUntil), and a snooze time sent here
+  // at minute precision would replace it, or, once that minute had begun,
+  // read as past and cancel the snooze's ring. A repeating alarm would also
+  // move every later morning.
+  const at = new Date(alarm.snoozedFrom ? alarm.snoozedFrom : alarm.scheduledTime);
   if (Number.isNaN(at.getTime())) {
     throw new Error(`alarm ${alarm._id} has no valid time`);
   }

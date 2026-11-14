@@ -61,6 +61,11 @@ public class HealthNightsTest {
         return a.equals(b);
     }
 
+    /** For other tests comparing the phone's JSON with a shared fixture. */
+    static boolean sameJsonForTests(Object a, Object b) throws Exception {
+        return sameJson(a, b);
+    }
+
     private static HealthNights.Result fold(String name, ZoneId zone) throws Exception {
         JSONObject f = fixture(name);
         return HealthNights.fold(

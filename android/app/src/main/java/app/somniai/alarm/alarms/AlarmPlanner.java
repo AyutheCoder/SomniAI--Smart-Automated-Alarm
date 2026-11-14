@@ -46,6 +46,12 @@ public final class AlarmPlanner {
     public static Planned plan(AlarmRecord current, Instant now, ZoneId zone, boolean exactAllowed) {
         AlarmSpec spec = current.spec;
         Long missed = null;
+        if (current.snoozedUntil != null && current.status == AlarmRecord.Status.SCHEDULED
+                && current.snoozedUntil.equals(current.triggerAt) && current.snoozedUntil >= now.toEpochMilli()) {
+            // A snooze still to come: it rings then, whatever the alarm's own schedule says.
+            return new Planned(exactAllowed ? current
+                : new AlarmRecord(spec, AlarmRecord.Status.WAITING_FOR_PERMISSION, null, current.lastFiredAt), null);
+        }
         if (spec.enabled && current.status == AlarmRecord.Status.SCHEDULED && current.triggerAt != null
                 && current.triggerAt < now.toEpochMilli()
                 && (current.lastFiredAt == null || current.lastFiredAt < current.triggerAt)) {
@@ -76,6 +82,20 @@ public final class AlarmPlanner {
             return new Planned(new AlarmRecord(spec, AlarmRecord.Status.WAITING_FOR_PERMISSION, null, current.lastFiredAt), missed);
         }
         return new Planned(new AlarmRecord(spec, AlarmRecord.Status.SCHEDULED, next.toEpochMilli(), current.lastFiredAt), missed);
+    }
+
+    /**
+     * The record after the ring was snoozed until {@code until} (prompt 5.1):
+     * scheduled for then, enabled again if it was a one-off that rang. The
+     * occurrence that rang stays rung ({@code lastFiredAt}); when the snooze
+     * rings, {@link #afterFiring} moves the alarm on as usual.
+     */
+    public static AlarmRecord snoozed(AlarmRecord current, long until, boolean exactAllowed) {
+        AlarmSpec spec = current.spec.withEnabled(true);
+        if (!exactAllowed) {
+            return new AlarmRecord(spec, AlarmRecord.Status.WAITING_FOR_PERMISSION, null, current.lastFiredAt);
+        }
+        return new AlarmRecord(spec, AlarmRecord.Status.SCHEDULED, until, current.lastFiredAt, until);
     }
 
     /**

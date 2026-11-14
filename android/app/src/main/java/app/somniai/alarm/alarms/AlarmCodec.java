@@ -96,6 +96,7 @@ public final class AlarmCodec {
             o.put("status", r.status.name().toLowerCase());
             o.put("triggerAt", r.triggerAt == null ? JSONObject.NULL : r.triggerAt);
             o.put("lastFiredAt", r.lastFiredAt == null ? JSONObject.NULL : r.lastFiredAt);
+            o.put("snoozedUntil", r.snoozedUntil == null ? JSONObject.NULL : r.snoozedUntil);
             return o;
         }
         catch (JSONException e) {
@@ -109,7 +110,9 @@ public final class AlarmCodec {
             AlarmRecord.Status status = AlarmRecord.Status.valueOf(o.getString("status").toUpperCase());
             Long triggerAt = o.isNull("triggerAt") ? null : o.getLong("triggerAt");
             Long lastFiredAt = o.isNull("lastFiredAt") ? null : o.getLong("lastFiredAt");
-            return new AlarmRecord(spec, status, triggerAt, lastFiredAt);
+            // Absent in records saved before 5.1.
+            Long snoozedUntil = !o.has("snoozedUntil") || o.isNull("snoozedUntil") ? null : o.getLong("snoozedUntil");
+            return new AlarmRecord(spec, status, triggerAt, lastFiredAt, snoozedUntil);
         }
         catch (JSONException e) {
             throw new IllegalArgumentException("stored alarm is unreadable: " + e.getMessage());

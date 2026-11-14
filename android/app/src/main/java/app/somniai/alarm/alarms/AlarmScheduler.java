@@ -122,6 +122,29 @@ public final class AlarmScheduler {
     }
 
     /**
+     * Snoozed from the ring screen (prompt 5.1): the alarm rings again at
+     * {@code until}, through its own AlarmManager entry, so there is never a
+     * second trigger for it. Returns null if the alarm was deleted meanwhile.
+     */
+    static AlarmRecord snooze(Context context, String id, long until) {
+        AlarmRecord record;
+        synchronized (AlarmStore.LOCK) {
+            AlarmRecord current = AlarmStore.get(context, id);
+            if (current == null) {
+                Log.w(TAG, "snooze for an alarm no longer here: " + id);
+                return null;
+            }
+            record = apply(context, AlarmPlanner.snoozed(current, until, canSchedule(context)));
+            AlarmStore.put(context, record);
+            AlarmStore.log(context, logEntry(id, current.spec.label, "snooze_scheduled", until, System.currentTimeMillis(),
+                "rings again at " + Instant.ofEpochMilli(until) + "; " + describe(record)));
+        }
+        Log.i(TAG, "snoozed " + id + " until " + Instant.ofEpochMilli(until));
+        PreflightReceiver.update(context);
+        return record;
+    }
+
+    /**
      * An alarm was delivered: start it ringing, move it on, and record what
      * happened. Returns the record it fired for, or null if the delivery was stale.
      */

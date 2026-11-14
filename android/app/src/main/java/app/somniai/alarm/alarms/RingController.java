@@ -12,8 +12,12 @@ import java.util.Map;
  * (RingControllerTest); RingService implements the effects.
  *
  * <pre>
- * IDLE --start--> RINGING --dismiss / timeout / destroyed--> STOPPED --start--> RINGING
+ * IDLE --start--> RINGING --dismiss / snooze / timeout / destroyed--> STOPPED --start--> RINGING
  * </pre>
+ *
+ * Snooze (prompt 5.1) ends the ring like a dismissal, without a wake check,
+ * and sets each alarm to ring again {@link #SNOOZE_MS} later, from the first
+ * level of its ladder. An unmissable alarm can't be snoozed.
  *
  * While ringing it climbs the alarm's escalation ladder ({@link EscalationLadder},
  * from the ring plan cached on the phone): louder at each level's volume
@@ -30,6 +34,9 @@ import java.util.Map;
 final class RingController {
 
     enum State { IDLE, RINGING, STOPPED }
+
+    /** How long a snooze lasts: as on the web (lib/ringFlow.ts SNOOZE_MINUTES). */
+    static final long SNOOZE_MS = 5 * 60_000L;
 
     /** Where the sound comes from, tried in this order until one plays. */
     enum Source {
@@ -93,6 +100,8 @@ final class RingController {
         void closeRingScreen();
         void stopService();
         void record(Alarm alarm, String outcome, long at, String detail);
+        /** Snoozed: ring this alarm again at {@code until}. */
+        void snooze(Alarm alarm, long until);
         /** Queues the ring for the server: fire, and verify, escalate (the level reached) and dismiss if it was stopped. */
         void queueSync(Alarm alarm, long rangAt, String outcome, long endedAt, Verification verification, int level, List<Backups.Outcome> backups);
     }
@@ -328,6 +337,35 @@ final class RingController {
             return false;
         }
         finish("dismissed", now, "after " + (now - startedAt) / 1000 + " s at level " + level.level + "; " + verification.describe(), verification);
+        return true;
+    }
+
+    /** Whether the ring can be snoozed: not when an unmissable alarm is ringing. */
+    boolean canSnooze() {
+        return state == State.RINGING && !ladder().critical;
+    }
+
+    /**
+     * The user snoozed. Refused, and recorded as refused, for an unmissable
+     * alarm. Returns false if nothing was ringing or it was refused.
+     */
+    boolean snooze(long now) {
+        if (state != State.RINGING) {
+            return false;
+        }
+        if (!canSnooze()) {
+            for (Alarm a : ringing.values()) {
+                fx.record(a, "snooze_refused", now, "an unmissable alarm can't be snoozed");
+            }
+            return false;
+        }
+        long until = now + SNOOZE_MS;
+        List<Alarm> snoozed = new ArrayList<>(ringing.values());
+        finish("snoozed", now, "after " + (now - startedAt) / 1000 + " s at level " + level.level + "; rings again at "
+            + java.time.Instant.ofEpochMilli(until), null);
+        for (Alarm a : snoozed) {
+            fx.snooze(a, until);
+        }
         return true;
     }
 

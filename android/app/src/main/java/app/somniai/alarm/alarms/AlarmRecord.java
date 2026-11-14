@@ -22,11 +22,22 @@ public final class AlarmRecord {
     public final Long triggerAt;
     /** Epoch millis it last rang, if ever. */
     public final Long lastFiredAt;
+    /**
+     * Set while a snooze from the ring screen is pending (prompt 5.1): the
+     * alarm is SCHEDULED for this time instead of its own next occurrence, and
+     * a reschedule keeps it. Null otherwise.
+     */
+    public final Long snoozedUntil;
 
     public AlarmRecord(AlarmSpec spec, Status status, Long triggerAt, Long lastFiredAt) {
+        this(spec, status, triggerAt, lastFiredAt, null);
+    }
+
+    public AlarmRecord(AlarmSpec spec, Status status, Long triggerAt, Long lastFiredAt, Long snoozedUntil) {
         this.spec = spec;
         this.status = status;
         this.triggerAt = triggerAt;
         this.lastFiredAt = lastFiredAt;
+        this.snoozedUntil = snoozedUntil;
     }
 }

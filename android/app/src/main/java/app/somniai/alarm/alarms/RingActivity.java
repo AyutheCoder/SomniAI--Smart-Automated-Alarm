@@ -9,9 +9,12 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
@@ -56,6 +59,8 @@ public class RingActivity extends Activity {
     };
 
     private WakeCheck check;
+    /** When this screen last told the service about an interaction (elapsedRealtime); at most every 2 s. */
+    private long interactionSentAt = Long.MIN_VALUE;
     private TextView progress;
     private TextView question;
     private EditText answer;
@@ -84,6 +89,47 @@ public class RingActivity extends Activity {
         ContextCompat.registerReceiver(this, stopped, new IntentFilter(RingService.ACTION_STOPPED), ContextCompat.RECEIVER_NOT_EXPORTED);
         ContextCompat.registerReceiver(this, challenge, new IntentFilter(RingService.ACTION_CHALLENGE), ContextCompat.RECEIVER_NOT_EXPORTED);
         ContextCompat.registerReceiver(this, backups, new IntentFilter(RingService.ACTION_BACKUPS), ContextCompat.RECEIVER_NOT_EXPORTED);
+        openedFromNotification(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        openedFromNotification(intent);
+    }
+
+    /** Tapping the ring notification is an interaction; the full-screen launch isn't (prompt 5.1). */
+    private void openedFromNotification(Intent intent) {
+        if (intent != null && "notification".equals(intent.getStringExtra(RingService.EXTRA_VIA))) {
+            interaction(SystemClock.elapsedRealtime(), "notification");
+        }
+    }
+
+    // Telemetry's time to first interaction (prompt 5.1): the first touch or key on
+    // this screen, timed by the event itself, moved to the elapsedRealtime clock.
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            interaction(WakeTelemetry.elapsedOfEvent(ev.getEventTime(), SystemClock.uptimeMillis(), SystemClock.elapsedRealtime()), "screen");
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent ev) {
+        if (ev.getAction() == KeyEvent.ACTION_DOWN && ev.getRepeatCount() == 0) {
+            interaction(WakeTelemetry.elapsedOfEvent(ev.getEventTime(), SystemClock.uptimeMillis(), SystemClock.elapsedRealtime()), "key");
+        }
+        return super.dispatchKeyEvent(ev);
+    }
+
+    private void interaction(long elapsed, String via) {
+        // Only each ring's first counts (WakeTelemetry); later touches just keep an
+        // alarm that joined mid-ring from missing its own first one.
+        if (elapsed - interactionSentAt >= 2_000) {
+            interactionSentAt = elapsed;
+            RingService.interacted(this, elapsed, via);
+        }
     }
 
     @Override
@@ -171,6 +217,7 @@ public class RingActivity extends Activity {
         root.addView(text(time, 56, Typeface.BOLD));
         root.addView(name);
         root.addView(button("Stop alarm", v -> stopPressed()), fill());
+        addSnooze(root);
         root.addView(backupNote());
         clearOfKeyboardAndBars(root);
         return root;
@@ -229,12 +276,26 @@ public class RingActivity extends Activity {
         root.addView(answer, fill());
         root.addView(message);
         root.addView(button("Check", v -> submit()), fill());
+        addSnooze(root);
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(Color.rgb(15, 23, 42));
         scroll.addView(root);
         clearOfKeyboardAndBars(scroll);
         return scroll;
+    }
+
+    /** Snooze, as on the web, unless the alarm is unmissable (prompt 5.1). */
+    private void addSnooze(LinearLayout root) {
+        RingService.Snapshot now = RingService.current;
+        if (now == null || !now.canSnooze) {
+            return;
+        }
+        Button snooze = button("Snooze " + RingController.SNOOZE_MS / 60_000 + " min", v -> RingService.snooze(this));
+        snooze.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        LinearLayout.LayoutParams lp = fill();
+        lp.topMargin = dp(16);
+        root.addView(snooze, lp);
     }
 
     private static void clearOfKeyboardAndBars(View v) {

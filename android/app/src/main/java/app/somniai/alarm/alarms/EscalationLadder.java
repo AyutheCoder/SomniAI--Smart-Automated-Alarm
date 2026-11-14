@@ -55,6 +55,16 @@ final class EscalationLadder {
 
     final List<Level> levels;
     final boolean critical;
+
+    /** The stage of this level number ("ramp", "vibration", "challenge", "backup"); null if the ladder has no such level. */
+    String stageOf(int level) {
+        for (Level l : levels) {
+            if (l.level == level) {
+                return l.stage;
+            }
+        }
+        return null;
+    }
     /** Where the ladder came from, for the ring log: "plan", "standard (...)", plus "full ladder (unmissable)". */
     final String source;
 

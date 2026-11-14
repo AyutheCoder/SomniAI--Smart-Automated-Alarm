@@ -46,6 +46,14 @@ describe("toNativeAlarm", () => {
     expect(toNativeAlarm(alarm({ enabled: false, ringPlan }))).toMatchObject({ enabled: false, ringPlan: { version: 1 } });
   });
 
+  it("a snoozed alarm reaches the phone at its own time, one-off or repeating: the phone keeps its own snooze (5.1)", () => {
+    // Snoozed on the server until 06:35:40; its own time was 06:30. Sent as 06:35, a
+    // reconcile after 06:35:00 would read the one-off as past and cancel the snooze's ring.
+    const snoozed = { scheduledTime: new Date(2026, 9, 25, 6, 35, 40).toISOString(), snoozedFrom: new Date(2026, 9, 25, 6, 30).toISOString() };
+    expect(toNativeAlarm(alarm(snoozed))).toMatchObject({ hour: 6, minute: 30, date: "2026-10-25" });
+    expect(toNativeAlarm(alarm({ ...snoozed, repeat: { type: "daily" } }))).toMatchObject({ hour: 6, minute: 30 });
+  });
+
   it("refuses an alarm without a valid time rather than guessing one", () => {
     expect(() => toNativeAlarm(alarm({ scheduledTime: "not a date" }))).toThrow(/no valid time/);
   });

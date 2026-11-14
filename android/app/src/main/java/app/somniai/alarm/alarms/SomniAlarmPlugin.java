@@ -93,9 +93,10 @@ public class SomniAlarmPlugin extends Plugin {
      * it (lib/nativeSync.ts). Raised when the plugin gains something the web app
      * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
      * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2),
-     * 5 Health Connect (4.2), 6 screen time before bed (4.3).
+     * 5 Health Connect (4.2), 6 screen time before bed (4.3), 7 telemetry
+     * consent and snooze on the ring screen (5.1).
      */
-    static final int API = 6;
+    static final int API = 7;
 
     @PluginMethod
     public void version(PluginCall call) {
@@ -243,6 +244,72 @@ public class SomniAlarmPlugin extends Plugin {
         catch (android.content.ActivityNotFoundException e) {
             call.resolve(new JSObject().put("opened", false));
         }
+    }
+
+    /**
+     * API 7: telemetry on this phone (prompt 5.1): the consent it holds, the
+     * wakes still open (between a snooze and the next ring) and those queued.
+     */
+    @PluginMethod
+    public void telemetryStatus(PluginCall call) {
+        call.resolve(telemetryState());
+    }
+
+    private JSONObject telemetryRaw() {
+        WakeTelemetry.Consent c = Telemetry.get(getContext()).consent();
+        int queued = 0;
+        org.json.JSONArray pending = Outbox.queue(getContext()).pending();
+        for (int i = 0; i < pending.length(); i++) {
+            if (Telemetry.PATH.equals(pending.optJSONObject(i).optString("path"))) {
+                queued++;
+            }
+        }
+        JSONObject o = new JSONObject();
+        try {
+            o.put("granted", c.granted);
+            o.put("version", c.version == null ? JSONObject.NULL : c.version);
+            o.put("openWakes", Telemetry.get(getContext()).openWakes());
+            o.put("queued", queued);
+        }
+        catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+        return o;
+    }
+
+    private JSObject telemetryState() {
+        try {
+            return JSObject.fromJSONObject(telemetryRaw());
+        }
+        catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * API 7: the consent the user gave or withdrew, as the server holds it.
+     * Recording starts with the next ring after it is given; withdrawing drops
+     * everything not yet sent, open and queued.
+     */
+    @PluginMethod
+    public void setTelemetryConsent(PluginCall call) {
+        Boolean granted = call.getBoolean("granted");
+        String version = call.getString("version");
+        if (granted == null || (granted && (version == null || version.isEmpty()))) {
+            call.reject("granted is required, and a version with it", "INVALID");
+            return;
+        }
+        Telemetry.get(getContext()).setConsent(granted, granted ? version : null, System.currentTimeMillis());
+        int dropped = granted ? 0 : Telemetry.purge(getContext());
+        android.util.Log.i(AlarmScheduler.TAG, "telemetry consent " + (granted ? "given (" + version + ")" : "withdrawn; dropped " + dropped));
+        call.resolve(telemetryState().put("dropped", dropped));
+    }
+
+    /** API 7: drops every wake not yet sent (the user deleted their telemetry). */
+    @PluginMethod
+    public void clearTelemetry(PluginCall call) {
+        int dropped = Telemetry.purge(getContext());
+        call.resolve(telemetryState().put("dropped", dropped));
     }
 
     /** API 6: whether Usage access is on, for screen time before bed (prompt 4.3). */

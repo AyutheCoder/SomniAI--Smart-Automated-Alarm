@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.os.VibrationAttributes;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -42,6 +43,13 @@ public class RingService extends Service implements RingController.Effects {
 
     static final String ACTION_RING = "app.somniai.alarm.RING";
     static final String ACTION_DISMISS = "app.somniai.alarm.DISMISS";
+    /** Snooze from the ring screen (prompt 5.1). */
+    static final String ACTION_SNOOZE = "app.somniai.alarm.SNOOZE";
+    /** The user interacted with the ring screen: for telemetry's time to first interaction. */
+    static final String ACTION_INTERACTION = "app.somniai.alarm.INTERACTION";
+    /** On the ring screen's intent from tapping the notification: that tap was an interaction. */
+    static final String EXTRA_VIA = "via";
+    private static final String EXTRA_ELAPSED = "elapsed";
     /** The wake check was solved but not convincingly: to the top of the ladder. */
     static final String ACTION_ESCALATE = "app.somniai.alarm.ESCALATE";
     /** Sent (to this app only) when the ladder reaches the challenge level. */
@@ -79,9 +87,11 @@ public class RingService extends Service implements RingController.Effects {
         final WakeCheck.Plan check;
         /** The escalation level the ring is at. */
         final EscalationLadder.Level level;
+        /** Whether the ring screen offers Snooze: not for an unmissable alarm or another device's backup ring. */
+        final boolean canSnooze;
 
         Snapshot(List<String> ids, String label, long scheduledFor, RingController.Source source, float volume, boolean vibrating, boolean wakeLockHeld,
-                WakeCheck.Plan check, EscalationLadder.Level level) {
+                WakeCheck.Plan check, EscalationLadder.Level level, boolean canSnooze) {
             this.ids = ids;
             this.label = label;
             this.scheduledFor = scheduledFor;
@@ -91,6 +101,7 @@ public class RingService extends Service implements RingController.Effects {
             this.wakeLockHeld = wakeLockHeld;
             this.check = check;
             this.level = level;
+            this.canSnooze = canSnooze;
         }
     }
 
@@ -123,6 +134,27 @@ public class RingService extends Service implements RingController.Effects {
         }
         catch (IllegalStateException e) {
             Log.i(AlarmScheduler.TAG, "escalate with nothing ringing");
+        }
+    }
+
+    /** Snoozes what is ringing, unless it is unmissable. Does nothing if nothing is ringing. */
+    static void snooze(Context context) {
+        try {
+            context.startService(new Intent(context, RingService.class).setAction(ACTION_SNOOZE));
+        }
+        catch (IllegalStateException e) {
+            Log.i(AlarmScheduler.TAG, "snooze with nothing ringing");
+        }
+    }
+
+    /** The user interacted, at this time on the elapsedRealtime clock. */
+    static void interacted(Context context, long elapsed, String via) {
+        try {
+            context.startService(new Intent(context, RingService.class).setAction(ACTION_INTERACTION)
+                .putExtra(EXTRA_ELAPSED, elapsed).putExtra(EXTRA_VIA, via));
+        }
+        catch (IllegalStateException e) {
+            Log.i(AlarmScheduler.TAG, "interaction with nothing ringing");
         }
     }
 
@@ -163,6 +195,7 @@ public class RingService extends Service implements RingController.Effects {
         latestStartId = startId;
         String action = intent == null ? null : intent.getAction();
         long now = System.currentTimeMillis();
+        long elapsed = SystemClock.elapsedRealtime();
         if (ACTION_RING.equals(action)) {
             RingController.Alarm alarm = new RingController.Alarm(
                 String.valueOf(intent.getStringExtra(EXTRA_ID)),
@@ -173,7 +206,12 @@ public class RingService extends Service implements RingController.Effects {
             if (controller.state() != RingController.State.RINGING) {
                 backupNote = null;
             }
+            boolean already = isRinging(alarm.id);
             controller.start(alarm, RingTuning.fromPlan(intent.getStringExtra(EXTRA_PLAN)), now);
+            if (!already && isRinging(alarm.id) && !BackupRing.isBackup(alarm.id)) {
+                // Telemetry, with consent only (WakeTelemetry checks): this ring's start on the monotonic clock.
+                Telemetry.get(this).ringStarted(alarm.id, alarm.scheduledFor, now, elapsed);
+            }
             if (controller.state() == RingController.State.RINGING) {
                 List<RingController.Alarm> all = new ArrayList<>();
                 for (RingController.Alarm a : controller.ringing()) {
@@ -196,6 +234,12 @@ public class RingService extends Service implements RingController.Effects {
         else if (ACTION_ESCALATE.equals(action)) {
             controller.escalateToTop(now);
         }
+        else if (ACTION_SNOOZE.equals(action)) {
+            controller.snooze(now);
+        }
+        else if (ACTION_INTERACTION.equals(action)) {
+            Telemetry.get(this).interacted(intent.getLongExtra(EXTRA_ELAPSED, elapsed), intent.getStringExtra(EXTRA_VIA));
+        }
         if (controller.state() != RingController.State.RINGING) {
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -203,6 +247,18 @@ public class RingService extends Service implements RingController.Effects {
         publish();
         // If Android kills the process mid-ring, deliver the ring again rather than fall silent.
         return START_REDELIVER_INTENT;
+    }
+
+    private boolean isRinging(String id) {
+        if (controller.state() != RingController.State.RINGING) {
+            return false;
+        }
+        for (RingController.Alarm a : controller.ringing()) {
+            if (a.id.equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -449,6 +505,18 @@ public class RingService extends Service implements RingController.Effects {
             return;
         }
         Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification, level, backups));
+        JSONObject wake = Telemetry.get(this).ringEnded(alarm.id, outcome, endedAt, SystemClock.elapsedRealtime(), level,
+            alarm.ladder.stageOf(level), verification, alarm.check.required);
+        if (wake != null) {
+            Telemetry.send(this, wake);
+        }
+    }
+
+    @Override
+    public void snooze(RingController.Alarm alarm, long until) {
+        if (!BackupRing.isBackup(alarm.id)) {
+            AlarmScheduler.snooze(this, alarm.id, until);
+        }
     }
 
     // --- Helpers ---
@@ -494,6 +562,11 @@ public class RingService extends Service implements RingController.Effects {
         PendingIntent screen = PendingIntent.getActivity(this, 0,
             new Intent(this, RingActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION),
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        // Tapping the notification (the screen was on, so it showed as a banner) is the user's
+        // first interaction: a separate intent, so the full-screen launch, which is no one's doing, isn't.
+        PendingIntent tapped = PendingIntent.getActivity(this, 1,
+            new Intent(this, RingActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra(EXTRA_VIA, "notification"),
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String time = DateFormat.getTimeInstance(DateFormat.SHORT).format(new Date(first.scheduledFor));
         String title = first.label.isEmpty() ? "Alarm" : first.label;
         if (alarms.size() > 1) {
@@ -508,7 +581,7 @@ public class RingService extends Service implements RingController.Effects {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setFullScreenIntent(screen, true)
-            .setContentIntent(screen)
+            .setContentIntent(tapped)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build();
     }
@@ -527,6 +600,7 @@ public class RingService extends Service implements RingController.Effects {
             }
         }
         current = new Snapshot(ids, first == null ? "" : first.label, first == null ? 0 : first.scheduledFor,
-            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld(), controller.check(), controller.level());
+            controller.source(), volume, vibrating, wakeLock != null && wakeLock.isHeld(), controller.check(), controller.level(),
+            controller.canSnooze() && first != null && !BackupRing.isBackup(first.id));
     }
 }

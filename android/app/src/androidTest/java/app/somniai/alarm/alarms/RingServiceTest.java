@@ -379,6 +379,64 @@ public class RingServiceTest {
     }
 
     /**
+     * Snooze from the ring screen (prompt 5.1): the ring stops cleanly, the
+     * alarm's own AlarmManager entry is set for five minutes on (so there is
+     * never a second trigger), and a reschedule keeps it. With consent, the
+     * wake stays open for the next ring.
+     */
+    @Test
+    public void snoozeStopsTheRingAndSetsTheAlarmFiveMinutesOn() throws Exception {
+        String id = "t-snooze";
+        WakeTelemetry telemetry = Telemetry.get(context);
+        telemetry.setConsent(true, "telemetry-v1", System.currentTimeMillis());
+        try {
+            AlarmScheduler.put(context, new AlarmSpec(id, "Snooze test", 7, 0, java.util.EnumSet.allOf(DayOfWeek.class), null, true, null));
+            long scheduledFor = System.currentTimeMillis();
+            assertTrue(RingService.start(context, spec(id), scheduledFor));
+            waitFor("ringing", () -> RingService.current != null);
+            assertTrue("a plain alarm offers Snooze", RingService.current.canSnooze);
+
+            long pressed = System.currentTimeMillis();
+            RingService.snooze(context);
+            waitFor("stopped", () -> RingService.current == null && ringNotification() == null && !alarmPlaying());
+
+            AlarmRecord r = AlarmStore.get(context, id);
+            assertEquals(AlarmRecord.Status.SCHEDULED, r.status);
+            assertNotNull(r.snoozedUntil);
+            assertEquals(r.snoozedUntil, r.triggerAt);
+            long expected = pressed + RingController.SNOOZE_MS;
+            assertTrue("rings again five minutes on: " + (r.snoozedUntil - expected) + " ms off",
+                Math.abs(r.snoozedUntil - expected) < 10_000);
+            assertEquals(List.of("ringing", "snoozed", "snooze_scheduled"), ringAndEnd(id));
+
+            // App start reschedules everything: the snooze stays.
+            AlarmScheduler.rescheduleAll(context, "test", java.time.ZoneId.systemDefault());
+            assertEquals(r.snoozedUntil, AlarmStore.get(context, id).triggerAt);
+            assertEquals("the wake waits for the snooze's ring", 1, telemetry.openWakes());
+        }
+        finally {
+            AlarmScheduler.remove(context, id);
+            telemetry.setConsent(false, null, System.currentTimeMillis());
+            Telemetry.purge(context);
+        }
+    }
+
+    @Test
+    public void anUnmissableAlarmOffersNoSnoozeAndKeepsRinging() throws Exception {
+        String id = "t-nosnooze";
+        AlarmSpec unmissable = new AlarmSpec(id, "Flight", 7, 0, java.util.EnumSet.noneOf(DayOfWeek.class), LocalDate.now(), true,
+            fastPlan(true, false, new int[] { 0, 60, 120, 180, 240 }, false));
+        assertTrue(RingService.start(context, unmissable, System.currentTimeMillis()));
+        waitFor("ringing", () -> RingService.current != null);
+        assertFalse(RingService.current.canSnooze);
+        RingService.snooze(context);
+        Thread.sleep(1_500);
+        assertNotNull("still ringing", RingService.current);
+        assertTrue(alarmPlaying());
+        assertEquals(List.of("ringing", "snooze_refused"), ringAndEnd(id));
+    }
+
+    /**
      * A ring plan with this ladder: levels at the given seconds, the standard
      * features per level (vibration from 3, challenge from 4, backups at 5).
      */

@@ -31,7 +31,7 @@ final class SyncCalls {
     private SyncCalls() {}
 
     /**
-     * @param outcome "dismissed" or "unanswered"
+     * @param outcome "dismissed", "snoozed" or "unanswered"
      * @param verification how it was stopped; null for unanswered
      * @param level the escalation level the ring had reached when it ended
      * @param backups what each backup channel did, if the ladder got that far
@@ -48,6 +48,15 @@ final class SyncCalls {
             put(m, "level", level);
             put(m, "rang", true);
             calls.add(new Call(alarmId, base + "/missed", m));
+            return calls;
+        }
+        if ("snoozed".equals(outcome)) {
+            // As the web (lib/ringFlow.ts): fire, then the snooze with the time it rings again.
+            JSONObject s = body("at", iso(endedAt));
+            put(s, "snoozeMinutes", RingController.SNOOZE_MS / 60_000);
+            put(s, "until", iso(endedAt + RingController.SNOOZE_MS));
+            put(s, "responseMs", Math.max(0, endedAt - rangAt));
+            calls.add(new Call(alarmId, base + "/snooze", s));
             return calls;
         }
         if (!"dismissed".equals(outcome) || verification == null) {
