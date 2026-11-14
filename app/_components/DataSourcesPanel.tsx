@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Database, HeartPulse, MapPin } from "lucide-react";
+import { CalendarDays, Database, HeartPulse, MapPin, Smartphone } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import type { DataSources, DataSourceStatus } from "@/lib/aiFeatures";
 import type { CalendarState } from "@/lib/calendarServer";
 import { outcomeFrom, outcomeText, resyncDue } from "@/lib/calendarClient";
 import { SomniAlarm, type HealthState } from "@/lib/nativeAlarm";
 import { hasHealth, importFromHealthConnect, importText } from "@/lib/nativeHealth";
+import { hasScreenTime, importScreenTime, SCREEN_WHY, screenText, type ScreenImport } from "@/lib/nativeScreen";
 import type { NativeConnection } from "@/lib/nativeSync";
 
 const ROWS: [keyof DataSources, string][] = [
@@ -15,6 +16,7 @@ const ROWS: [keyof DataSources, string][] = [
   ["weather", "Weather"],
   ["calendar", "Calendar"],
   ["wearable", "Wearable"],
+  ["screenTime", "Screen time"],
 ];
 
 const DOT: Record<DataSourceStatus["source"], string> = {
@@ -43,6 +45,11 @@ export default function DataSourcesPanel({ onTasksChanged, native = null }: { on
   const [health, setHealth] = useState<HealthState | null>(null);
   const [healthNote, setHealthNote] = useState("");
   const [reading, setReading] = useState(false);
+  const [screenAllowed, setScreenAllowed] = useState<boolean | null>(null);
+  // What the last measurement said; worded when shown, against what the server still has.
+  const [screenResult, setScreenResult] = useState<ScreenImport | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+  const [explaining, setExplaining] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -173,6 +180,52 @@ export default function DataSourcesPanel({ onTasksChanged, native = null }: { on
     }).catch(() => setHealth(null));
   }, [nativeHealth, readHealth]);
 
+  // Screen time before bed, in the app (prompt 4.3): measured on opening, on
+  // Measure now, and on coming back from Settings with Usage access turned on.
+  const measureScreen = useCallback(async (quiet: boolean) => {
+    setMeasuring(true);
+    try {
+      const r = await importScreenTime();
+      setScreenAllowed(r.state !== "not_allowed");
+      if (!quiet || r.state === "failed" || (r.state === "measured" && (r.added > 0 || r.updated > 0))) {
+        setScreenResult(r);
+      }
+    }
+    finally {
+      setMeasuring(false);
+      await load();
+    }
+  }, [load]);
+
+  const nativeScreen = hasScreenTime(native);
+  useEffect(() => {
+    if (!nativeScreen) {
+      return;
+    }
+    let last: boolean | null = null;
+    const check = async (quiet: boolean) => {
+      const allowed = await SomniAlarm.screenTimeStatus().then((s) => s.allowed).catch(() => null);
+      setScreenAllowed(allowed);
+      if (allowed && last !== true) {
+        setExplaining(false);
+        void measureScreen(quiet);
+      }
+      else if (allowed === false && last === true) {
+        setScreenResult({ state: "not_allowed" });
+      }
+      last = allowed;
+    };
+    void check(true);
+    // Back from Settings: Usage access may have been turned on or off there.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void check(false);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [nativeScreen, measureScreen]);
+
   async function disconnectCalendar() {
     const json = await (await fetch("/api/calendar", { method: "DELETE" })).json().catch(() => null);
     setCalendarNote(json?.ok
@@ -249,14 +302,41 @@ export default function DataSourcesPanel({ onTasksChanged, native = null }: { on
                 {key === "sleepLogs" && (
                   <HealthControls native={native} state={health} reading={reading} onConnect={() => void connectHealth()} onRead={() => void readHealth(false)} />
                 )}
+                {key === "screenTime" && (
+                  <ScreenControls
+                    native={native}
+                    allowed={screenAllowed}
+                    measuring={measuring}
+                    onExplain={() => setExplaining(true)}
+                    onMeasure={() => void measureScreen(false)}
+                  />
+                )}
                 {key === "calendar" && <CalendarControls state={calendar} syncing={syncing} onSync={() => void syncCalendar(false)} onDisconnect={() => void disconnectCalendar()} />}
               </li>
             );
           })}
         </ul>
       )}
+      {explaining && screenAllowed === false && (
+        <div role="dialog" aria-label="Why SomniAI asks for Usage access" className="mt-3 rounded-xl border border-sky-300/20 bg-sky-300/5 p-3 text-xs text-slate-300">
+          <p className="mb-2 font-medium text-white">Why SomniAI asks for Usage access</p>
+          {SCREEN_WHY.map((p) => <p key={p} className="mb-2">{p}</p>)}
+          <p className="mb-3 text-slate-400">In Settings, find SomniAI under Usage access and turn on &quot;Permit usage access&quot;, then come back.</p>
+          <span className="flex gap-2">
+            <button type="button" onClick={() => void SomniAlarm.openUsageAccess()} className={BUTTON}>
+              <Smartphone className="h-3.5 w-3.5" /> Open Settings
+            </button>
+            <button type="button" onClick={() => setExplaining(false)} className={BUTTON}>Not now</button>
+          </span>
+        </div>
+      )}
       {weatherNote && <p className="mt-3 text-xs text-amber-300">{weatherNote}</p>}
       {healthNote && <p role="status" aria-label="Health Connect" className="mt-3 text-xs text-emerald-200">{healthNote}</p>}
+      {screenResult && (
+        <p role="status" aria-label="Screen time" className="mt-3 text-xs text-violet-200">
+          {screenText(screenResult, sources?.screenTime.source === "live")}
+        </p>
+      )}
       {calendarNote && <p role="status" aria-label="Calendar" className="mt-3 text-xs text-sky-200">{calendarNote}</p>}
     </section>
   );
@@ -303,6 +383,42 @@ function HealthControls({ native, state, reading, onConnect, onRead }: {
         <HeartPulse className="h-3.5 w-3.5" /> {reading ? "Reading…" : "Sync now"}
       </button>
       <button type="button" onClick={() => void SomniAlarm.openHealthConnect()} className={BUTTON}>Manage</button>
+    </span>
+  );
+}
+
+/** Screen time before bed (prompt 4.3): only in the Android app, with Usage access. */
+function ScreenControls({ native, allowed, measuring, onExplain, onMeasure }: {
+  native: NativeConnection | null;
+  allowed: boolean | null;
+  measuring: boolean;
+  onExplain: () => void;
+  onMeasure: () => void;
+}) {
+  if (!hasScreenTime(native)) {
+    const inApp = native !== null && "api" in native;
+    return (
+      <span className="ml-auto text-xs text-slate-500">
+        {inApp ? "Update the app to measure screen time" : "Screen time before bed is measured in the Android app"}
+      </span>
+    );
+  }
+  if (allowed === null) {
+    return null;
+  }
+  if (!allowed) {
+    return (
+      <button type="button" onClick={onExplain} className={`ml-auto ${BUTTON}`}>
+        <Smartphone className="h-3.5 w-3.5" /> Measure screen time
+      </button>
+    );
+  }
+  return (
+    <span className="ml-auto flex gap-2">
+      <button type="button" onClick={onMeasure} disabled={measuring} className={BUTTON}>
+        <Smartphone className="h-3.5 w-3.5" /> {measuring ? "Measuring…" : "Measure now"}
+      </button>
+      <button type="button" onClick={() => void SomniAlarm.openUsageAccess()} className={BUTTON}>Manage</button>
     </span>
   );
 }

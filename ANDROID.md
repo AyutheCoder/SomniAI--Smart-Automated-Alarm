@@ -675,3 +675,63 @@ phone's zone) and checks the phone's output is exactly
 `tests/fixtures/health-connect/fortnight-nights.json`, which the server's
 (`tests/api/sleepImport.test.ts`) and the page's (`lib/nativeHealth.test.ts`)
 tests use.
+
+## Screen time before bed (prompt 4.3)
+
+The model's `screen_minutes_before_bed` (0 to 180 minutes, a lever in the
+night plan) was never measured, so it was always left out. The app now
+measures it from Android's usage records (`UsageStatsManager.queryEvents`).
+
+- **Permission flow.** Reading usage records needs **Usage access**
+  (`PACKAGE_USAGE_STATS`), a special permission no dialog can grant: the user
+  turns it on in Settings. Data sources > Screen time > **Measure screen time**
+  first shows why it's asked for (`SCREEN_WHY` in `lib/nativeScreen.ts`: what
+  is measured, that only minutes per night leave the phone and never which
+  apps, how to turn it off, and that without it predictions leave screen time
+  out), and only then **Open Settings** opens Settings' Usage access page
+  (SomniAI's own where the phone has one, else the list). Coming back to the
+  app, the page checks again and measures at once. Without access nothing is
+  read, nothing is sent, and the feature is absent, not 0. Access turned off
+  after nights were measured: nothing more is measured, and the nights already
+  stored keep counting until they're a week old; the page says exactly that.
+- **What counts.** As Digital Wellbeing counts it: time an app was in the
+  foreground (`ACTIVITY_RESUMED` to `ACTIVITY_PAUSED`/`STOPPED`, or the screen
+  going off, or a shutdown), all apps together, so two side by side count once;
+  the home screens (resolved from the `HOME` intent, declared in `<queries>`),
+  the system UI and the **in-call screen** don't count. The in-call screen
+  stays "resumed" for a whole call while the proximity sensor darkens the
+  display, with no screen-off event: counting it put a day on the test phone at
+  459 minutes against Digital Wellbeing's 305; without it, 306 (`DEVICE_TESTS.md`
+  4.3). It is recognised by "incallui" in the app or activity name (AOSP, MIUI,
+  Google's Phone app, Samsung).
+- **The window** (`ScreenNights.java`, pure): the **3 hours before bed**, the
+  feature's range. A night is keyed by its wake date, as the sleep log is. Bed
+  is the sleep log's bedtime for that date when there is one (Health Connect
+  or typed in; the page passes them), else the phone's reading of it: the end
+  of the last use before the night's longest break of 3 hours or more that
+  starts between 19:00 and 06:00, a short check of the phone in the night
+  (up to 15 minutes, an hour or more after the last use) not counting as
+  getting up. Times are instants, so the window is 3 real hours across a clock
+  change.
+- **Never a 0 for "can't tell".** A night is skipped, with its reason, when the
+  phone's records don't reach back to it (`before_records`: Android keeps them
+  for a limited time), when there's no night break (`no_night_break`) or no
+  use at all (`no_use`), or when the night isn't over (`in_progress`, measured
+  once the user is up).
+- **Into the features.** The page sends the nights to `POST /api/screen-time`
+  (`lib/screenTime.ts`, `models/ScreenNight.ts`: date, bedtime, minutes,
+  window, where bed came from; nothing about apps). `buildUserSignals` uses the
+  mean of the last 7 days' nights as `screen_minutes_before_bed`: a habit, as
+  the prediction is made before tonight's is known. The last week is measured
+  each time the app opens, and on **Measure now**.
+
+Tests: `ScreenNightsTest` windows the made-up usage events in
+`app/src/test/resources/screen-time/week.json` (nights worked out by hand in
+its README: a use straddling the window, two apps side by side, the screen
+going off, the home screen, a check in the night, a sleep-log bedtime, a quiet
+evening, records that start later) plus a night still going, a night with no
+break, no records at all, and a clock change; the phone's output must be
+exactly `tests/fixtures/screen-time/week-nights.json`, which the server's
+(`tests/api/screenTime.test.ts`) and the page's (`lib/nativeScreen.test.ts`)
+tests use. The no-permission path: nothing read, fetched or sent, and the
+feature absent.

@@ -92,9 +92,10 @@ public class SomniAlarmPlugin extends Plugin {
      * What this native code offers, for the web app's check before it relies on
      * it (lib/nativeSync.ts). Raised when the plugin gains something the web app
      * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
-     * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2).
+     * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2),
+     * 5 Health Connect (4.2), 6 screen time before bed (4.3).
      */
-    static final int API = 5;
+    static final int API = 6;
 
     @PluginMethod
     public void version(PluginCall call) {
@@ -242,6 +243,57 @@ public class SomniAlarmPlugin extends Plugin {
         catch (android.content.ActivityNotFoundException e) {
             call.resolve(new JSObject().put("opened", false));
         }
+    }
+
+    /** API 6: whether Usage access is on, for screen time before bed (prompt 4.3). */
+    @PluginMethod
+    public void screenTimeStatus(PluginCall call) {
+        call.resolve(new JSObject().put("allowed", ScreenUsage.allowed(getContext())));
+    }
+
+    /**
+     * API 6: Settings' Usage access page, where the user turns it on. The page
+     * explains why before calling this, and checks again when the app is back.
+     */
+    @PluginMethod
+    public void openUsageAccess(PluginCall call) {
+        for (Intent intent : ScreenUsage.settingsIntents(getContext())) {
+            try {
+                getActivity().startActivity(intent);
+                call.resolve(new JSObject().put("opened", true));
+                return;
+            }
+            catch (android.content.ActivityNotFoundException | SecurityException e) {
+                // This phone has no page for one app: try the list.
+            }
+        }
+        call.resolve(new JSObject().put("opened", false));
+    }
+
+    /**
+     * API 6: the last week's screen time before bed, a night per wake date
+     * (ScreenNights). {@code bedtimes} are the sleep log's, {"2026-11-14":
+     * "2026-11-13T17:30:00Z"}; other nights use the phone's own reading of
+     * bed. Without Usage access nothing is read.
+     */
+    @PluginMethod
+    public void readScreenTime(PluginCall call) {
+        JSObject given = call.getObject("bedtimes");
+        new Thread(() -> {
+            if (!ScreenUsage.allowed(getContext())) {
+                call.resolve(new JSObject().put("allowed", false).put("nights", new JSArray()).put("skipped", new JSArray()));
+                return;
+            }
+            try {
+                ScreenNights.Result r = ScreenUsage.read(getContext(), ScreenNights.bedtimesFrom(given), Instant.now(), ZoneId.systemDefault());
+                android.util.Log.i(AlarmScheduler.TAG, "screen time: " + r.nights.size() + " night(s), skipped " + r.skipped);
+                call.resolve(JSObject.fromJSONObject(ScreenNights.toJson(r)).put("allowed", true));
+            }
+            catch (RuntimeException | JSONException e) {
+                android.util.Log.w(AlarmScheduler.TAG, "screen time: read failed: " + e);
+                call.reject("Couldn't read screen time: " + e.getMessage());
+            }
+        }, "screen-time").start();
     }
 
     /** Opens "Tonight's alarm check", where each failing setting has its fix. */

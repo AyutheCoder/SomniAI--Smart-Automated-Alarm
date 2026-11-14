@@ -159,6 +159,7 @@ describe("GET /api/context", () => {
       weather: { source: "missing", detail: "Not connected: allow location for live weather" },
       calendar: { source: "missing", detail: "Not connected" },
       wearable: { source: "missing", detail: "Not connected" },
+      screenTime: { source: "missing", detail: "Not measured in the last week" },
     });
   });
 
@@ -173,6 +174,7 @@ describe("GET /api/context", () => {
       weather: { source: "live", detail: "Live, from your location" },
       calendar: { source: "simulated", detail: "Simulated: not used for predictions" },
       wearable: { source: "simulated", detail: "Simulated: not used for predictions" },
+      screenTime: { source: "missing", detail: "Not measured in the last week" },
     });
   });
 

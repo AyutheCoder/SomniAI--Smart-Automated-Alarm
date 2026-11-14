@@ -122,6 +122,25 @@ export interface SomniAlarmPlugin {
   readSleep(): Promise<{ status: HealthAvailability; nights: HealthNight[]; skipped: string[] }>;
   /** API 5: Health Connect itself, or its Play Store page when it isn't installed. */
   openHealthConnect(): Promise<{ opened: boolean }>;
+  /** API 6: whether Usage access is on, for screen time before bed (4.3). */
+  screenTimeStatus(): Promise<{ allowed: boolean }>;
+  /** API 6: Settings' Usage access page. */
+  openUsageAccess(): Promise<{ opened: boolean }>;
+  /**
+   * API 6: the last week's screen time before bed, a night per wake date.
+   * bedtimes are the sleep log's, by wake date; other nights use the phone's
+   * reading of bed. Without Usage access nothing is read (allowed: false).
+   */
+  readScreenTime(options: { bedtimes: Record<string, string> }): Promise<{ allowed: boolean; nights: ScreenNightReading[]; skipped: string[] }>;
+}
+
+/** One night as ScreenNights.java measures it; the server's import takes it as is. */
+export interface ScreenNightReading {
+  date: string;
+  bedtime: string;
+  minutes: number;
+  windowMinutes: number;
+  bedtimeFrom: "sleep_log" | "phone";
 }
 
 export type HealthAvailability = "available" | "not_installed" | "update_required";

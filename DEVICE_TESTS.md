@@ -779,3 +779,35 @@ writes sleep or heart rate to Health Connect, so Health Connect was empty.
 | 2 | **Partly: the empty case passes** | Both allowed (`dumpsys package`: `READ_SLEEP` and `READ_RESTING_HEART_RATE` granted, `USER_SET`). The plugin logged `health permissions: [READ_SLEEP, READ_RESTING_HEART_RATE]`, then read at once: `health: 0 night(s) read, skipped []`. The note said "No sleep recorded in Health Connect in the last two weeks.", nothing was sent to `/api/sleep-logs/import` (the server log has no request), and Sleep log stayed "No nights logged yet". A night arriving with "N from Health Connect" is **not run**: nothing records sleep on this phone |
 | 3 | **Not run** | No recorded night to compare. Needs a sleep app or watch that writes to Health Connect |
 | 4 | **Pass (with no nights)** | Resting heart rate switched off in Health Connect (`granted=false`, sleep still `granted=true`), **Sync now**: the read ran without an error (`0 night(s) read`) and the note said "No sleep recorded in Health Connect in the last two weeks. Resting heart rate isn't allowed, so it's left out." |
+
+## 4.3 Screen time before bed
+
+The windowing and the no-permission path are tested on fixtures (`ANDROID.md`,
+"Screen time before bed"). What only a phone shows: Settings' Usage access
+page, and whether the minutes match what Android itself shows (the plan's gate:
+"matches Digital Wellbeing roughly"; on Xiaomi phones the same numbers are
+under Settings > Screen time).
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Data sources > Screen time > **Measure screen time** | The explanation appears before anything opens; **Open Settings** opens Usage access (SomniAI's page, or the list) |
+| 2 | Turn on "Permit usage access" for SomniAI, go back | The page measures at once: "Measured N nights…"; the row shows minutes on average |
+| 3 | Last night: note your bedtime, and in Digital Wellbeing (or Settings > Screen time) the per-hour use in the 3 hours before it | SomniAI's minutes for that date within about 10 minutes of the sum. Logcat `screen time:` lists the nights |
+| 4 | Turn Usage access off in Settings, go back | With no nights measured in the last week: "Usage access is off, so screen time isn't measured. Predictions leave it out." With some: "…no more screen time is measured. The nights already measured count until they're a week old." Nothing is read or sent |
+
+### Run 2026-11-14, POCO (Android 16, HyperOS, Digital Wellbeing)
+
+App built from the 4.3 working tree with `CAP_SERVER_URL=http://localhost:3000`,
+`npm run dev:phone`, `adb reverse tcp:3000 tcp:3000`.
+
+| # | Result | What was seen |
+| --- | --- | --- |
+| 1 | **Pass** | The explanation showed first; **Open Settings** started `USAGE_ACCESS_SETTINGS` with `package:` data, which this phone opens as `Settings$AppUsageAccessSettingsActivity` |
+| 2 | **Pass** | Back in the app: "Measured 6 nights: 6 added", the row "connected, 133 min … over the last 6 nights"; `POST /api/screen-time 200` |
+| 3 | **Failed, fixed, pass** | This Digital Wellbeing has no hourly view, so whole days were compared: the phone's usage events (`adb shell dumpsys usagestats`, 3,659 events) run through `ScreenNights.inUse`, today 00:00-22:25. First **459 min against Digital Wellbeing's 305**. App by app the rest matched (YouTube 81 / 84, SomniAI 64 / 66, WhatsApp 49 / 49, ChatGPT 23 / 22) and `com.android.incallui` had 152 min: the in-call screen stays resumed for the whole call while the proximity sensor darkens the display, and Digital Wellbeing doesn't count calls. With the in-call screen left out: **306 against 305**. The phone, reinstalled, measured again: last night 104 min (136 before; two calls at 01:08 and 01:25 were in the window). Bed by the phone's reading, about 03:00, which the tester confirmed |
+| 4 | **Failed, fixed, pass** | Access off: the note said "Predictions leave it out" while the row still showed 114 min from nights already measured, which the predictions do use until they're a week old. The wording now says that; seen on the phone after the fix. `appops GET_USAGE_STATS: ignore`, and the app read nothing |
+
+Also seen: the dev build's "1 Issue" badge, a hydration warning because the
+Android shell sets `--safe-area-inset-*` on `<html>` before React loads. Older
+than 4.3 (it showed on the sign-in page with the 4.2 app); `app/layout.tsx` now
+has `suppressHydrationWarning` on `<html>`, and no warning appeared after.

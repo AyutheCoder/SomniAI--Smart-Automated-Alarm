@@ -5,6 +5,7 @@ import { ContextSnapshot } from "@/models/ContextSnapshot";
 import { User } from "@/models/User";
 import { CalendarConnection } from "@/models/CalendarConnection";
 import { Task } from "@/models/Task";
+import { recentScreenTime } from "@/lib/screenTime";
 import { computeMetrics, type BehavioralMetrics, type BehaviorEventInput, type SleepLogInput, } from "@/lib/features";
 import type { ModelFeatures } from "@/lib/aiClient";
 import {
@@ -55,7 +56,7 @@ export async function buildUserSignals(userId: string, days = 30): Promise<UserS
   await connectToDatabase();
   const allowSimulated = simulatedInputsAllowed();
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  const [logsRaw, eventsRaw, context, user] = await Promise.all([
+  const [logsRaw, eventsRaw, context, user, screen] = await Promise.all([
     SleepLog.find({ userId, ...modelSleepLogFilter(allowSimulated) }).sort({ date: -1 }).limit(days).lean(),
     BehaviorEvent.find({ userId, at: { $gte: since }, ...modelEventFilter(allowSimulated) })
       .sort({ at: -1 })
@@ -63,6 +64,7 @@ export async function buildUserSignals(userId: string, days = 30): Promise<UserS
       .lean(),
     ContextSnapshot.findOne({ userId }).sort({ at: -1 }).lean(),
     User.findById(userId).lean(),
+    recentScreenTime(userId),
   ]);
   const logs = logsRaw as unknown as SleepLogInput[];
   const events = eventsRaw as unknown as BehaviorEventInput[];
@@ -131,6 +133,9 @@ export async function buildUserSignals(userId: string, days = 30): Promise<UserS
     features.resting_hr = nightHr;
   if (typeof wearable?.steps === "number")
     features.steps = wearable.steps;
+  // Measured on the phone (4.3): the last week's mean. Not measured, not sent.
+  if (screen)
+    features.screen_minutes_before_bed = screen.minutes;
   return { features, metrics, recentSleepHours, sleepGoalHours };
 }
 export interface DataSourceStatus {
@@ -144,17 +149,19 @@ export interface DataSources {
   weather: DataSourceStatus;
   calendar: DataSourceStatus;
   wearable: DataSourceStatus;
+  screenTime: DataSourceStatus;
 }
 
 export async function describeDataSources(userId: string): Promise<DataSources> {
   await connectToDatabase();
-  const [snapshot, realNights, simulatedNights, calendarConn, calendarTasks, healthNights] = await Promise.all([
+  const [snapshot, realNights, simulatedNights, calendarConn, calendarTasks, healthNights, screen] = await Promise.all([
     ContextSnapshot.findOne({ userId }).sort({ at: -1 }).lean<{ sources?: Partial<ContextSources>; at?: Date }>(),
     SleepLog.countDocuments({ userId, source: { $ne: "simulated" } }),
     SleepLog.countDocuments({ userId, source: "simulated" }),
     CalendarConnection.findOne({ userId }).lean<{ status: string; email?: string | null; lastError?: string | null }>(),
     Task.countDocuments({ userId, source: "google_calendar", completed: false }),
     SleepLog.countDocuments({ userId, source: "health_connect" }),
+    recentScreenTime(userId),
   ]);
   const sources = snapshotSources(snapshot);
   const simulatedNote = simulatedInputsAllowed()
@@ -184,5 +191,9 @@ export async function describeDataSources(userId: string): Promise<DataSources> 
         ? { source: "missing", detail: calendarConn.lastError ?? "Google Calendar access was removed: connect it again" }
         : describe(sources.calendar, "Connected", "Not connected"),
     wearable: describe(sources.wearable, "Connected", "Not connected"),
+    // Measured on the phone with Usage access (prompt 4.3).
+    screenTime: screen
+      ? { source: "live", detail: `${screen.minutes} min in the 3 hours before bed, on average over the last ${screen.nights === 1 ? "night" : `${screen.nights} nights`}` }
+      : { source: "missing", detail: "Not measured in the last week" },
   };
 }

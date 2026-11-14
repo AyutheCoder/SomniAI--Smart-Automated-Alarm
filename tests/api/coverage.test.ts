@@ -51,10 +51,11 @@ describe("API route coverage", () => {
   // DEVELOPMENT_PLAN.md says 22; there were 23 route files, 3.2 (wake buddy)
   // added 7, 3.3 (backups) 2, 3.4 (morning report: missed, wake-reports,
   // night-plans) 3, 4.1 (Google Calendar: calendar, connect, callback, sync)
-  // 4 and 4.2 (Health Connect: sleep-logs/import) 1. Update this count
-  // deliberately when adding or removing a route, alongside its tests.
-  it("finds all 40 route files", () => {
-    expect(routes).toHaveLength(40);
+  // 4, 4.2 (Health Connect: sleep-logs/import) 1 and 4.3 (screen-time) 1.
+  // Update this count deliberately when adding or removing a route, alongside
+  // its tests.
+  it("finds all 41 route files", () => {
+    expect(routes).toHaveLength(41);
   });
 
   it.each(routes.flatMap((r) => r.methods.map((m) => [`${m} /api/${r.key}`, r.key, m] as const)))(
