@@ -119,3 +119,15 @@ export function formatSummary(steps) {
     : `VERIFY FAILED: ${failed.join(", ")}`;
   return { ok: failed.length === 0, text: [...rows.map((r) => r.line), "", banner].join("\n") };
 }
+
+/** Routes only `next dev` may have (prompt 4.4): the developer simulator and its API. */
+const DEV_ROUTE = /^\/(simulator|api\/dev)(\/|$)/;
+
+/**
+ * The developer-only routes in a production build's
+ * `.next/app-path-routes-manifest.json` ({"/simulator/page": "/simulator"}),
+ * which must be none.
+ */
+export function devRoutesIn(manifest) {
+  return Object.values(manifest ?? {}).filter((route) => DEV_ROUTE.test(route)).sort();
+}

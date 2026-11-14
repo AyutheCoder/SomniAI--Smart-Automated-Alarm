@@ -17,6 +17,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  devRoutesIn,
   formatSummary,
   summarizeEslint,
   summarizeJunit,
@@ -90,7 +91,19 @@ function vitest() {
 
 function build() {
   const res = sh("npx --no-install next build");
-  return { exitCode: res.status, error: spawnError(res), needsCounts: false, detail: "production build" };
+  if (res.status !== 0) {
+    return { exitCode: res.status, error: spawnError(res), needsCounts: false, detail: "production build" };
+  }
+  // The developer simulator must not be in a production build (prompt 4.4).
+  const manifest = join(".next", "app-path-routes-manifest.json");
+  if (!existsSync(manifest)) {
+    return { exitCode: 0, needsCounts: false, error: `the build wrote no ${manifest} to check for developer routes` };
+  }
+  const dev = devRoutesIn(JSON.parse(readFileSync(manifest, "utf8")));
+  if (dev.length > 0) {
+    return { exitCode: 0, needsCounts: false, error: `developer-only routes in the production build: ${dev.join(", ")}` };
+  }
+  return { exitCode: res.status, needsCounts: false, detail: "production build, no developer routes" };
 }
 
 function pytest() {

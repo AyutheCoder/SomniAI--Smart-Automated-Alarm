@@ -1,5 +1,10 @@
 "use client";
 
+// The developer simulator (prompt 4.4). A ".dev.tsx" page: next.config.ts
+// registers that extension only for `next dev`, so production builds have no
+// /simulator route and none of the simulators below. Everything it makes up is
+// labelled "simulated", and simulated values never reach a model.
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -16,6 +21,7 @@ import {
   Zap,
 } from "lucide-react";
 import { createMicAdapter, createMotionAdapter, createScreenAdapter, type MicSample, type MotionSample, type ScreenSample, type SensorAdapter } from "@/lib/sensors";
+import { simulatedMic, simulatedMotion, simulatedScreen } from "@/lib/simulators/sensors";
 import type { BehavioralMetrics } from "@/lib/features";
 
 interface ContextSnapshotView {
@@ -127,7 +133,11 @@ function LiveSensors({
   );
 }
 
-function useSensor<T>(make: () => SensorAdapter<T>) {
+/**
+ * The real sensor; if it isn't there or isn't allowed, the simulated one, and
+ * the tile says which and why. Only this developer page falls back.
+ */
+function useSensor<T>(real: () => SensorAdapter<T>, fake: () => SensorAdapter<T>, flash: (m: string) => void) {
   const adapterRef = useRef<SensorAdapter<T> | null>(null);
   const [running, setRunning] = useState(false);
   const [sample, setSample] = useState<T | null>(null);
@@ -135,12 +145,19 @@ function useSensor<T>(make: () => SensorAdapter<T>) {
 
   const start = useCallback(async () => {
     if (adapterRef.current) return;
-    const adapter = make();
+    let adapter = real();
+    try {
+      await adapter.start((s) => setSample(s));
+    }
+    catch (e) {
+      adapter = fake();
+      await adapter.start((s) => setSample(s));
+      flash(`${e instanceof Error ? e.message : String(e)} Showing simulated readings.`);
+    }
     adapterRef.current = adapter;
     setSimulated(adapter.simulated);
-    await adapter.start((s) => setSample(s));
     setRunning(true);
-  }, [make]);
+  }, [real, fake, flash]);
 
   const stop = useCallback(() => {
     adapterRef.current?.stop();
@@ -219,7 +236,7 @@ function MotionTile({
   onLog: (e: EventPayload[]) => Promise<unknown>;
   flash: (m: string) => void;
 }) {
-  const { running, sample, simulated, start, stop } = useSensor<MotionSample>(() => createMotionAdapter());
+  const { running, sample, simulated, start, stop } = useSensor<MotionSample>(createMotionAdapter, simulatedMotion, flash);
 
   return (
     <SensorTile
@@ -258,7 +275,7 @@ function MicTile({
   onLog: (e: EventPayload[]) => Promise<unknown>;
   flash: (m: string) => void;
 }) {
-  const { running, sample, simulated, start, stop } = useSensor<MicSample>(() => createMicAdapter());
+  const { running, sample, simulated, start, stop } = useSensor<MicSample>(createMicAdapter, simulatedMic, flash);
 
   return (
     <SensorTile
@@ -302,7 +319,7 @@ function ScreenTile({
   onLog: (e: EventPayload[]) => Promise<unknown>;
   flash: (m: string) => void;
 }) {
-  const { running, sample, simulated, start, stop } = useSensor<ScreenSample>(() => createScreenAdapter());
+  const { running, sample, simulated, start, stop } = useSensor<ScreenSample>(createScreenAdapter, simulatedScreen, flash);
 
   return (
     <SensorTile
@@ -539,17 +556,13 @@ function ContextPanel({ flash }: { flash: (m: string) => void }) {
     setBusy(true);
     try {
       const body: {
-        simulate?: boolean;
         lat?: number;
         lon?: number;
-      } = {
-        simulate: true,
-      };
+      } = {};
       if (uselocation && navigator.geolocation) {
         await new Promise<void>((resolve) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => {
-              body.simulate = false;
               body.lat = pos.coords.latitude;
               body.lon = pos.coords.longitude;
               resolve();
@@ -559,7 +572,8 @@ function ContextPanel({ flash }: { flash: (m: string) => void }) {
           );
         });
       }
-      const res = await fetch("/api/context", {
+      // Live weather with a location; everything else made up, labelled simulated.
+      const res = await fetch("/api/dev/simulated-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

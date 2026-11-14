@@ -168,15 +168,19 @@ outage at ring time changes nothing: the alarm rings, its challenge runs and a
 snooze or dismissal takes effect on the device. The outcome is sent to the
 server afterwards and retried until it gets through, and the alarm list is
 kept on the device so a reload during an outage still has it.
-None of the backup channels can be set up yet, so every one of them reports
-"not set up"; the app never claims a backup reached anyone.
+Backups (a second device, the wake buddy, an emergency contact's text; see
+`BUDDY.md`) report "delivered" only when a transport accepted the message, and
+"not set up" when they aren't; the app never claims a backup reached anyone.
 
-Calendar and wearable data aren't connected yet. Predictions use only live
-data: the sleep logs and alarm history you record, and live weather once you
-allow location. The home page's **Data sources** panel shows which sources are
-connected. Everything carries its source (`live`, `simulated` or `missing`);
-anything simulated, such as the developer simulator's data, is treated as
-missing by every model. In development only, `SOMNIAI_SIMULATED_INPUTS=allow`
-lets simulated data through so the simulator can demonstrate predictions;
-production ignores it. Shake and QR
+Predictions use only live data: the sleep logs and alarm history you record
+(or read from Health Connect in the Android app), upcoming events from Google
+Calendar once connected, screen time before bed measured on the phone, and
+live weather once you allow location. The home page's **Data sources** panel
+shows which sources are connected. Everything carries its source (`live`,
+`simulated` or `missing`), and nothing in the app makes values up: the
+developer simulator (`/simulator`, with the simulators in `lib/simulators/`)
+exists only under `npm run dev`, and a production build doesn't contain it.
+Its data is labelled simulated and treated as missing by every model; in
+development only, `SOMNIAI_SIMULATED_INPUTS=allow` lets it through so the
+simulator can demonstrate predictions. Shake and QR
 challenges need a device with an accelerometer and camera.

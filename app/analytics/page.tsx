@@ -332,11 +332,17 @@ export default function AnalyticsPage() {
         <>
           {!data?.hasData && (
             <p className="mb-6 rounded-2xl border border-sky-400/30 bg-sky-500/10 p-4 text-sm text-sky-200">
-              No sleep logged in the last 7 days. Use the{" "}
-              <Link href="/simulator" className="underline">
-                Behavior Simulator
-              </Link>{" "}
-              to generate data, then revisit this report.
+              {process.env.NODE_ENV === "development"
+                ? (
+                  <>
+                    No sleep logged in the last 7 days. Use the{" "}
+                    <Link href="/simulator" className="underline">
+                      Behavior Simulator
+                    </Link>{" "}
+                    to generate data, then revisit this report.
+                  </>
+                )
+                : "No sleep logged in the last 7 days. Log a night, or connect Health Connect in the app, then revisit this report."}
             </p>
           )}
 

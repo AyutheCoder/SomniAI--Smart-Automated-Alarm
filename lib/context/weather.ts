@@ -28,24 +28,9 @@ function conditionFor(code: number): string {
   return WMO[code] ?? "Unknown";
 }
 
-const SIM_CONDITIONS = [
-  "Clear",
-  "Partly cloudy",
-  "Overcast",
-  "Light rain",
-  "Fog",
-];
-
-export function simulateWeather(): WeatherInfo {
-  return {
-    tempC: Math.round((10 + Math.random() * 20) * 10) / 10,
-    condition: SIM_CONDITIONS[Math.floor(Math.random() * SIM_CONDITIONS.length)],
-  };
-}
-
 /**
  * Live weather for a location, or null when it can't be had. It used to fall
- * back to simulateWeather() here, so a network failure quietly produced made-up
+ * back to a weather simulator here, so a network failure quietly produced made-up
  * weather that nothing could tell apart from the real thing.
  */
 export async function fetchWeather(lat: number, lon: number): Promise<WeatherInfo | null> {

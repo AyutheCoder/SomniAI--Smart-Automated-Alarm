@@ -66,13 +66,6 @@ describe("buildContextData", () => {
     expect(data.sources).toEqual({ weather: "live", calendar: "missing", wearable: "missing" });
   });
 
-  it("keeps weather live with a location even when simulating the rest", async () => {
-    vi.stubGlobal("fetch", weatherReply({ current: { temperature_2m: 30, weather_code: 63 } }));
-    const data = await buildContextData({ simulate: true, lat: 28.6, lon: 77.2 });
-    expect(data.sources).toEqual({ weather: "live", calendar: "simulated", wearable: "simulated" });
-    expect(data.weather).toEqual({ tempC: 30, condition: "Rain" });
-  });
-
   it.each([
     ["the service errors", () => weatherReply({ error: "down" }, 503)],
     ["the reply is malformed", () => weatherReply({ current: {} })],
@@ -84,10 +77,10 @@ describe("buildContextData", () => {
     expect(data.weather).toBeUndefined();
   });
 
-  it("labels every made-up group simulated when asked to simulate", async () => {
+  it("has no way to make anything up: that's only the developer simulator's (lib/simulators)", async () => {
     vi.stubGlobal("fetch", vi.fn());
-    const data = await buildContextData({ simulate: true });
-    expect(data.sources).toEqual({ weather: "simulated", calendar: "simulated", wearable: "simulated" });
-    expect(data.wearable?.restingHr).toEqual(expect.any(Number));
+    // An option from before 4.4 is ignored, not honoured.
+    const data = await buildContextData({ simulate: true } as never);
+    expect(data).toEqual({ sources: { weather: "missing", calendar: "missing", wearable: "missing" } });
   });
 });

@@ -111,3 +111,19 @@ describe("formatSummary", () => {
     expect(text.trim().split("\n").at(-1)).toBe("VERIFY PASSED");
   });
 });
+
+describe("developer routes in a production build (prompt 4.4)", () => {
+  it("finds the simulator and its API, and nothing else", async () => {
+    const { devRoutesIn } = await import("./verify-summary.mjs");
+    expect(devRoutesIn({
+      "/page": "/",
+      "/simulator/page": "/simulator",
+      "/api/dev/simulated-context/route": "/api/dev/simulated-context",
+      "/api/context/route": "/api/context",
+      "/simulators-guide/page": "/simulators-guide",
+      "/api/devices/route": "/api/devices",
+    })).toEqual(["/api/dev/simulated-context", "/simulator"]);
+    expect(devRoutesIn({ "/page": "/", "/analytics/page": "/analytics" })).toEqual([]);
+    expect(devRoutesIn(undefined)).toEqual([]);
+  });
+});

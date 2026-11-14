@@ -1,9 +1,10 @@
-import type { ScreenSample, SensorAdapter } from "./types";
+import { SensorUnavailable, type ScreenSample, type SensorAdapter } from "./types";
 
+/** Whether this page is visible and in use. Outside a browser: start() rejects. */
 export class ScreenAdapter implements SensorAdapter<ScreenSample> {
   readonly kind = "screen" as const;
   readonly supported: boolean;
-  readonly simulated: boolean;
+  readonly simulated = false;
   private running = false;
   private lastInteraction = Date.now();
   private emit?: (s: ScreenSample) => void;
@@ -14,30 +15,23 @@ export class ScreenAdapter implements SensorAdapter<ScreenSample> {
     EventListener
   ]> = [];
 
-  constructor(opts: {
-    simulate?: boolean;
-  } = {}) {
-    const hasDom = typeof document !== "undefined";
-    this.supported = hasDom && !opts.simulate;
-    this.simulated = !this.supported;
+  constructor() {
+    this.supported = typeof document !== "undefined";
   }
 
   start(onSample: (s: ScreenSample) => void) {
     if (this.running) {
       return;
     }
+    if (!this.supported) {
+      throw new SensorUnavailable("screen", "unsupported", "There is no page to watch here.");
+    }
     this.running = true;
     this.emit = onSample;
-    if (this.simulated) {
-      this.startSimulator();
-      return;
-    }
-
     const onActivity = () => {
       this.lastInteraction = Date.now();
       this.sample();
     };
-
     const onVisibility = () => this.sample();
     this.bind(document, "visibilitychange", onVisibility);
     this.bind(window, "focus", onVisibility);
@@ -68,22 +62,6 @@ export class ScreenAdapter implements SensorAdapter<ScreenSample> {
     });
   }
 
-  private startSimulator() {
-    let visible = true;
-    this.timer = setInterval(() => {
-      if (Math.random() < 0.2) {
-        visible = !visible;
-      }
-      this.emit?.({
-        state: visible ? "screen_on" : "screen_off",
-        visible,
-        focused: visible,
-        idleMs: visible ? Math.floor(Math.random() * 5000) : 60000,
-        at: Date.now(),
-      });
-    }, 1500);
-  }
-
   stop() {
     this.running = false;
     if (this.timer) {
@@ -102,8 +80,6 @@ export class ScreenAdapter implements SensorAdapter<ScreenSample> {
   }
 }
 
-export function createScreenAdapter(opts?: {
-  simulate?: boolean;
-}) {
-  return new ScreenAdapter(opts);
+export function createScreenAdapter() {
+  return new ScreenAdapter();
 }

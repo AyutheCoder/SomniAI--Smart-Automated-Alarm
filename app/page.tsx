@@ -516,13 +516,16 @@ export default function Home() {
             <BarChart3 className="h-4 w-4" />
             <span className="hidden sm:inline">Analytics</span>
           </Link>
-          <Link
-            href="/simulator"
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            <span className="hidden sm:inline">Simulator</span>
-          </Link>
+          {/* The developer simulator exists only under `next dev` (prompt 4.4). */}
+          {process.env.NODE_ENV === "development" && (
+            <Link
+              href="/simulator"
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/10"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="hidden sm:inline">Simulator</span>
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/sign-in" })}

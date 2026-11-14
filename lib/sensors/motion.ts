@@ -1,4 +1,4 @@
-import type { MotionSample, SensorAdapter } from "./types";
+import { SensorUnavailable, type MotionSample, type SensorAdapter } from "./types";
 
 type DeviceMotionEventCtor = typeof DeviceMotionEvent & {
   requestPermission?: () => Promise<"granted" | "denied">;
@@ -6,46 +6,33 @@ type DeviceMotionEventCtor = typeof DeviceMotionEvent & {
 
 const G = 9.81;
 
+/** The device's accelerometer. No accelerometer, or permission refused: start() rejects. */
 export class MotionAdapter implements SensorAdapter<MotionSample> {
   readonly kind = "motion" as const;
   readonly supported: boolean;
-  readonly simulated: boolean;
+  readonly simulated = false;
   private running = false;
   private handler?: (e: DeviceMotionEvent) => void;
-  private timer?: ReturnType<typeof setInterval>;
 
-  constructor(opts: {
-    simulate?: boolean;
-  } = {}) {
-    const hasApi = typeof window !== "undefined" && "DeviceMotionEvent" in window;
-    this.supported = hasApi && !opts.simulate;
-    this.simulated = !this.supported;
+  constructor() {
+    this.supported = typeof window !== "undefined" && "DeviceMotionEvent" in window;
   }
 
   async start(onSample: (s: MotionSample) => void) {
     if (this.running) {
       return;
     }
-    this.running = true;
-    if (this.simulated) {
-      this.startSimulator(onSample);
-      return;
+    if (!this.supported) {
+      throw new SensorUnavailable("motion", "unsupported", "This browser has no motion sensor.");
     }
-
     const ctor = window.DeviceMotionEvent as DeviceMotionEventCtor;
     if (typeof ctor.requestPermission === "function") {
-      try {
-        const res = await ctor.requestPermission();
-        if (res !== "granted") {
-          this.startSimulator(onSample);
-          return;
-        }
-      } catch {
-        this.startSimulator(onSample);
-        return;
+      const res = await ctor.requestPermission().catch(() => "denied" as const);
+      if (res !== "granted") {
+        throw new SensorUnavailable("motion", "refused", "Motion sensor access was refused.");
       }
     }
-
+    this.running = true;
     this.handler = (e: DeviceMotionEvent) => {
       const acc = e.accelerationIncludingGravity;
       if (!acc) {
@@ -60,29 +47,11 @@ export class MotionAdapter implements SensorAdapter<MotionSample> {
     window.addEventListener("devicemotion", this.handler);
   }
 
-  private startSimulator(onSample: (s: MotionSample) => void) {
-    this.timer = setInterval(() => {
-      const spike = Math.random() < 0.15 ? Math.random() * 18 : 0;
-      const magnitude = Math.random() * 1.5 + spike;
-      onSample({
-        magnitude,
-        x: (Math.random() - 0.5) * 2,
-        y: (Math.random() - 0.5) * 2,
-        z: G + (Math.random() - 0.5),
-        at: Date.now(),
-      });
-    }, 500);
-  }
-
   stop() {
     this.running = false;
     if (this.handler) {
       window.removeEventListener("devicemotion", this.handler);
       this.handler = undefined;
-    }
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = undefined;
     }
   }
 
@@ -91,8 +60,6 @@ export class MotionAdapter implements SensorAdapter<MotionSample> {
   }
 }
 
-export function createMotionAdapter(opts?: {
-  simulate?: boolean;
-}) {
-  return new MotionAdapter(opts);
+export function createMotionAdapter() {
+  return new MotionAdapter();
 }

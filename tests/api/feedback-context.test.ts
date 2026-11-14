@@ -82,7 +82,9 @@ describe("POST /api/context", () => {
   it.each([
     ["a latitude out of range", { lat: 123, lon: 10 }, /lat must be a number from -90 to 90/],
     ["a latitude without a longitude", { lat: 12 }, /lat and lon must be given together/],
-    ["simulate as text", { simulate: "yes" }, /simulate must be true or false/],
+    // Removed in 4.4: made-up context is only the developer simulator's.
+    ["simulate, even false", { simulate: false }, /simulate is no longer accepted; made-up context exists only on the developer simulator/],
+    ["simulate", { simulate: true }, /simulate is no longer accepted/],
     // Removed in 1.2: caller-typed values are neither live nor simulated.
     ["an override of any kind", { override: { weather: { tempC: 21, condition: "Clear" } } }, /override is no longer accepted/],
   ])("rejects %s", async (_what, body, message) => {
@@ -102,11 +104,6 @@ describe("POST /api/context", () => {
     expect(res.body.data.source).toBeUndefined();
   });
 
-  it("labels each simulated group simulated", async () => {
-    signInAs(alice);
-    const res = await read(await postContext(request("POST", "/api/context", { simulate: true })));
-    expect(res.body.data.sources).toEqual({ weather: "simulated", calendar: "simulated", wearable: "simulated" });
-  });
 
   describe("with a location", () => {
     afterEach(() => {
@@ -129,7 +126,7 @@ describe("POST /api/context", () => {
     it("stores weather as missing when the weather service fails, never as simulated", async () => {
       vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 502 })));
       signInAs(alice);
-      const res = await read(await postContext(request("POST", "/api/context", { lat: 28.6, lon: 77.2, simulate: true })));
+      const res = await read(await postContext(request("POST", "/api/context", { lat: 28.6, lon: 77.2 })));
       expect(res.body.data.sources.weather).toBe("missing");
       expect(res.body.data.weather).toBeUndefined();
     });
