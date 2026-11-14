@@ -167,6 +167,29 @@ def predict_wake_success(features: dict | None) -> dict:
     }
 
 
+MAX_BATCH = 400
+
+
+def predict_batch(rows: list[dict | None]) -> dict:
+    """The population models' predictions for many nights at once (prompt 5.3).
+
+    For personalisation: what the models would have said for each of a
+    person's past nights, to compare with what happened. Same inputs and
+    medians as the single predictions.
+    """
+    load_models()
+    if len(rows) > MAX_BATCH:
+        raise ValueError(f"at most {MAX_BATCH} rows at a time")
+    if not rows:
+        return {"sleep": [], "regular": []}
+    x = _frame(rows)
+    clf = _models["wake_regularity"]
+    return {
+        "sleep": [round(float(v), 3) for v in _models["sleep_duration"].predict(x)],
+        "regular": [round(float(p[_regular_index(clf)]), 4) for p in clf.predict_proba(x)],
+    }
+
+
 __all__ = [
     "FEATURE_DEFAULTS",
     "FEATURE_NAMES",
@@ -174,6 +197,7 @@ __all__ = [
     "get_meta",
     "load_models",
     "models_loaded",
+    "predict_batch",
     "predict_sleep",
     "predict_wake_success",
     "predict_wake_success_batch",

@@ -15,9 +15,22 @@ export interface ModelCard {
   inputsNotUsed: { feature: string; why: string }[];
   models: {
     sleep_duration: { trainingParticipants: number; evaluation: { mae: Summary; r2: Summary; baselineMeanMae: number } };
-    wake_regularity: { trainingParticipants: number; evaluation: { roc_auc: Summary; accuracy: Summary; majorityBaselineAccuracy: number } };
+    wake_regularity: {
+      trainingParticipants: number;
+      evaluation: {
+        roc_auc: Summary;
+        accuracy: Summary;
+        majorityBaselineAccuracy: number;
+        calibration: { ece: number; mean_prediction: number; base_rate: number; n: number };
+      };
+    };
   };
   thresholds: { offScheduleAlert: number; regularHigh: number };
+  personalisation: {
+    sleep_duration: { withinSd: number; betweenSd: number; nightsForHalfWeight: number };
+    wake_regularity: { betweenSd: number; meanProbability: number; priorStrength: number };
+    minimumNights: number;
+  };
   trainedAt: string;
 }
 
@@ -68,7 +81,10 @@ export function cardLines(c: ModelCard = MODEL_CARD): { heading: string; lines: 
           + `They explain about ${pct(sd.r2.mean)} of why nights differ.`,
         `Waking close to your usual time: given one regular night and one off-schedule night, they rank them the right way round `
           + `${pct(wr.roc_auc.mean)} of the time, where a coin toss manages 50%. As a yes or no they're right on ${pct(wr.accuracy.mean)} `
-          + `of nights, a little under the ${pct(wr.majorityBaselineAccuracy)} you'd get by always saying "regular".`,
+          + `of nights, ${wr.accuracy.mean >= wr.majorityBaselineAccuracy ? "barely more than" : "a little under"} the `
+          + `${pct(wr.majorityBaselineAccuracy)} you'd get by always saying "regular".`,
+        `When they say a chance, it holds up: on held-out nights they averaged ${pct(wr.calibration.mean_prediction)} and `
+          + `${pct(wr.calibration.base_rate)} of those nights were regular.`,
         `Figures are averages over ${sd.mae.n_splits} different groups of held-out people, and they move a lot between groups.`,
       ],
     },

@@ -107,8 +107,8 @@ const r3 = (x: number) => Math.round(x * 1000) / 1000;
 // model's held-out scores (ai-brain/MODEL_CARD.md, prompt 5.2): the top quartile
 // of predicted off-schedule risk, and of predicted regularity.
 // lib/modelCard.test.ts checks they match the model card.
-export const OVERSLEEP_ALERT = 0.488;
-export const WAKE_RELIABLE = 0.704;
+export const OVERSLEEP_ALERT = 0.309;
+export const WAKE_RELIABLE = 0.833;
 
 const PRIORITY_WEIGHT: Record<Recommendation["priority"], number> = {
   high: 3,
@@ -296,6 +296,17 @@ export async function predictSleep(features: ModelFeatures): Promise<{
     return { data: ai, source: "ai" };
   }
   return { data: fallbackSleep(features), source: "fallback" };
+}
+/**
+ * The population models for many nights at once (prompt 5.3), for comparing a
+ * person's past nights with what the models would have said. Null when the AI
+ * Brain isn't there: there is no fallback for this, as the rules aren't the model.
+ */
+export async function predictBatch(rows: ModelFeatures[]): Promise<{ sleep: number[]; regular: number[] } | null> {
+  const ai = await postJson<{ sleep: number[]; regular: number[] }>("/predict/batch", { rows });
+  return ai && Array.isArray(ai.sleep) && Array.isArray(ai.regular) && ai.sleep.length === rows.length && ai.regular.length === rows.length
+    ? ai
+    : null;
 }
 export async function predictWakeSuccess(features: ModelFeatures): Promise<{
   data: WakePrediction;

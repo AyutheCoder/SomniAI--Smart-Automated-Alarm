@@ -86,7 +86,7 @@ async function brainInputs(userId: string) {
   await sleepPrediction(request("POST", "/api/ai/sleep-prediction", {}));
   await wakePlan(request("POST", "/api/ai/wake-plan", { requiredReliability: 0.9, wakeTime: "06:30" }));
   await schedule(request("POST", "/api/ai/schedule", { mode: "assisted" }));
-  await recommendations();
+  await recommendations(request("GET", "/api/recommendations"));
   await weekly();
   return brain.mock.calls.map(([url, init]) => ({
     endpoint: String(url).replace("http://ai-brain.test", ""),

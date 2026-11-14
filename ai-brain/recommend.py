@@ -18,13 +18,12 @@ _PRIORITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 # its held-out predictions (models/real/model_card.json "thresholds", written by
 # training/train_shipped.py; tests/test_shipped_models.py keeps these in step).
 #
-# The real-data regularity model (prompt 5.2) is trained on a label that is
-# regular on 75% of nights, with balanced class weights, so its scores sit lower
-# than the synthetic model's did (whose thresholds were 0.70 and 0.75). The
-# warning still means the top quartile of predicted off-schedule risk, and the
-# encouraging message the top quartile of predicted regularity.
-OVERSLEEP_ALERT = 0.488
-WAKE_RELIABLE = 0.704
+# The real-data regularity model is calibrated (prompt 5.3; ECE 0.0148) on a
+# label that is regular on 75% of nights, so most predictions sit high: the
+# warning means the top quartile of predicted off-schedule risk (above 0.309),
+# and the encouraging message the top quartile of predicted regularity (0.833).
+OVERSLEEP_ALERT = 0.309
+WAKE_RELIABLE = 0.833
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:

@@ -57,9 +57,14 @@ def test_its_evaluation_is_the_papers(card):
     assert sd["mae"]["mean"] == pytest.approx(1.016, abs=0.001)
     assert sd["r2"]["mean"] == pytest.approx(0.186, abs=0.001)
     assert (sd["r2"]["ci_low"], sd["r2"]["ci_high"]) == pytest.approx((0.075, 0.297), abs=0.001)
-    assert wr["roc_auc"]["mean"] == pytest.approx(0.660, abs=0.001)
-    assert (wr["roc_auc"]["ci_low"], wr["roc_auc"]["ci_high"]) == pytest.approx((0.610, 0.710), abs=0.001)
-    assert wr["balanced_accuracy"]["mean"] == pytest.approx(0.615, abs=0.001)
+    # The shipped classifier is the study's calibrated one: the paper's calibration figures.
+    assert wr["calibration"] == {"n": 3180, "ece": 0.0148, "mce": 0.1325, "brier": 0.1727, "base_rate": 0.7453, "mean_prediction": 0.7524}
+    # Unweighted, it ranks as the research notes record (0.663), and edges the majority baseline.
+    assert wr["roc_auc"]["mean"] == pytest.approx(0.663, abs=0.001)
+    assert wr["accuracy"]["mean"] > wr["majorityBaselineAccuracy"]
+    # The paper's headline AUC is for the class-balanced variant, recomputed alongside.
+    assert wr["balancedVariantRocAuc"]["mean"] == pytest.approx(0.660, abs=0.001)
+    assert (wr["balancedVariantRocAuc"]["ci_low"], wr["balancedVariantRocAuc"]["ci_high"]) == pytest.approx((0.610, 0.710), abs=0.001)
     assert sd["mae"]["n_splits"] == wr["roc_auc"]["n_splits"] == 8
 
 
@@ -143,6 +148,17 @@ def test_the_planners_batch_scores_like_single_calls(fresh):
     assert fresh.predict_wake_success_batch([]) == []
 
 
+def test_the_batch_is_the_single_predictions_for_many_nights(fresh):
+    rows = [{"bedtime_hour": h, "sleep_consistency": 60 + h} for h in (22.0, 23.5, 25.0)] + [{}]
+    out = fresh.predict_batch(rows)
+    # The same models and inputs: equal up to each call's rounding (3 decimals here, 2 and 3 there).
+    assert out["sleep"] == pytest.approx([fresh.predict_sleep(r)["predictedSleepDuration"] for r in rows], abs=0.006)
+    assert out["regular"] == pytest.approx([fresh.predict_wake_success(r)["wakeSuccessProbability"] for r in rows], abs=0.0011)
+    assert fresh.predict_batch([]) == {"sleep": [], "regular": []}
+    with pytest.raises(ValueError, match="at most 400"):
+        fresh.predict_batch([{}] * 401)
+
+
 def test_without_the_models_nothing_is_predicted_and_nothing_synthetic_is_trained(fresh, tmp_path):
     with pytest.raises(predict.ModelsUnavailable, match="no model card"):
         fresh.load_models(str(tmp_path))
@@ -222,5 +238,6 @@ def test_the_final_fit_is_the_studys_forest_on_every_usable_night():
     fitted = train_shipped.fit_final(df, feats)
     assert fitted["regressor"].get_params()["n_estimators"] == train_real.FOREST["n_estimators"]
     assert fitted["regressor"].get_params()["max_depth"] == train_real.FOREST["max_depth"]
-    assert fitted["classifier"].get_params()["class_weight"] == "balanced"
+    # The calibrated classifier: no class weights (5.3; 5.2 shipped the balanced one).
+    assert fitted["classifier"].get_params()["class_weight"] is None
     assert len(fitted["regRows"]) == len(df.dropna(subset=feats + [train_real.TARGET]))

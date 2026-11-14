@@ -23,7 +23,7 @@ export interface UserSignals {
   recentSleepHours: number | null;
   sleepGoalHours: number;
 }
-const CHRONOTYPE_CODE: Record<string, number> = {
+export const CHRONOTYPE_CODE: Record<string, number> = {
   lark: 0,
   intermediate: 1,
   owl: 2,
@@ -33,7 +33,7 @@ function mean(xs: number[]): number | null {
     return null;
   return xs.reduce((s, v) => s + v, 0) / xs.length;
 }
-function bedtimeHour(sleepTime?: Date | null): number | null {
+export function bedtimeHour(sleepTime?: Date | null): number | null {
   if (!sleepTime)
     return null;
   const d = sleepTime instanceof Date ? sleepTime : new Date(sleepTime);

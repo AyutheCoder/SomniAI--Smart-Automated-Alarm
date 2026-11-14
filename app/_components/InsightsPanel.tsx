@@ -17,6 +17,8 @@ import {
 
 import PredictionOrigin from "./PredictionOrigin";
 import ModelCardDetails from "./ModelCardDetails";
+import PersonalPredictions from "./PersonalPredictions";
+import type { PersonalPredictions as Personal } from "@/lib/personalServer";
 import {
   REGULARITY_HINT,
   REGULARITY_LABEL,
@@ -60,6 +62,8 @@ export interface Insights {
   predictionSource: AISource;
   recentSleepHours: number | null;
   sleepGoalHours: number;
+  /** Personal predictions (prompt 5.3); absent from an older server. */
+  personal?: Personal;
 }
 
 const ICONS: Record<string, LucideIcon> = {
@@ -122,7 +126,9 @@ export default function InsightsPanel() {
     let active = true;
     (async () => {
       try {
-        const res = await fetch("/api/recommendations", { cache: "no-store" });
+        // The timezone labels your wake times as the population model's were (lib/wakeProxy.ts).
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const res = await fetch(`/api/recommendations?tz=${encodeURIComponent(tz)}`, { cache: "no-store" });
         const json = await res.json();
         if (!active) return;
         if (json.ok) {
@@ -212,6 +218,7 @@ export function InsightsView({ insights }: { insights: Insights }) {
           origin={insights.predictionSource}
           confidence={describeConfidence(insights.predictionSource, insights.prediction.confidence)}
         />
+        {insights.personal && <PersonalPredictions personal={insights.personal} />}
         <ModelCardDetails />
 
         <div className="space-y-2">

@@ -111,6 +111,20 @@ def predict_wake_success(req: FeaturesRequest) -> dict[str, Any]:
     return predict_mod.predict_wake_success(req.feature_dict())
 
 
+class BatchRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    rows: list[dict[str, Any]] = []
+
+
+@app.post("/predict/batch")
+def predict_batch(req: BatchRequest) -> Any:
+    """The population models for many nights at once, for personalisation (prompt 5.3)."""
+    try:
+        return predict_mod.predict_batch(req.rows)
+    except ValueError as exc:
+        return JSONResponse(status_code=422, content={"error": str(exc)})
+
+
 @app.post("/recommend")
 def recommend(req: RecommendRequest) -> dict[str, Any]:
     return recommend_mod.build_report(req.model_dump())

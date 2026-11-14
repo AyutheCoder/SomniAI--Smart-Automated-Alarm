@@ -16,8 +16,9 @@ describe("the model card in the app (prompt 5.2)", () => {
     const [, how] = cardLines();
     expect(how.lines[0]).toBe("Sleep length: off by 1.0 h on a typical night, against 1.2 h for guessing everyone's average. They explain about 19% of why nights differ.");
     expect(how.lines[1]).toBe("Waking close to your usual time: given one regular night and one off-schedule night, they rank them the right way round "
-      + "66% of the time, where a coin toss manages 50%. As a yes or no they're right on 72% of nights, a little under the 75% you'd get by always saying \"regular\".");
-    expect(how.lines[2]).toBe("Figures are averages over 8 different groups of held-out people, and they move a lot between groups.");
+      + "66% of the time, where a coin toss manages 50%. As a yes or no they're right on 76% of nights, barely more than the 75% you'd get by always saying \"regular\".");
+    expect(how.lines[2]).toBe("When they say a chance, it holds up: on held-out nights they averaged 75% and 75% of those nights were regular.");
+    expect(how.lines[3]).toBe("Figures are averages over 8 different groups of held-out people, and they move a lot between groups.");
   });
 
   it("names what the models use and what can't change a prediction", () => {

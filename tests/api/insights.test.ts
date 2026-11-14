@@ -69,12 +69,12 @@ describe("GET /api/analytics/weekly", () => {
 
 describe("GET /api/recommendations", () => {
   it("rejects an unauthenticated request", async () => {
-    expect((await recommendations()).status).toBe(401);
+    expect((await recommendations(request("GET", "/api/recommendations"))).status).toBe(401);
   });
 
   it("answers from local fallbacks, from the caller's data only", async () => {
     signInAs(alice);
-    const res = await read(await recommendations());
+    const res = await read(await recommendations(request("GET", "/api/recommendations")));
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ reportSource: "fallback", predictionSource: "fallback", recentSleepHours: null });
     expect(Array.isArray(res.body.data.recommendations)).toBe(true);
