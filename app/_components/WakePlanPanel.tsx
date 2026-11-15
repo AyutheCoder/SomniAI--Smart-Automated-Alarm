@@ -98,10 +98,15 @@ export default function WakePlanPanel({ userId, onAlarmsChanged }: { userId: str
       const res = await fetch("/api/ai/wake-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requiredReliability: required, wakeTime }),
+        body: JSON.stringify({ requiredReliability: required, wakeTime, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       });
       const json = await res.json();
-      if (json.ok) {
+      if (json.ok && json.data.withheld) {
+        // The study withholds the plan for this alarm (6.1).
+        setPlan(null);
+        setNotice(json.data.withheld.reason);
+      }
+      else if (json.ok) {
         setPlan(json.data.plan);
         setPlanFor({ wakeTime, required });
       }

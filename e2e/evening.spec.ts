@@ -45,7 +45,8 @@ test("infeasible: an honest refusal with the ceiling, the habit and a second ala
   await expect(refusal).toContainText("The most tonight's changes can reach is 78%, 17 points short.");
   await expect(refusal).toContainText("What holds it back is a habit, not tonight: answer your first alarm would be worth +28% on its own, over weeks.");
   await expect(refusal).toContainText("Set a second alarm, ideally on another device");
-  expect(asked).toEqual([{ requiredReliability: 0.95, wakeTime: "06:30" }]);
+  // The browser's timezone goes too, so the study can tell which alarm a plan is for (6.1).
+  expect(asked).toEqual([{ requiredReliability: 0.95, wakeTime: "06:30", tz: expect.any(String) }]);
 
   await refusal.getByRole("button", { name: "Add a backup alarm at 06:40" }).click();
   await expect(tonight.getByRole("status")).toContainText("Backup alarm set for 06:40.");

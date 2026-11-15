@@ -9,12 +9,15 @@ import mongoose from "mongoose";
 import { buildUserSignals } from "@/lib/aiFeatures";
 import { aiBrainConfigured, predictWakeSuccess } from "@/lib/aiClient";
 import { buildRingPlan, type AlarmSettings, type BrainStatus, type RingPlan } from "@/lib/ringPlan";
+import { studyFor } from "@/lib/randomisationServer";
 import { currentProfile } from "@/lib/wakeHistory";
 import { Alarm } from "@/models/Alarm";
 import { Task } from "@/models/Task";
 
 export interface PlanContext extends AlarmSettings {
   linkedTaskId?: string;
+  /** The alarm's id, for the study's per-alarm randomisation (6.1). */
+  _id?: unknown;
 }
 
 export interface KnownPrediction {
@@ -74,12 +77,15 @@ export async function computeRingPlan(
     criticality(userId, { ...settings, linkedTaskId: ctx.linkedTaskId }),
     known ? Promise.resolve(known) : predict(userId),
   ]);
+  // The study's arm for this alarm (6.1), assigned and logged on first sight; never for an unmissable one.
+  const study = ctx._id ? await studyFor(userId, String(ctx._id), critical.value) : null;
   return buildRingPlan({
     ...settings,
     profile,
     critical,
     prediction: predicted.prediction,
     brain: predicted.brain,
+    study,
   });
 }
 

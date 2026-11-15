@@ -15,12 +15,24 @@ import {
   type EscalationLevel,
   type EscalationProfile,
 } from "./escalation";
+import { EXPERIMENTS, pacedEscalation, STRETCH, type Arm, type Experiment } from "./randomisation";
 import type { WakeStrategy } from "./types";
 
 export const RING_PLAN_VERSION = 1;
 
 export type ChallengeKind = "math" | "typing" | "shake" | "qr";
 const CHALLENGE_KINDS: readonly ChallengeKind[] = ["math", "typing", "shake", "qr"];
+
+/**
+ * The study's part in this alarm (prompt 6.1): its randomised arm, and whether
+ * it applies. Never applied to an unmissable alarm.
+ */
+export interface PlanStudy {
+  experiment: Experiment;
+  arm: Arm | null;
+  applied: boolean;
+  reason?: "unmissable";
+}
 
 /** How the AI Brain figured in a plan. */
 export type BrainStatus = "used" | "unreachable" | "not_configured" | "not_asked";
@@ -42,6 +54,8 @@ export interface RingPlan {
   prediction: { offScheduleChance: number; source: "ai" | "fallback" } | null;
   /** What changed the ladder from the plain one for this strategy, in words. */
   adjustments: string[];
+  /** The study's randomisation for this alarm (6.1); absent when none runs. */
+  study?: PlanStudy;
 }
 
 export interface AlarmSettings {
@@ -59,6 +73,7 @@ export interface RingPlanInputs extends AlarmSettings {
   profile?: EscalationProfile | null;
   prediction?: { offScheduleChance: number; source: "ai" | "fallback" } | null;
   brain: BrainStatus;
+  study?: PlanStudy | null;
   now?: Date;
 }
 
@@ -100,6 +115,24 @@ export function buildRingPlan(inputs: RingPlanInputs): RingPlan {
     adjustments.push(`Escalates sooner: ${Math.round(prediction.offScheduleChance * 100)}% predicted chance of waking off your usual time (${from}).`);
   }
 
+  // The study's arm, last, so it scales the ladder the user would otherwise get. Never for an unmissable alarm.
+  // Enforced here too, whatever the caller passed: an unmissable alarm's arm never applies.
+  const study: PlanStudy | null = inputs.study && critical.value && inputs.study.applied
+    ? { ...inputs.study, applied: false, reason: "unmissable" }
+    : inputs.study ?? null;
+  if (study?.applied && study.experiment === "escalation_pacing" && study.arm) {
+    escalation = pacedEscalation(escalation, study.arm);
+    adjustments.push(study.arm === "stretched"
+      ? `Study: each level starts ${STRETCH} times later than it otherwise would (randomised for this alarm, and logged).`
+      : "Study: standard pacing (randomised for this alarm, and logged).");
+  }
+  else if (study?.applied && study.experiment === "wake_plan") {
+    adjustments.push(`Study: the wake plan is ${study.arm === "shown" ? "shown" : "not shown"} for this alarm (randomised, and logged).`);
+  }
+  else if (study && !study.applied) {
+    adjustments.push(`Study: not randomised, because this alarm is unmissable (${EXPERIMENTS[study.experiment].label.toLowerCase()}).`);
+  }
+
   const decidedBy = inputs.brain === "used" && prediction?.source === "ai" ? "ai" : "fallback";
   return {
     version: RING_PLAN_VERSION,
@@ -117,6 +150,7 @@ export function buildRingPlan(inputs: RingPlanInputs): RingPlan {
     criticalReason: critical.reason,
     prediction,
     adjustments,
+    ...(study ? { study } : {}),
   };
 }
 
