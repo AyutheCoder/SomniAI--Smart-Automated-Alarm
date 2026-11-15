@@ -83,6 +83,17 @@ describe("the counter", () => {
 });
 
 describe("the middleware", () => {
+  // Fixed windows start afresh on the clock's minute, quarter-hour and hour: a test
+  // running across one (CI did, at 15:30:00) sees its count reset. Only Date is
+  // faked, at the middle of every window; timers stay real for the database.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-12-01T12:07:30Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("sign-up: 10 an hour from one address, then 429 with Retry-After; another address is unaffected", async () => {
     await makeUser();
     const ip = freshIp();
