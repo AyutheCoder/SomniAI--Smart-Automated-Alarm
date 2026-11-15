@@ -7,6 +7,7 @@ import { signIn } from "next-auth/react";
 import { Moon, Loader2 } from "lucide-react";
 import { safeCallbackUrl } from "@/lib/callbackUrl";
 import { GOOGLE_REFUSED } from "@/lib/googleSignIn";
+import { signInErrorText } from "@/lib/signInErrors";
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
@@ -33,7 +34,7 @@ function SignInForm() {
     });
     setLoading(false);
     if (res?.error) {
-      setError("Invalid email or password.");
+      setError(signInErrorText(res.error));
       return;
     }
     router.push(callbackUrl);

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AlarmClock, BarChart3, CheckCircle2, Circle, ListTodo, LogOut, Moon, Plus, SlidersHorizontal, Sparkles, Trash2 } from "lucide-react";
 import { signOut, useSession } from "next-auth/react";
 import type { Alarm, Priority, Task, WakeStrategy } from "@/lib/types";
-import { Outbox, browserStore } from "@/lib/outbox";
+import { Outbox, browserStore, sendEntry } from "@/lib/outbox";
 import { loadAlarmCache, mergeWithLocal, saveAlarmCache } from "@/lib/alarmCache";
 import { dismissLocally, snoozeLocally, syncCalls } from "@/lib/ringFlow";
 import { resolveRingPlan } from "@/lib/ringPlan";
@@ -21,6 +21,8 @@ import DataSourcesPanel from "./_components/DataSourcesPanel";
 import TelemetryPanel from "./_components/TelemetryPanel";
 import StudyPanel from "./_components/StudyPanel";
 import AccountPanel from "./_components/AccountPanel";
+import PanelBoundary from "./_components/PanelBoundary";
+import ServiceBanner from "./_components/ServiceBanner";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
 import BedtimeReminder from "./_components/BedtimeReminder";
@@ -238,11 +240,7 @@ export default function Home() {
     }
     flushingRef.current = true;
     try {
-      const result = await outbox.flush((entry) => fetch(entry.path, {
-        method: entry.method,
-        headers: { "Content-Type": "application/json" },
-        body: entry.body === undefined ? undefined : JSON.stringify(entry.body),
-      }));
+      const result = await outbox.flush((entry) => sendEntry(entry));
       // Once an alarm has nothing left to send, the server's copy is current.
       const stillPending = outbox.pendingAlarmIds();
       if (result.alarms.size > 0) {
@@ -547,12 +545,14 @@ export default function Home() {
         </p>
       )}
 
-      <BedtimeReminder userId={userId} />
+      <PanelBoundary name="The service status"><ServiceBanner /></PanelBoundary>
 
-      {userId && <MorningReportCard />}
+      <PanelBoundary name="The bedtime reminder"><BedtimeReminder userId={userId} /></PanelBoundary>
+
+      {userId && <PanelBoundary name="The morning report"><MorningReportCard /></PanelBoundary>}
 
       {/* The evening starts here: when you must be up, and what tonight takes. */}
-      <WakePlanPanel userId={userId} onAlarmsChanged={loadData} />
+      <PanelBoundary name="The wake plan"><WakePlanPanel userId={userId} onAlarmsChanged={loadData} /></PanelBoundary>
 
       <section className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Pending tasks" value={pendingTasks} />
@@ -561,17 +561,17 @@ export default function Home() {
         <StatCard label="Total alarms" value={alarms.length} />
       </section>
 
-      <InsightsPanel />
+      <PanelBoundary name="Insights"><InsightsPanel /></PanelBoundary>
 
-      <DataSourcesPanel onTasksChanged={loadData} native={native} />
-      <TelemetryPanel native={native} />
-      <StudyPanel native={native} />
+      <PanelBoundary name="Data sources"><DataSourcesPanel onTasksChanged={loadData} native={native} /></PanelBoundary>
+      <PanelBoundary name="Alarm telemetry"><TelemetryPanel native={native} /></PanelBoundary>
+      <PanelBoundary name="The study"><StudyPanel native={native} /></PanelBoundary>
 
-      <SmartSchedulePanel onChange={loadData} />
+      <PanelBoundary name="Smart schedule"><SmartSchedulePanel onChange={loadData} /></PanelBoundary>
 
-      {userId && <BuddyPanel push={push} />}
+      {userId && <PanelBoundary name="Wake buddy"><BuddyPanel push={push} /></PanelBoundary>}
 
-      {userId && <AccountPanel userId={userId} native={native} />}
+      {userId && <PanelBoundary name="Your data"><AccountPanel userId={userId} native={native} /></PanelBoundary>}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">

@@ -4,6 +4,7 @@ import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { accountKey, hit, POLICIES } from "@/lib/rateLimit";
 import { GOOGLE_REFUSED_PATH, googleVerdict } from "@/lib/googleSignIn";
+import { SIGN_IN_TROUBLE } from "@/lib/signInErrors";
 import { connectToDatabase } from "@/lib/mongoose";
 import { User } from "@/models/User";
 const googleId = process.env.GOOGLE_CLIENT_ID;
@@ -24,15 +25,18 @@ const providers: NextAuthOptions["providers"] = [
       // addresses. Keyed by a hash, so the counts don't hold e-mail addresses.
       const verdict = await hit(POLICIES.signInAccount, accountKey(email));
       if (!verdict.ok)
-        throw new Error("Too many sign-in attempts for this account. Try again in a few minutes.");
-      await connectToDatabase();
-      const user = await User.findOne({ email }).select("+passwordHash").lean<{
-        _id: unknown;
-        email: string;
-        name?: string;
-        image?: string;
-        passwordHash?: string;
-      }>();
+        throw new Error(SIGN_IN_TROUBLE.rateLimited);
+      type Stored = { _id: unknown; email: string; name?: string; image?: string; passwordHash?: string };
+      let user: Stored | null;
+      try {
+        await connectToDatabase();
+        user = await User.findOne({ email }).select("+passwordHash").lean<Stored>();
+      }
+      catch (e) {
+        // Said as it is (7.3): not "Invalid email or password", which would send people to reset a good password.
+        console.error("[auth] couldn't read the account:", e instanceof Error ? e.message : e);
+        throw new Error(SIGN_IN_TROUBLE.unavailable);
+      }
       if (!user?.passwordHash)
         return null;
       const valid = await bcrypt.compare(password, user.passwordHash);

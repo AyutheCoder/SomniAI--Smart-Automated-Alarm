@@ -1,6 +1,6 @@
 # SomniAI privacy policy
 
-Version 1, effective 15 November 2026.
+Version 2, effective 16 November 2026.
 
 SomniAI is an alarm app: an Android app and a web app on the same account. This policy says what it stores about you, why, who else sees any of it, how long it is kept, and how to get a copy or delete it. It is run by {{OPERATOR}}, who decides how your data is used (the "controller"). Questions, requests and complaints: {{CONTACT}}.
 
@@ -61,6 +61,10 @@ If an alarm isn't stopped and checked in time (an unmissable alarm, or any alarm
 ### Research study
 
 Only if you join with an enrolment code, after reading and agreeing to a separate consent document. The study assigns your alarms at random to showing the wake plan or not, and records the assignments. Researchers receive only an anonymised export: a random participant code, study days instead of dates, times of day, and the measurements, never your name, email address, account or alarm names. Leaving, at any time, deletes everything collected for the study. An export a researcher already took can't be recalled, but it never contained who you are. The study enrols no one before an ethics committee has approved it.
+
+### Error reports
+
+When something breaks (a page that fails to show, a server error, an error in the prediction service), SomniAI records what went wrong so it can be fixed: the kind of error, its message and where in the code it happened, and the page or service involved. Before anything is stored, email addresses, ids, tokens, phone numbers and web-address details are removed, and no account is recorded with it, so a report can't be traced to you. The same error happening again only raises its count. Reports are deleted 90 days after the error last happened. SomniAI also checks every minute that its prediction service is answering and keeps a record of when it wasn't; that record holds nothing about anyone.
 
 ### Security
 

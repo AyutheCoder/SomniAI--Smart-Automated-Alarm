@@ -12,6 +12,7 @@ import type { FeedbackOutcome, RlContext } from "@/lib/aiClient";
 import { isNum, isOccurredAt } from "@/lib/validate";
 import { nextOccurrence } from "@/lib/recurrence";
 import { recordWakeReport, ringAtOf, type CheckRecord } from "@/lib/wakeReportServer";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface DismissBody {
   responseMs?: number;
@@ -33,6 +34,11 @@ type RouteContext = {
 
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // Read back: the report may have replanned this alarm's next ring.
     return jsonOk((await Alarm.findOne({ _id: id, userId }).lean()) ?? existing.toObject());
   });
-}
+});
 
 interface WakeFeedbackArgs {
   woke: boolean;

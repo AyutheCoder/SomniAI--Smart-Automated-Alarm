@@ -3,6 +3,7 @@ import { connectToDatabase } from "@/lib/mongoose";
 import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { deleteTelemetry, invalidWake, recordWake, telemetrySummary, type WakeInput } from "@/lib/telemetry";
+import { withIdempotency } from "@/lib/idempotency";
 
 /** The user's telemetry: their consent, how many wakes are held, the latest few. */
 export async function GET() {
@@ -22,6 +23,11 @@ export async function GET() {
  * phone's outbox treats as final and drops.
  */
 export async function POST(req: NextRequest) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, undefined);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -39,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
     return jsonOk({ result }, { status: result === "stored" ? 201 : 200 });
   });
-}
+});
 
 /** Deletes every wake the user has. Consent stays as it is. */
 export async function DELETE() {

@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/session";
 import { isInt, isOccurredAt } from "@/lib/validate";
 import { recordWakeReport, ringAtOf } from "@/lib/wakeReportServer";
 import { Alarm, type AlarmDocument } from "@/models/Alarm";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface MissedBody {
   /** When the ring ended unanswered (or, if it never rang, when it was noticed). */
@@ -26,6 +27,11 @@ type RouteContext = { params: Promise<{ id: string }> };
  * itself is left as it is: a wake buddy is still told about it.
  */
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -59,4 +65,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
     return jsonOk((await Alarm.findOne({ _id: id, userId }).lean()) ?? alarm);
   });
-}
+});

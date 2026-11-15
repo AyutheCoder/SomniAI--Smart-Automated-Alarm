@@ -22,6 +22,8 @@ Definitions used (Play Console Help, "Provide information for Google Play's Data
 
 ## Data types (section 2)
 
+(Updated in prompt 7.3: Crash logs are now collected.)
+
 For every type below: **not shared** (the services involved are service providers: hosting, Google, Firebase, Twilio), **not processed ephemerally** unless said, and the purposes listed. Nothing is used for advertising, marketing, analytics SDKs, or fraud scoring.
 
 ### Personal info
@@ -77,8 +79,8 @@ Not collected by the Android app: it has no location permission (`AndroidManifes
 
 | Type | Collected | Why |
 | --- | --- | --- |
-| Crash logs | No | No crash reporting SDK. |
-| Diagnostics | No | The bedtime check runs on the phone and its results stay there. |
+| Crash logs | **Yes**, required, purpose **Analytics** (and App functionality), not shared | Since prompt 7.3: errors in the app's pages (which run in the app's web view) are sent to SomniAI's own server (`lib/errorReporter.ts`, `POST /api/errors`) and kept 90 days, with email addresses, ids, tokens and numbers removed and no account attached (`lib/errorTracking.ts`). No third-party crash SDK. |
+| Diagnostics | No | The bedtime check runs on the phone and its results stay there; the AI Brain's uptime check is the server's own. |
 | Other app performance data | No | |
 
 ### Device or other IDs

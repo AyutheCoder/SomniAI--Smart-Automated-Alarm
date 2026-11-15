@@ -7,6 +7,7 @@ import { isInt, isOccurredAt } from "@/lib/validate";
 import { BACKUP_KINDS, BACKUP_STATUSES, type BackupKind, type BackupStatus } from "@/lib/backupAdapters";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface BackupReport {
   kind: BackupKind;
@@ -36,6 +37,11 @@ type RouteContext = {
 };
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -78,4 +84,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // not say it did (it used to return emergencyContacted: true).
     return jsonOk({ level, backups });
   });
-}
+});

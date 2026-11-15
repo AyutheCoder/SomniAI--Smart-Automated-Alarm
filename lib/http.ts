@@ -117,6 +117,8 @@ export function routeError(err: unknown) {
   }
 
   console.error("[route] unhandled error:", err);
+  // Error tracking (7.3): recorded in the background, never delaying or changing the answer.
+  void import("@/lib/errorTracking").then(({ recordError, reportOf }) => recordError(reportOf(err, "server"))).catch(() => {});
   return jsonError("Something went wrong on our end", 500);
 }
 

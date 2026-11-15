@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/session";
 import { foreignTaskError } from "@/lib/ownership";
 import { computeRingPlan, type PlanContext } from "@/lib/ringPlanServer";
 import { Alarm } from "@/models/Alarm";
+import { withIdempotency } from "@/lib/idempotency";
 
 const ALLOWED_FIELDS = [
   "label",
@@ -119,10 +120,15 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePatch(req, context);
+}
+
+const repeatSafePatch = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     return PUT(req, context);
   });
-}
+});
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
   return guard(async () => {

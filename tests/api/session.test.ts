@@ -2,6 +2,7 @@
 // deleted account's session token still verifies, so the account itself is
 // checked (7.2). Otherwise a second phone still signed in would keep writing
 // records under an id whose account no longer exists.
+import mongoose from "mongoose";
 import { describe, expect, it, vi } from "vitest";
 import { MISSING_ID, makeUser } from "./helpers";
 import { User } from "@/models/User";
@@ -31,5 +32,18 @@ describe("who is signed in", () => {
     expect(await real.getUserId()).toBeNull();
     signedInAs.id = null;
     expect(await real.getUserId()).toBeNull();
+  });
+
+  it("with the database down, trusts the signed token: an outage doesn't sign anyone out (7.3)", async () => {
+    const id = await makeUser();
+    signedInAs.id = id;
+    mongoose.set("bufferTimeoutMS", 300);
+    await mongoose.connection.close();
+    try {
+      expect(await real.getUserId()).toBe(id);
+    }
+    finally {
+      await mongoose.connect(process.env.MONGO_DB_URI!);
+    }
   });
 });

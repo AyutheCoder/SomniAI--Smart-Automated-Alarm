@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "errors": "node scripts/errors.mjs",
     "buddy:cron": "node scripts/buddy-cron.mjs",
     "dev:phone": "node scripts/dev-phone.mjs",
     "android:doctor": "node scripts/android.mjs doctor",

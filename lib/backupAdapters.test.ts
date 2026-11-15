@@ -162,7 +162,9 @@ describe("no code path returns delivered without a confirmed delivery", () => {
       const count = (text.match(/status:\s*"delivered"(?!\s*;)/g) ?? []).length;
       return count > 0 ? [[file.split("\\").join("/"), count] as const] : [];
     });
-    expect(writers).toEqual([["lib/backupAdapters.ts", 1]]);
+    // The one other writer is the operator's outage alert (7.3), "delivered" only when the
+    // webhook answered 2xx, which lib/uptime.test.ts holds it to.
+    expect(writers).toEqual([["lib/backupAdapters.ts", 1], ["lib/opsAlert.ts", 1]]);
   });
 });
 

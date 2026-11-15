@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/session";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { isOccurredAt } from "@/lib/validate";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface FireBody {
   /** When it rang, if it is being reported later (a phone that was offline). */
@@ -19,6 +20,11 @@ type RouteContext = {
 };
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -45,4 +51,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
     return jsonOk(alarm);
   });
-}
+});

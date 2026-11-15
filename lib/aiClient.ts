@@ -1,6 +1,7 @@
 import type { BehavioralMetrics } from "@/lib/features";
 const AI_BRAIN_URL = process.env.AI_BRAIN_URL?.replace(/\/+$/, "") ?? "";
-const TIMEOUT_MS = 4000;
+// How long to wait for the AI Brain before using the app's own rules. Settable for the failure-mode tests (7.3).
+const TIMEOUT_MS = Number(process.env.AI_BRAIN_TIMEOUT_MS) > 0 ? Number(process.env.AI_BRAIN_TIMEOUT_MS) : 4000;
 /** Whether an AI Brain is configured at all, as opposed to configured and not answering. */
 export function aiBrainConfigured(): boolean {
   return AI_BRAIN_URL !== "";
@@ -76,13 +77,38 @@ async function postJson<T>(path: string, body: unknown): Promise<T | null> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
-    if (!res.ok)
+    if (!res.ok) {
+      if (res.status >= 500 && res.status !== 503) {
+        await recordBrainError(path, res);
+      }
       return null;
+    }
     return (await res.json()) as T;
   }
   catch {
+    // Unreachable, too slow, or the connection dropped mid-answer: the app's own rules answer instead.
+    // Outages are the uptime check's to record (lib/uptime.ts), not an error per request.
     return null;
   }
+}
+
+/**
+ * The AI Brain's own error answer (ai-brain/errors.py), recorded in the error
+ * tracker (7.3). A 503 is "no models loaded", a state the uptime check reports.
+ */
+async function recordBrainError(path: string, res: Response): Promise<void> {
+  const body = (await res.json().catch(() => null)) as { kind?: unknown; message?: unknown; stack?: unknown } | null;
+  const { recordError } = await import("./errorTracking");
+  await recordError({
+    source: "ai-brain",
+    kind: typeof body?.kind === "string" ? body.kind : `HTTP ${res.status}`,
+    message: typeof body?.message === "string" ? body.message : `The AI Brain answered ${res.status} to ${path}`,
+    // Python's frames ('File "x.py", line 3, in f'), in the shape the tracker keeps ("at ...").
+    stack: typeof body?.stack === "string"
+      ? body.stack.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("File ")).map((l) => `at ${l}`).join("\n")
+      : undefined,
+    where: path,
+  });
 }
 export async function aiBrainHealth(): Promise<boolean> {
   if (!AI_BRAIN_URL)

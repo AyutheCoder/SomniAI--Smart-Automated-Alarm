@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
-import { timingSafeEqual } from "node:crypto";
 import { connectToDatabase } from "@/lib/mongoose";
-import { jsonError, jsonOk, guard } from "@/lib/http";
+import { jsonOk, guard } from "@/lib/http";
+import { cronRefusal } from "@/lib/cronAuth";
 import { runBuddyAlerts } from "@/lib/buddyAlerts";
 import { fcmFromEnv } from "@/lib/push";
 
@@ -14,14 +14,9 @@ import { fcmFromEnv } from "@/lib/push";
  */
 async function run(req: NextRequest) {
   return guard(async () => {
-    const secret = process.env.CRON_SECRET;
-    if (!secret) {
-      return jsonError("CRON_SECRET is not set, so buddy alerts are off on this server", 503);
-    }
-    const given = Buffer.from(req.headers.get("authorization") ?? "");
-    const expected = Buffer.from(`Bearer ${secret}`);
-    if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      return jsonError("Unauthorized", 401);
+    const refused = cronRefusal(req.headers.get("authorization"), "buddy alerts");
+    if (refused) {
+      return refused;
     }
     await connectToDatabase();
     return jsonOk(await runBuddyAlerts(fcmFromEnv()));

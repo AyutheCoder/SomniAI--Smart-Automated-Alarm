@@ -30,9 +30,14 @@ final class OutboxQueue {
         void write(String json);
     }
 
-    /** Returns the HTTP status, or a negative number when the server couldn't be reached. */
+    /**
+     * Returns the HTTP status, or a negative number when the server couldn't be
+     * reached. {@code key} is the call's queue id, the same on every resend: sent
+     * as its Idempotency-Key, so a call whose answer was lost to a dropped
+     * connection is recorded once (prompt 7.3, lib/idempotency.ts).
+     */
     interface Sender {
-        int send(String path, String body);
+        int send(String path, String body, String key);
     }
 
     static final class Flush {
@@ -141,7 +146,7 @@ final class OutboxQueue {
         JSONArray all = pending();
         while (all.length() > 0) {
             JSONObject e = all.optJSONObject(0);
-            status = sender.send(e.optString("path"), e.optString("body"));
+            status = sender.send(e.optString("path"), e.optString("body"), e.optString("id"));
             if (status >= 200 && status < 300) {
                 sent++;
             }

@@ -7,6 +7,7 @@ import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { computeWakeConfidence } from "@/lib/wakeConfidence";
 import { isInt, isNum, isOccurredAt, isStringList } from "@/lib/validate";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface VerifyBody {
   /** The client's own score. Ignored: the server scores from the signals. */
@@ -60,6 +61,11 @@ type RouteContext = {
 };
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -117,4 +123,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
     return jsonOk({ confidence, passed, threshold });
   });
-}
+});

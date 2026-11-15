@@ -22,6 +22,7 @@ import { BuddyAlert, BuddyInvite, BuddyPair, PushToken } from "@/models/Buddy";
 import { ContextSnapshot } from "@/models/ContextSnapshot";
 import { ModelFeedback } from "@/models/ModelFeedback";
 import { RlPolicy } from "@/models/RlPolicy";
+import { RequestKey } from "@/models/RequestKey";
 import { ScreenNight } from "@/models/ScreenNight";
 import { SleepLog } from "@/models/SleepLog";
 import { Study } from "@/models/Study";
@@ -85,6 +86,7 @@ async function fillEverything(me: Who, tag: string) {
   await RlPolicy.create({ userId: me.id, policy: { tag } });
   await PushToken.create({ userId: me.id, token: `push-token-${tag}`, updatedAt: at(0) });
   await BuddyInvite.create({ userId: me.id, code: `CODE${tag.toUpperCase()}`.slice(0, 8), expiresAt: at(1) });
+  await RequestKey.create({ userId: me.id, key: `key-of-${tag}`, path: `/api/alarms/${alarmId}/fire`, state: "done", status: 200, body: "{}", createdAt: new Date() });
   await hit(POLICIES.write, `user:${me.id}`);
   await hit(POLICIES.signInAccount, accountKey(me.email));
 

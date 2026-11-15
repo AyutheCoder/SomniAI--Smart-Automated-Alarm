@@ -42,7 +42,7 @@ public class OutboxSyncTest {
         Outbox.autoSync = false;
         androidx.work.WorkManager.getInstance(context).cancelUniqueWork(Outbox.WORK).getResult().get();
         // Start from an empty queue; earlier tests' rings are queued for a server that doesn't exist.
-        Outbox.queue(context).flush((path, body) -> 404);
+        Outbox.queue(context).flush((path, body, key) -> 404);
     }
 
     @After
@@ -142,6 +142,32 @@ public class OutboxSyncTest {
         return n;
     }
 
+    /**
+     * Network lost mid-request (prompt 7.3): the server received the call and the
+     * connection dropped before its answer. The phone keeps the call and sends it
+     * again under the same Idempotency-Key, so the server can answer it once.
+     */
+    @Test
+    public void aCallWhoseAnswerIsLostIsSentAgainWithTheSameKey() throws Exception {
+        Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234569", 1_000, "dismissed", 2_000, null, 1, java.util.List.of()));
+        int queued = Outbox.queue(context).size();
+        server = new Stub(Stub.HANG_UP);
+        Outbox.baseUrlOverride = server.url();
+        OutboxQueue.Flush dropped = Outbox.flushNow(context);
+        assertTrue("the lost answer leaves it waiting", dropped.stalled);
+        assertEquals(queued, Outbox.queue(context).size());
+
+        OutboxQueue.Flush again = Outbox.flushNow(context);
+        assertFalse(again.stalled);
+        assertEquals(queued, again.sent);
+        List<String> got = server.received();
+        assertTrue(got.get(0), got.get(0).startsWith("POST /api/alarms/64f0a1b2c3d4e5f601234569/fire "));
+        assertEquals("sent twice", got.get(0), got.get(1));
+        assertEquals("under the same key", server.keys.get(0), server.keys.get(1));
+        assertTrue(server.keys.get(0), server.keys.get(0).matches("[A-Za-z0-9_-]{8,100}"));
+        assertEquals("every call has its own key", queued, server.keys.subList(1, 1 + queued).stream().distinct().count());
+    }
+
     @Test
     public void notSignedInKeepsItForLater() throws Exception {
         Outbox.enqueue(context, SyncCalls.forRing("64f0a1b2c3d4e5f601234567", 1_000, "unanswered", 2_000, null, 1, java.util.List.of()));
@@ -157,6 +183,10 @@ public class OutboxSyncTest {
     static final class Stub implements AutoCloseable {
         final ServerSocket socket = new ServerSocket(0);
         final Deque<Integer> answers = new ArrayDeque<>();
+        /** An answer that is never given: the connection is closed after the request is read. */
+        static final int HANG_UP = -2;
+        /** Each request's Idempotency-Key, in order ("" when it had none). */
+        final List<String> keys = Collections.synchronizedList(new ArrayList<>());
         /** The body of every answer. */
         volatile String reply = "{}";
         private final List<String> received = Collections.synchronizedList(new ArrayList<>());
@@ -182,10 +212,14 @@ public class OutboxSyncTest {
                     BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.UTF_8));
                     String requestLine = in.readLine();
                     int length = 0;
+                    String key = "";
                     String line;
                     while ((line = in.readLine()) != null && !line.isEmpty()) {
                         if (line.toLowerCase().startsWith("content-length:")) {
                             length = Integer.parseInt(line.substring(15).trim());
+                        }
+                        if (line.toLowerCase().startsWith("idempotency-key:")) {
+                            key = line.substring(16).trim();
                         }
                     }
                     char[] body = new char[length];
@@ -198,7 +232,12 @@ public class OutboxSyncTest {
                         read += n;
                     }
                     received.add(requestLine + " " + new String(body, 0, read));
+                    keys.add(key);
                     int status = answers.isEmpty() ? 200 : answers.poll();
+                    if (status == HANG_UP) {
+                        // The server got it all, then the connection dropped before any answer.
+                        continue;
+                    }
                     OutputStream out = s.getOutputStream();
                     byte[] bytes = reply.getBytes(StandardCharsets.UTF_8);
                     out.write(("HTTP/1.1 " + status + " X\r\nContent-Type: application/json\r\nContent-Length: " + bytes.length

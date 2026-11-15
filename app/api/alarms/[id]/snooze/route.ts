@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/session";
 import { isInt, isNum } from "@/lib/validate";
 import { Alarm } from "@/models/Alarm";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
+import { withIdempotency } from "@/lib/idempotency";
 
 interface SnoozeBody {
   snoozeMinutes?: number;
@@ -27,6 +28,11 @@ type RouteContext = {
 };
 
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -78,4 +84,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
     return jsonOk(alarm.toObject());
   });
-}
+});

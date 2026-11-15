@@ -183,7 +183,9 @@ describe("the anonymised export", () => {
       for (let d = -5; d <= 3; d++) {
         const wakeAt = new Date(today.getTime() + d * 86_400_000);
         await SleepLog.create({
-          userId: me, date: wakeAt.toISOString().slice(0, 10), source: "manual", durationHours: 7.5,
+          // The date in the participant's own time zone, as the app files a night; a UTC date
+          // here made the test fail every evening between 18:30 and midnight UTC.
+          userId: me, date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(wakeAt), source: "manual", durationHours: 7.5,
           sleepTime: new Date(wakeAt.getTime() - 7.5 * 3_600_000), wakeTime: wakeAt,
         });
       }

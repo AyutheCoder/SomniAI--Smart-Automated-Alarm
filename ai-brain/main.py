@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
+import errors as errors_mod
 import predict as predict_mod
 import recommend as recommend_mod
 import rl as rl_mod
@@ -33,6 +34,13 @@ async def models_unavailable(_request: Request, exc: predict_mod.ModelsUnavailab
     # No models, no prediction: the app falls back to its own rules and says so.
     # Never a synthetic stand-in (prompt 5.2).
     return JSONResponse(status_code=503, content={"error": "models unavailable", "detail": str(exc)})
+
+@app.exception_handler(Exception)
+async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+    # Error tracking (prompt 7.3): a clear 500 the app records, never a bare
+    # "Internal Server Error"; personal details removed (errors.py).
+    return JSONResponse(status_code=500, content=errors_mod.report(exc, request.url.path))
+
 
 _origins = os.environ.get("AI_BRAIN_ALLOW_ORIGINS", "*").split(",")
 app.add_middleware(

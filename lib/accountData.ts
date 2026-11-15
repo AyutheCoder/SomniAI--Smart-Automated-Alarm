@@ -21,10 +21,13 @@ import { ContextSnapshot } from "@/models/ContextSnapshot";
 import { ModelFeedback } from "@/models/ModelFeedback";
 import { Assignment, Randomisation } from "@/models/Randomisation";
 import { RateLimit } from "@/models/RateLimit";
+import { RequestKey } from "@/models/RequestKey";
 import { RlPolicy } from "@/models/RlPolicy";
 import { ScreenNight } from "@/models/ScreenNight";
 import { SleepLog } from "@/models/SleepLog";
 import { Enrollment, Study, StudyCode } from "@/models/Study";
+import { ErrorEvent } from "@/models/ErrorEvent";
+import { Outage, ServiceStatus } from "@/models/ServiceStatus";
 import { Task } from "@/models/Task";
 import { TelemetryConsent } from "@/models/TelemetryConsent";
 import { User } from "@/models/User";
@@ -115,6 +118,11 @@ export const HOLDINGS: Holding[] = [
     }),
   },
   {
+    name: "resendKeys", model: RequestKey, policy: "Alarms and tasks",
+    mine: (w) => ({ userId: w.id }),
+    noExport: "the ids of calls your phone sent, with the answers they got, kept 30 days so a call sent twice is recorded once",
+  },
+  {
     name: "rateLimitCounts", model: RateLimit, policy: "Security",
     // Keys: "<policy>|user:<id>|<window>" and "sign-in-account|account:<sha256 of email>|<window>".
     mine: (w) => ({ _id: { $regex: `\\|(user:${escape(w.id)}|${escape(accountKey(w.email))})\\|` } }),
@@ -127,6 +135,9 @@ export const HOLDINGS: Holding[] = [
 export const NOT_PERSONAL: { model: Model<any>; reason: string }[] = [
   { model: Study, reason: "the study's settings and how many people have left it, a number" },
   { model: StudyCode, reason: "enrolment codes as hashes, with how many times each was used, never by whom" },
+  { model: ServiceStatus, reason: "whether the AI Brain is up, from the uptime check" },
+  { model: Outage, reason: "when the AI Brain was down, and the alerts sent about it" },
+  { model: ErrorEvent, reason: "error reports, with email addresses, ids, tokens and numbers removed and no account recorded (lib/errorTracking.ts)" },
 ];
 
 const plain = (d: Doc): Doc => {

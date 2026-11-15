@@ -25,8 +25,10 @@ public class OutboxQueueTest {
     static final class Server implements OutboxQueue.Sender {
         final Deque<Integer> statuses = new ArrayDeque<>();
         final List<String> received = new ArrayList<>();
+        final List<String> keys = new ArrayList<>();
         Server answer(int... s) { for (int x : s) statuses.add(x); return this; }
-        @Override public int send(String path, String body) {
+        @Override public int send(String path, String body, String key) {
+            keys.add(key);
             int s = statuses.isEmpty() ? 200 : statuses.poll();
             if (s >= 0) {
                 received.add(path);
@@ -40,6 +42,26 @@ public class OutboxQueueTest {
     static List<SyncCalls.Call> ring(String id) {
         Verification v = new Verification(true, true, 1, 5_000, 0, List.of("math"), 90, 2_000);
         return SyncCalls.forRing(id, 1_000, "dismissed", 3_000, v, 2, List.of());
+    }
+
+    /**
+     * The connection drops after the server did the work (prompt 7.3): the call
+     * stays queued and is sent again under the same key, which the server
+     * answers from the first time instead of recording it twice.
+     */
+    @Test
+    public void aCallSentAgainAfterALostAnswerCarriesTheSameKey() {
+        Mem mem = new Mem();
+        new OutboxQueue(mem).enqueue(ring("a"), 0);
+        Server first = new Server().answer(OFFLINE);
+        assertTrue(new OutboxQueue(mem).flush(first).stalled);
+        Server again = new Server();
+        assertEquals(4, new OutboxQueue(mem).flush(again).sent);
+        assertEquals(first.keys.get(0), again.keys.get(0));
+        assertEquals(4, new java.util.HashSet<>(again.keys).size());
+        for (String k : again.keys) {
+            assertTrue(k, k.matches("[A-Za-z0-9_-]{8,100}"));
+        }
     }
 
     @Test

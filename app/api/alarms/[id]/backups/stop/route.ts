@@ -6,6 +6,7 @@ import { getUserId } from "@/lib/session";
 import { stopBackups } from "@/lib/backupServer";
 import { fcmFromEnv } from "@/lib/push";
 import { Alarm } from "@/models/Alarm";
+import { withIdempotency } from "@/lib/idempotency";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -15,6 +16,11 @@ type RouteContext = { params: Promise<{ id: string }> };
  * once there's a network.
  */
 export async function POST(req: NextRequest, context: RouteContext) {
+  // Sent again by an outbox after a dropped connection: answered once (lib/idempotency.ts, 7.3).
+  return repeatSafePost(req, context);
+}
+
+const repeatSafePost = withIdempotency(async (req: NextRequest, context: RouteContext) => {
   return guard(async () => {
     const userId = await getUserId();
     if (!userId) {
@@ -34,4 +40,4 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
     return jsonOk(await stopBackups(userId, id, body.fromToken as string | undefined, fcmFromEnv()));
   });
-}
+});

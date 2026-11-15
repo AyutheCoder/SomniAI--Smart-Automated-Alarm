@@ -115,8 +115,8 @@ final class Outbox {
     static OutboxQueue.Flush flushNow(Context context) {
         String base = baseUrl(context);
         Set<String> ended = new LinkedHashSet<>();
-        OutboxQueue.Flush f = queue(context).flush((path, body) -> {
-            int status = post(base, path, body);
+        OutboxQueue.Flush f = queue(context).flush((path, body, key) -> {
+            int status = post(base, path, body, key);
             String id = MorningNotice.endedAlarm(path, status);
             if (id != null) {
                 ended.add(id);
@@ -158,8 +158,8 @@ final class Outbox {
     }
 
     /** The HTTP status, or -1 when the server couldn't be reached. */
-    private static int post(String base, String path, String body) {
-        return request(base, path, body, 15_000).status;
+    private static int post(String base, String path, String body, String key) {
+        return request(base, path, body, 15_000, key).status;
     }
 
     /** A server answer: the status (-1: not reached) and the body, if any. */
@@ -179,10 +179,15 @@ final class Outbox {
      * thread.
      */
     static Response request(Context context, String path, String body, int timeoutMs) {
-        return request(baseUrl(context), path, body, timeoutMs);
+        return request(baseUrl(context), path, body, timeoutMs, null);
     }
 
     private static Response request(String base, String path, String body, int timeoutMs) {
+        return request(base, path, body, timeoutMs, null);
+    }
+
+    /** {@code key}: the Idempotency-Key, or null for a call that isn't resent. */
+    static Response request(String base, String path, String body, int timeoutMs, String key) {
         if (base == null) {
             return new Response(-1, null);
         }
@@ -196,6 +201,9 @@ final class Outbox {
             String cookie = sessionCookie(url);
             if (cookie != null) {
                 c.setRequestProperty("Cookie", cookie);
+            }
+            if (key != null && !key.isEmpty()) {
+                c.setRequestProperty("Idempotency-Key", key);
             }
             if (body != null) {
                 c.setDoOutput(true);

@@ -26,6 +26,19 @@ export interface KeyValueStore {
 
 export type Send = (entry: OutboxEntry) => Promise<{ status: number; json: () => Promise<unknown> }>;
 
+/**
+ * Sends one entry to the server, with its queue id as the Idempotency-Key
+ * (7.3): if the connection drops after the server did the work, the resend is
+ * answered from the first time instead of being recorded twice (lib/idempotency.ts).
+ */
+export function sendEntry(entry: OutboxEntry, fetchFn: typeof fetch = fetch) {
+  return fetchFn(entry.path, {
+    method: entry.method,
+    headers: { "Content-Type": "application/json", "Idempotency-Key": entry.id },
+    body: entry.body === undefined ? undefined : JSON.stringify(entry.body),
+  });
+}
+
 export interface FlushResult {
   sent: number;
   dropped: number;

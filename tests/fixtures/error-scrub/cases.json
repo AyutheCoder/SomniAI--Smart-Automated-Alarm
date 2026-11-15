@@ -1,0 +1,12 @@
+[
+  { "in": "No user with email Sleeper.One@example.org", "out": "No user with email <email>" },
+  { "in": "Cast to ObjectId failed for value \"64f0a1b2c3d4e5f601234567\"", "out": "Cast to ObjectId failed for value \"<id>\"" },
+  { "in": "session 3f2b8c1e-9d4a-4f6b-8e2a-1c5d7e9f0a3b expired", "out": "session <id> expired" },
+  { "in": "Authorization: Bearer abc.def-ghi_123 was refused", "out": "Authorization: Bearer <token> was refused" },
+  { "in": "bad cookie eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.fixture-scrub-case", "out": "bad cookie <token>" },
+  { "in": "GET https://api.example.org/v1/thing?token=secret&user=7 failed", "out": "GET https://api.example.org/v1/thing?<query> failed" },
+  { "in": "text to +44 7700 900123 failed", "out": "text to <number> failed" },
+  { "in": "digest 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08 mismatch", "out": "digest <hex> mismatch" },
+  { "in": "Cannot read properties of undefined (reading 'granted')", "out": "Cannot read properties of undefined (reading 'granted')" },
+  { "in": "list index out of range at line 42", "out": "list index out of range at line 42" }
+]
