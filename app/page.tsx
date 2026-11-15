@@ -19,6 +19,7 @@ import InsightsPanel from "./_components/InsightsPanel";
 import MorningReportCard, { REPORT_CHANGED } from "./_components/MorningReportCard";
 import DataSourcesPanel from "./_components/DataSourcesPanel";
 import TelemetryPanel from "./_components/TelemetryPanel";
+import StudyPanel from "./_components/StudyPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
 import BedtimeReminder from "./_components/BedtimeReminder";
@@ -563,6 +564,7 @@ export default function Home() {
 
       <DataSourcesPanel onTasksChanged={loadData} native={native} />
       <TelemetryPanel native={native} />
+      <StudyPanel native={native} />
 
       <SmartSchedulePanel onChange={loadData} />
 

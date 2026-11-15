@@ -52,12 +52,13 @@ describe("API route coverage", () => {
   // added 7, 3.3 (backups) 2, 3.4 (morning report: missed, wake-reports,
   // night-plans) 3, 4.1 (Google Calendar: calendar, connect, callback, sync)
   // 4, 4.2 (Health Connect: sleep-logs/import) 1, 4.3 (screen-time) 1 and 5.1
-  // (telemetry, telemetry/consent, telemetry/export) 3, 6.1 (randomisation) 1. The developer
+  // (telemetry, telemetry/consent, telemetry/export) 3, 6.1 (randomisation) 1, 6.2 (study,
+  // study/enrol, study/export) 3. The developer
   // simulator's route.dev.ts (4.4) isn't a production route and isn't counted.
   // Update this count deliberately when adding or removing a route, alongside
   // its tests.
-  it("finds all 45 route files", () => {
-    expect(routes).toHaveLength(45);
+  it("finds all 48 route files", () => {
+    expect(routes).toHaveLength(48);
   });
 
   it.each(routes.flatMap((r) => r.methods.map((m) => [`${m} /api/${r.key}`, r.key, m] as const)))(
