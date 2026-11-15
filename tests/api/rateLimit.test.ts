@@ -147,6 +147,14 @@ describe("the middleware", () => {
     expect(passedThrough(await call("GET", "/sign-in"))).toBe(true);
   });
 
+  it("the privacy policy, the terms and the deletion page are public, as Google Play requires (7.2)", async () => {
+    await makeUser();
+    for (const page of ["/privacy", "/terms", "/delete-account"]) {
+      expect(passedThrough(await call("GET", page)), page).toBe(true);
+    }
+    expect((await call("GET", "/privacy-settings")).status).toBe(307);
+  });
+
   it("routes with their own secret are reached without a session, to check it: cron and the researchers' export", async () => {
     await makeUser();
     expect(passedThrough(await call("POST", "/api/cron/buddy-alerts"))).toBe(true);

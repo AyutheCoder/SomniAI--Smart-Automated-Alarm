@@ -832,3 +832,22 @@ interaction that matches a stopwatch.
 | 6 | **Download everything** | The file has the wake with both rings, and the consent's history |
 | 7 | **Stop recording**, then an alarm rings | Nothing recorded (no `telemetry:` line) |
 | 8 | **Delete everything** | "Deleted N recorded wakes"; the download is empty of wakes |
+
+## 7.2 Deleting the account on a phone
+
+The server's deletion is tested against every collection (`tests/api/account.test.ts`),
+the phone's forgetting on the emulators (`AccountResetTest`), and the page's order
+of steps in `lib/accountClient.test.ts`. What only a real phone shows: that after
+deleting in the app, no SomniAI alarm is left in the system's alarm clock and
+none rings.
+
+**Not run yet.** Use a throwaway account, not one with data you want.
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Sign up a throwaway account in the app; set two alarms a few minutes ahead | The status bar shows the next-alarm icon for SomniAI |
+| 2 | Home page > Your data > **Download all my data** | A `somniai-data-<date>.json` file with both alarms |
+| 3 | **Delete my account**, wrong password | "That password isn't right."; the alarms are still set |
+| 4 | **Delete my account**, the address and the right password | "Your account and everything stored with it were deleted. This phone's 2 alarms were cancelled and forgotten."; after a few seconds, the sign-in page says the account was deleted |
+| 5 | Wait past both alarm times | Neither rings; no SomniAI next-alarm icon; `adb shell dumpsys alarm` has no `app.somniai.alarm` alarm clock |
+| 6 | Sign in again with the deleted account | "Invalid email or password." |

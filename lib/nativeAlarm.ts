@@ -130,6 +130,8 @@ export interface SomniAlarmPlugin {
   setTelemetryConsent(options: { granted: boolean; version?: string }): Promise<PhoneTelemetry & { dropped: number }>;
   /** API 7: drops every wake not yet sent (the user deleted their telemetry). */
   clearTelemetry(): Promise<PhoneTelemetry & { dropped: number }>;
+  /** API 8: the account was deleted (7.2): cancels and forgets every alarm, drops unsent calls and telemetry. */
+  forgetAccount(): Promise<{ alarms: number; unsent: number; openWakes: number }>;
   /** API 6: Settings' Usage access page. */
   openUsageAccess(): Promise<{ opened: boolean }>;
   /**

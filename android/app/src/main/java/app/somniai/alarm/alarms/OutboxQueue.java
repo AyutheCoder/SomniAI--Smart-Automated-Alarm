@@ -122,6 +122,13 @@ final class OutboxQueue {
         return removed;
     }
 
+    /** Drops every waiting call, unsent: the account was deleted (prompt 7.2). Returns how many. */
+    synchronized int clear() {
+        int n = pending().length();
+        store.write(new JSONArray().toString());
+        return n;
+    }
+
     /**
      * Sends what is waiting, oldest first, stopping at the first call that
      * can't be sent now. The queue is saved after every call, so a crash

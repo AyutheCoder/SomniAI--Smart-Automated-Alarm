@@ -92,6 +92,21 @@ public final class AlarmScheduler {
         }
     }
 
+    /**
+     * Cancels every alarm with AlarmManager and forgets them all, with their
+     * history (the account was deleted, prompt 7.2). Returns how many.
+     */
+    public static int forgetAll(Context context) {
+        synchronized (AlarmStore.LOCK) {
+            for (AlarmRecord r : AlarmStore.all(context)) {
+                cancel(context, r.spec.id);
+            }
+            int n = AlarmStore.clear(context);
+            PreflightReceiver.update(context);
+            return n;
+        }
+    }
+
     public static List<AlarmRecord> list(Context context) {
         synchronized (AlarmStore.LOCK) {
             return AlarmStore.all(context);

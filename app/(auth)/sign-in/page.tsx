@@ -18,6 +18,8 @@ function SignInForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(GOOGLE_REFUSED[params.get("error") ?? ""] ?? null);
+  // After deleting an account (7.2), the panel signs out to here.
+  const deleted = params.get("deleted") === "1";
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -40,6 +42,11 @@ function SignInForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {deleted && (
+        <p role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200">
+          Your account and everything stored with it were deleted.
+        </p>
+      )}
       {error && (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {error}
@@ -127,6 +134,11 @@ export default function SignInPage() {
           <Link href="/sign-up" className="text-indigo-300 hover:text-indigo-200">
             Create one
           </Link>
+        </p>
+        <p className="mt-3 text-center text-xs text-slate-500">
+          <Link href="/privacy" className="hover:text-slate-300">Privacy policy</Link>
+          {" · "}
+          <Link href="/terms" className="hover:text-slate-300">Terms</Link>
         </p>
       </div>
     </main>

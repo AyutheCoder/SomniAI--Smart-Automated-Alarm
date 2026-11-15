@@ -2,8 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { createHash } from "node:crypto";
-import { hit, POLICIES } from "@/lib/rateLimit";
+import { accountKey, hit, POLICIES } from "@/lib/rateLimit";
 import { GOOGLE_REFUSED_PATH, googleVerdict } from "@/lib/googleSignIn";
 import { connectToDatabase } from "@/lib/mongoose";
 import { User } from "@/models/User";
@@ -23,7 +22,7 @@ const providers: NextAuthOptions["providers"] = [
         return null;
       // Per account, from any address (7.1): password guessing spread over many
       // addresses. Keyed by a hash, so the counts don't hold e-mail addresses.
-      const verdict = await hit(POLICIES.signInAccount, `account:${createHash("sha256").update(email).digest("hex")}`);
+      const verdict = await hit(POLICIES.signInAccount, accountKey(email));
       if (!verdict.ok)
         throw new Error("Too many sign-in attempts for this account. Try again in a few minutes.");
       await connectToDatabase();

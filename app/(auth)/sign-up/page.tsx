@@ -154,6 +154,13 @@ export default function SignUpPage() {
             Sign in
           </Link>
         </p>
+        <p className="mt-3 text-center text-xs text-slate-500">
+          By creating an account you agree to the{" "}
+          <Link href="/terms" className="text-slate-400 underline hover:text-slate-300">terms</Link>
+          {" "}and the{" "}
+          <Link href="/privacy" className="text-slate-400 underline hover:text-slate-300">privacy policy</Link>.
+          You must be 16 or older.
+        </p>
       </div>
     </main>
   );

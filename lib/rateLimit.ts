@@ -9,6 +9,7 @@
 // request is let through: the route then fails or succeeds on its own, and a
 // limiter must never be why an alarm's result isn't recorded.
 
+import { createHash } from "node:crypto";
 import { connectToDatabase } from "@/lib/mongoose";
 import { RateLimit } from "@/models/RateLimit";
 
@@ -104,4 +105,9 @@ export function policyFor(method: string, path: string): Policy | null {
 export function clientIp(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   return forwarded || headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+/** The per-account sign-in key: a hash, so the counts don't hold e-mail addresses. */
+export function accountKey(email: string): string {
+  return `account:${createHash("sha256").update(email.toLowerCase().trim()).digest("hex")}`;
 }

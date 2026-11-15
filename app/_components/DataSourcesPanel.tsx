@@ -10,6 +10,7 @@ import { SomniAlarm, type HealthState } from "@/lib/nativeAlarm";
 import { hasHealth, importFromHealthConnect, importText } from "@/lib/nativeHealth";
 import { hasScreenTime, importScreenTime, SCREEN_WHY, screenText, type ScreenImport } from "@/lib/nativeScreen";
 import type { NativeConnection } from "@/lib/nativeSync";
+import { coarse } from "@/lib/context/weather";
 
 const ROWS: [keyof DataSources, string][] = [
   ["sleepLogs", "Sleep log"],
@@ -77,7 +78,8 @@ export default function DataSourcesPanel({ onTasksChanged, native = null }: { on
           const res = await fetch("/api/context", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+            // About 11 km (lib/context/weather.ts): the weather needs no more, so no more leaves the browser.
+            body: JSON.stringify({ lat: coarse(pos.coords.latitude), lon: coarse(pos.coords.longitude) }),
           });
           const json = await res.json();
           if (json.ok && json.data.sources?.weather !== "live") {

@@ -70,6 +70,15 @@ final class AlarmStore {
         return had;
     }
 
+    /** Removes every alarm and the record of what happened to them (the account was deleted, 7.2). Returns how many alarms. */
+    static int clear(Context context) {
+        int n = all(context).size();
+        if (!prefs(context).edit().clear().commit()) {
+            throw new IllegalStateException("could not clear the alarms");
+        }
+        return n;
+    }
+
     /** Appends to the record of what happened to alarms (rang, missed, dropped), newest last. */
     static void log(Context context, JSONObject entry) {
         JSONArray kept = readLog(context);

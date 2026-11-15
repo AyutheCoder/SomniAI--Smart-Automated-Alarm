@@ -43,6 +43,20 @@ public class OutboxQueueTest {
     }
 
     @Test
+    public void aDeletedAccountsCallsAreDroppedUnsentAndTheQueueStaysUsable() {
+        Mem mem = new Mem();
+        new OutboxQueue(mem).enqueue(ring("a"), 0);
+        assertEquals(4, new OutboxQueue(mem).clear());
+        Server server = new Server();
+        OutboxQueue.Flush f = new OutboxQueue(mem).flush(server);
+        assertEquals(0, f.sent);
+        assertTrue(server.received.isEmpty());
+        assertEquals(0, new OutboxQueue(mem).clear());
+        new OutboxQueue(mem).enqueue(ring("b"), 1);
+        assertEquals(4, new OutboxQueue(mem).size());
+    }
+
+    @Test
     public void offlineNothingIsSentAndNothingIsLost() {
         Mem mem = new Mem();
         new OutboxQueue(mem).enqueue(ring("a"), 0);

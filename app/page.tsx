@@ -20,6 +20,7 @@ import MorningReportCard, { REPORT_CHANGED } from "./_components/MorningReportCa
 import DataSourcesPanel from "./_components/DataSourcesPanel";
 import TelemetryPanel from "./_components/TelemetryPanel";
 import StudyPanel from "./_components/StudyPanel";
+import AccountPanel from "./_components/AccountPanel";
 import SmartSchedulePanel from "./_components/SmartSchedulePanel";
 import WakePlanPanel from "./_components/WakePlanPanel";
 import BedtimeReminder from "./_components/BedtimeReminder";
@@ -569,6 +570,8 @@ export default function Home() {
       <SmartSchedulePanel onChange={loadData} />
 
       {userId && <BuddyPanel push={push} />}
+
+      {userId && <AccountPanel userId={userId} native={native} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-white/5 p-5">

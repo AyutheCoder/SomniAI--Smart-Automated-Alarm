@@ -94,9 +94,10 @@ public class SomniAlarmPlugin extends Plugin {
      * needs: 1 is schedule/cancel/list (2.2), 2 adds reconcile (2.5), 3 the
      * bedtime check (3.1), 4 the push token for wake-buddy alerts (3.2),
      * 5 Health Connect (4.2), 6 screen time before bed (4.3), 7 telemetry
-     * consent and snooze on the ring screen (5.1).
+     * consent and snooze on the ring screen (5.1), 8 forgetting a deleted
+     * account (7.2).
      */
-    static final int API = 7;
+    static final int API = 8;
 
     @PluginMethod
     public void version(PluginCall call) {
@@ -310,6 +311,20 @@ public class SomniAlarmPlugin extends Plugin {
     public void clearTelemetry(PluginCall call) {
         int dropped = Telemetry.purge(getContext());
         call.resolve(telemetryState().put("dropped", dropped));
+    }
+
+    /**
+     * API 8: the account was deleted on the server (prompt 7.2). Cancels and
+     * forgets every alarm, drops unsent calls and telemetry; see AccountReset.
+     */
+    @PluginMethod
+    public void forgetAccount(PluginCall call) {
+        try {
+            call.resolve(JSObject.fromJSONObject(AccountReset.forget(getContext())));
+        }
+        catch (org.json.JSONException | RuntimeException e) {
+            call.reject("couldn't clear this phone: " + e.getMessage(), "FAILED");
+        }
     }
 
     /** API 6: whether Usage access is on, for screen time before bed (prompt 4.3). */

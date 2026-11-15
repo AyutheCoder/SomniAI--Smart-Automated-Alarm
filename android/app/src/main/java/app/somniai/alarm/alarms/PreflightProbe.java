@@ -117,6 +117,11 @@ final class PreflightProbe {
         return p.contains(CHECKED_FOR) ? p.getLong(CHECKED_FOR, 0) : null;
     }
 
+    /** Forgets the planned bedtime and which alarm was checked (the account was deleted, 7.2); the phone's own settings stay. */
+    static void forgetPlans(Context context) {
+        prefs(context).edit().remove(BEDTIME).remove(CHECKED_FOR).commit();
+    }
+
     private static SharedPreferences prefs(Context context) {
         return context.createDeviceProtectedStorageContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }

@@ -16,7 +16,8 @@ import { clientIp, hit, policyFor } from "@/lib/rateLimit";
  *
  * Runs on Node, not the edge, to reach the shared counts in MongoDB.
  */
-const PUBLIC_PAGES = ["/sign-in", "/sign-up"];
+// The legal pages are public (7.2): Google Play needs the policy and the deletion page reachable signed out.
+const PUBLIC_PAGES = ["/sign-in", "/sign-up", "/privacy", "/terms", "/delete-account"];
 const OWN_SECRET = ["/api/auth/", "/api/cron/", "/api/study/export"];
 
 /** Larger than any request the app or the phone sends; a bigger one is refused before it is read. */
