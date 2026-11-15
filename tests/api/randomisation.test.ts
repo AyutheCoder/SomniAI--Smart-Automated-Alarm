@@ -23,6 +23,19 @@ async function alarm(fields: Record<string, unknown> = {}) {
 const begin = async (experiment: string, seed: string | null = SEED) =>
   read(await start(request("PUT", "/api/randomisation", seed === null ? { experiment } : { experiment, seed })));
 const current = async () => (await read(await state())).body.data;
+/**
+ * A seed whose first arms for this user are the ones a test needs. User ids are
+ * random per run, so a short list of candidates can hold none (six letters missed
+ * one run in eleven); this searches far enough that a miss is practically impossible.
+ */
+function seedWhere(fits: (seed: string) => boolean): string {
+  for (let i = 0; i < 500; i++) {
+    if (fits(`seed-${i}`)) {
+      return `seed-${i}`;
+    }
+  }
+  throw new Error("no seed among 500 gives the arms this test needs");
+}
 const plain = buildEscalationPlan("adaptive").map((l) => l.afterSeconds);
 
 describe("randomising one aspect of waking per alarm", () => {
@@ -97,7 +110,7 @@ describe("randomising one aspect of waking per alarm", () => {
       const me = await makeUser();
       signInAs(me);
       // A seed whose first arm is "stretched", so the change is visible.
-      const seed = ["a", "b", "c", "d", "e", "f"].find((x) => armFor(x, me, "escalation_pacing", 0) === "stretched")!;
+      const seed = seedWhere((x) => armFor(x, me, "escalation_pacing", 0) === "stretched");
       await begin("escalation_pacing", seed);
       const a = await alarm();
       expect(a.ringPlan.study).toMatchObject({ arm: "stretched", applied: true });
@@ -124,7 +137,7 @@ describe("randomising one aspect of waking per alarm", () => {
   it("the wake plan isn't shown for an alarm whose arm is not_shown, and is for one that is", async () => {
     const me = await makeUser();
     signInAs(me);
-    const seed = ["a", "b", "c", "d", "e", "f"].find((x) => armFor(x, me, "wake_plan", 0) === "not_shown" && armFor(x, me, "wake_plan", 1) === "shown")!;
+    const seed = seedWhere((x) => armFor(x, me, "wake_plan", 0) === "not_shown" && armFor(x, me, "wake_plan", 1) === "shown");
     await begin("wake_plan", seed);
     const hidden = await alarm({ scheduledTime: "2026-12-05T06:30:00Z" });
     const shown = await alarm({ scheduledTime: "2026-12-05T07:15:00Z" });

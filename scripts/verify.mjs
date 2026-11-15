@@ -106,6 +106,12 @@ function build() {
   return { exitCode: res.status, needsCounts: false, detail: "production build, no developer routes" };
 }
 
+/** No secret in tracked files, git history or the production bundle just built (7.1). */
+function secrets() {
+  const res = sh("node scripts/check-secrets.mjs");
+  return { exitCode: res.status, error: spawnError(res), needsCounts: false, detail: "tracked files, history, client bundle" };
+}
+
 function pytest() {
   const venv = process.platform === "win32"
     ? join("ai-brain", ".venv", "Scripts", "python.exe")
@@ -191,6 +197,7 @@ const steps = [
   ["tsc", tsc],
   ["vitest", vitest],
   ["build", build],
+  ["secrets", secrets],
   ...(all ? [["pytest", pytest], ["android", androidTests], ["apk", androidApk]] : []),
 ];
 

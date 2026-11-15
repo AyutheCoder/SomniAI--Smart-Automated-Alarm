@@ -24,6 +24,11 @@ describe("POST /api/events", () => {
     ["a non-numeric value", { type: "motion", value: "lots" }, 422, /value must be a number/],
     ["a batch over 200", { events: Array.from({ length: 201 }, () => ({ type: "motion" })) }, 422, /max 200/],
     ["an event without a source", { type: "motion", value: 1 }, 422, /Each event needs a source: live or simulated/],
+    // 7.1's audit: meta was stored as sent.
+    ["meta that isn't an object", { type: "motion", source: "live", meta: "x" }, 422, /meta must be an object/],
+    ["meta over 2000 characters", { type: "motion", source: "live", meta: { note: "x".repeat(2001) } }, 422, /at most 2000/],
+    ["a meta key that is a MongoDB operator", { type: "motion", source: "live", meta: { $where: "1" } }, 422, /can't start with \$/],
+    ["a nested meta key with a dot", { type: "motion", source: "live", meta: { a: { "b.c": 1 } } }, 422, /contain a dot/],
     ["an unknown source", { type: "motion", source: "probably" }, 422, /Each event needs a source/],
     ["a batch where one event lacks a source", {
       events: [{ type: "motion", source: "live" }, { type: "motion" }],

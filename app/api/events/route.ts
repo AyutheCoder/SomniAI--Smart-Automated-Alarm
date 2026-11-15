@@ -43,6 +43,31 @@ const EVENT_SOURCES: readonly string[] = ["live", "simulated"];
 
 const MAX_BATCH = 200;
 
+/** At most this much JSON in one event's meta. */
+const MAX_META = 2000;
+
+/** Why an event's meta can't be stored, or null: a small plain object whose keys aren't MongoDB operators or paths. */
+function invalidMeta(meta: unknown): string | null {
+  if (meta === undefined || meta === null) {
+    return null;
+  }
+  if (typeof meta !== "object" || Array.isArray(meta)) {
+    return "meta must be an object";
+  }
+  const json = JSON.stringify(meta);
+  if (json.length > MAX_META) {
+    return `meta must be at most ${MAX_META} characters of JSON`;
+  }
+  let badKey = false;
+  JSON.parse(json, (key, value) => {
+    if (key.startsWith("$") || key.includes(".")) {
+      badKey = true;
+    }
+    return value;
+  });
+  return badKey ? "meta keys can't start with $ or contain a dot" : null;
+}
+
 export async function POST(req: NextRequest) {
   return guard(async () => {
     const userId = await getUserId();
@@ -78,6 +103,11 @@ export async function POST(req: NextRequest) {
       }
       if (e.value !== undefined && !isNum(e.value)) {
         return jsonError("value must be a number", 422);
+      }
+      // meta was stored as sent, any size and any keys (found in 7.1's audit).
+      const metaProblem = invalidMeta(e.meta);
+      if (metaProblem) {
+        return jsonError(metaProblem, 422);
       }
       const at = e.at ? new Date(e.at) : new Date();
       if (Number.isNaN(at.getTime())) {

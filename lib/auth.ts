@@ -2,6 +2,9 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
+import { hit, POLICIES } from "@/lib/rateLimit";
+import { GOOGLE_REFUSED_PATH, googleVerdict } from "@/lib/googleSignIn";
 import { connectToDatabase } from "@/lib/mongoose";
 import { User } from "@/models/User";
 const googleId = process.env.GOOGLE_CLIENT_ID;
@@ -18,6 +21,11 @@ const providers: NextAuthOptions["providers"] = [
       const password = credentials?.password;
       if (!email || !password)
         return null;
+      // Per account, from any address (7.1): password guessing spread over many
+      // addresses. Keyed by a hash, so the counts don't hold e-mail addresses.
+      const verdict = await hit(POLICIES.signInAccount, `account:${createHash("sha256").update(email).digest("hex")}`);
+      if (!verdict.ok)
+        throw new Error("Too many sign-in attempts for this account. Try again in a few minutes.");
       await connectToDatabase();
       const user = await User.findOne({ email }).select("+passwordHash").lean<{
         _id: unknown;
@@ -54,10 +62,29 @@ export const authOptions: NextAuthOptions = {
   },
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
+    // Google joins an account only with an address Google verified, and never one
+    // made with a password (lib/googleSignIn.ts: account pre-hijacking, 7.1).
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") {
+        return true;
+      }
+      const email = profile?.email?.toLowerCase().trim();
+      if (!email) {
+        return GOOGLE_REFUSED_PATH.unverified;
+      }
+      await connectToDatabase();
+      const existing = await User.findOne({ email }).select("+passwordHash").lean<{ passwordHash?: string }>();
+      const verdict = googleVerdict(profile as { email_verified?: unknown }, existing);
+      return verdict === "ok" ? true : GOOGLE_REFUSED_PATH[verdict];
+    },
     async jwt({ token, user, account }) {
       if (account?.provider === "google" && token.email) {
         await connectToDatabase();
-        const existing = await User.findOne({ email: token.email.toLowerCase() });
+        const existing = await User.findOne({ email: token.email.toLowerCase() }).select("+passwordHash");
+        if (existing?.passwordHash) {
+          // signIn refuses this first; never reached, and never joined if it were.
+          throw new Error("Google sign-in can't join an account with a password.");
+        }
         if (existing) {
           token.uid = String(existing._id);
         }

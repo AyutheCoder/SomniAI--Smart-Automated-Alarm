@@ -94,3 +94,52 @@ describe("POST /api/auth/[...nextauth] (credentials sign-in)", () => {
     expect((session as Session).user.id).toBe("abc123");
   });
 });
+
+// Account pre-hijacking (7.1's security review): a password account made with
+// someone else's address must never be joined by that person's Google sign-in.
+describe("signing in with Google", () => {
+  type SignIn = NonNullable<NonNullable<typeof authOptions.callbacks>["signIn"]>;
+  type Jwt = NonNullable<NonNullable<typeof authOptions.callbacks>["jwt"]>;
+  const signIn = (email: string, emailVerified: unknown) => authOptions.callbacks!.signIn!({
+    user: { id: "google-sub", email },
+    account: { provider: "google", type: "oauth", providerAccountId: "google-sub" },
+    profile: { email, email_verified: emailVerified },
+  } as unknown as Parameters<SignIn>[0]);
+  const jwt = (email: string) => authOptions.callbacks!.jwt!({
+    token: { email, sub: "google-sub" },
+    user: { id: "google-sub", email },
+    account: { provider: "google", type: "oauth", providerAccountId: "google-sub" },
+  } as unknown as Parameters<Jwt>[0]);
+
+  it("goes ahead with an address Google verified, for a new account or one Google made", async () => {
+    await User.create({ email: "made-by-google@example.test", provider: "google" });
+    expect(await signIn("new@example.test", true)).toBe(true);
+    expect(await signIn("Made-By-Google@example.test", true)).toBe(true);
+    const token = await jwt("made-by-google@example.test");
+    const account = await User.findOne({ email: "made-by-google@example.test" });
+    expect(token.uid).toBe(String(account!._id));
+  });
+
+  it("is refused onto an account made with a password: the attacker registered the victim's address first", async () => {
+    const res = await read(await register(request("POST", "/api/auth/register", { email: "victim@example.test", password: "attacker-knows" })));
+    expect(res.status).toBe(201);
+    expect(await signIn("Victim@example.test", true)).toBe("/sign-in?error=GoogleHasPassword");
+    // Even if signIn were skipped, the token is never given that account.
+    await expect(jwt("victim@example.test")).rejects.toThrow(/can't join an account with a password/);
+  });
+
+  it.each([
+    ["unverified", false],
+    ["not said", undefined],
+    ["a string, not true", "true"],
+  ])("is refused when Google's address is %s", async (_what, verified) => {
+    expect(await signIn("someone@example.test", verified)).toBe("/sign-in?error=GoogleEmailUnverified");
+    expect(await User.countDocuments({ email: "someone@example.test" })).toBe(0);
+  });
+
+  it("leaves password sign-in to the password check", async () => {
+    expect(await authOptions.callbacks!.signIn!({
+      user: { id: "x" }, account: { provider: "credentials", type: "credentials", providerAccountId: "x" },
+    } as unknown as Parameters<SignIn>[0])).toBe(true);
+  });
+});

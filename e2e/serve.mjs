@@ -30,6 +30,9 @@ const env = {
   FIREBASE_PROJECT_ID: "",
   FIREBASE_CLIENT_EMAIL: "",
   FIREBASE_PRIVATE_KEY: "",
+  // The tests sign up a dozen users from one address in minutes. Honoured only
+  // outside production (lib/rateLimit.ts); the limits have their own tests.
+  RATE_LIMIT_DISABLED: "1",
 };
 
 const next = spawn(process.execPath, ["node_modules/next/dist/bin/next", "dev", "-p", port], {

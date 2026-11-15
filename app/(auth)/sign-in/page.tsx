@@ -5,16 +5,19 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Moon, Loader2 } from "lucide-react";
+import { safeCallbackUrl } from "@/lib/callbackUrl";
+import { GOOGLE_REFUSED } from "@/lib/googleSignIn";
 
 const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
 
 function SignInForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const callbackUrl = params.get("callbackUrl") || "/";
+  // Only a place on this site (lib/callbackUrl.ts): a javascript: callback would run with the new session.
+  const callbackUrl = safeCallbackUrl(params.get("callbackUrl"), typeof window === "undefined" ? "http://localhost" : window.location.origin);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(GOOGLE_REFUSED[params.get("error") ?? ""] ?? null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
