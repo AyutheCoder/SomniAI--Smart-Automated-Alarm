@@ -9,7 +9,7 @@
 // request is let through: the route then fails or succeeds on its own, and a
 // limiter must never be why an alarm's result isn't recorded.
 
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { connectToDatabase } from "@/lib/mongoose";
 import { RateLimit } from "@/models/RateLimit";
 
@@ -58,6 +58,25 @@ const mongoCounter: Counter = {
     return (doc as unknown as { count: number }).count;
   },
 };
+
+export const TEST_KEY_HEADER = "x-somniai-test-key";
+
+/**
+ * The end-to-end flows run against staging from one address and sign up a
+ * user each (7.4). On staging only (SOMNIAI_ENV=staging), a request carrying
+ * STAGING_TEST_KEY is not counted. Production never sets either, and the
+ * check refuses anywhere SOMNIAI_ENV isn't "staging" even if a key were set.
+ */
+export function stagingTester(headers: Headers, env: Record<string, string | undefined> = process.env): boolean {
+  const key = env.STAGING_TEST_KEY;
+  const given = headers.get(TEST_KEY_HEADER);
+  if (env.SOMNIAI_ENV !== "staging" || !key || key.length < 32 || !given) {
+    return false;
+  }
+  const a = Buffer.from(given);
+  const b = Buffer.from(key);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /** Off only outside production, and only when asked (the e2e server signs up many users from one address). */
 export function limitingOff(env: Record<string, string | undefined> = process.env): boolean {

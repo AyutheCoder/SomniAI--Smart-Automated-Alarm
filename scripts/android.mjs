@@ -7,6 +7,8 @@
 //                            (assembleDebug, assembleDebugAndroidTest)
 //   npm run android:run      install the debug APK on the running emulator or
 //                            phone, and open it
+//   npm run android:prod     the debug APK pointed at production (DEPLOY.md):
+//                            CAP_SERVER_URL from deploy/environments.json, HTTPS only
 //
 // Nothing here assumes where things are installed: every location is checked
 // for existence, and the JDK's version is read from the JDK itself.
@@ -22,6 +24,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { summarizeJunit } from "./verify-summary.mjs";
+import { androidServerUrl, readState } from "./deploy.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const ANDROID = join(ROOT, "android");
@@ -251,6 +254,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (command === "run") {
     process.exit(install(t));
   }
-  console.error("usage: node scripts/android.mjs doctor|test|build|run");
+  if (command === "prod") {
+    // The phone app talks to production (prompt 7.4); CAP_RELEASE=1 makes capacitor.config.ts refuse plain HTTP.
+    process.env.CAP_SERVER_URL = androidServerUrl(readState(join(ROOT, "deploy", "environments.json")));
+    process.env.CAP_RELEASE = "1";
+    console.log(`Building against ${process.env.CAP_SERVER_URL}`);
+    process.exit(gradle("assembleDebug", t));
+  }
+  console.error("usage: node scripts/android.mjs doctor|test|build|run|prod");
   process.exit(2);
 }

@@ -2,7 +2,7 @@
 //
 //   node scripts/check-secrets.mjs           tracked files, git history, and .next/static if built
 //
-// 1. Every value in .env.local (and the environment) whose name isn't
+// 1. Every value in .env.local and .env.deploy.local (and the environment) whose name isn't
 //    NEXT_PUBLIC_*, 8 characters or longer, is searched for in every tracked
 //    file, in the whole git history, and in the built browser bundle
 //    (.next/static). NEXT_PUBLIC_ values are meant for the browser.
@@ -81,7 +81,8 @@ function main() {
   const findings = [];
   const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" }).split("\0").filter(Boolean)
     .filter((f) => existsSync(f) && !/\.(joblib|png|jpg|jpeg|gif|ico|pdf|zip|jar|keystore|woff2?)$/i.test(f));
-  const envText = existsSync(".env.local") ? readFileSync(".env.local", "utf8") : "";
+  // The app's own settings, and the deployment's (prompt 7.4: tokens, database strings, made secrets).
+  const envText = [".env.local", ".env.deploy.local"].filter((f) => existsSync(f)).map((f) => readFileSync(f, "utf8")).join("\n");
   const secrets = secretValues(envText, process.env);
 
   for (const f of tracked) {

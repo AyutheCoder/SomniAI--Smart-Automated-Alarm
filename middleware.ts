@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
-import { clientIp, hit, policyFor } from "@/lib/rateLimit";
+import { clientIp, hit, policyFor, stagingTester } from "@/lib/rateLimit";
 
 /**
  * Every request, before its route (prompt 7.1):
@@ -19,12 +19,14 @@ import { clientIp, hit, policyFor } from "@/lib/rateLimit";
 // The legal pages are public (7.2): Google Play needs the policy and the deletion page reachable signed out.
 const PUBLIC_PAGES = ["/sign-in", "/sign-up", "/privacy", "/terms", "/delete-account"];
 const OWN_SECRET = ["/api/auth/", "/api/cron/", "/api/study/export"];
+/** Public on purpose: the health check (7.4) says only whether the database and AI Brain answer. */
+const PUBLIC_API = ["/api/health"];
 
 /** Larger than any request the app or the phone sends; a bigger one is refused before it is read. */
 export const MAX_BODY_BYTES = 1_000_000;
 
 const isPublic = (path: string) =>
-  PUBLIC_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) || OWN_SECRET.some((p) => path.startsWith(p));
+  PUBLIC_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) || OWN_SECRET.some((p) => path.startsWith(p)) || PUBLIC_API.includes(path);
 
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
@@ -37,7 +39,8 @@ export async function middleware(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Request too large" }, { status: 413 });
   }
 
-  const policy = policyFor(req.method, path);
+  // The staging-only exemption for the end-to-end flows (lib/rateLimit.ts, 7.4).
+  const policy = stagingTester(req.headers) ? null : policyFor(req.method, path);
   if (policy) {
     // Writes count per account when signed in, so one busy household address doesn't lock everyone out.
     const key = userId && policy.name !== "sign-up" && policy.name !== "sign-in" ? `user:${userId}` : `ip:${clientIp(req.headers)}`;

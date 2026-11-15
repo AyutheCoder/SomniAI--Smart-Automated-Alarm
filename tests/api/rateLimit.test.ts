@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { encode } from "next-auth/jwt";
 import { middleware } from "@/middleware";
 import { authOptions } from "@/lib/auth";
-import { hit, limitingOff, policyFor, POLICIES, clientIp } from "@/lib/rateLimit";
+import { hit, limitingOff, policyFor, POLICIES, clientIp, stagingTester } from "@/lib/rateLimit";
 import { RateLimit } from "@/models/RateLimit";
 import { makeUser } from "./helpers";
 
@@ -82,6 +82,20 @@ describe("the counter", () => {
   });
 });
 
+describe("the staging-only exemption for the end-to-end flows (7.4)", () => {
+  const KEY = "k".repeat(40);
+  const h = (v?: string) => new Headers(v ? { "x-somniai-test-key": v } : {});
+
+  it("only on staging, only with the exact key, and only a long one", () => {
+    expect(stagingTester(h(KEY), { SOMNIAI_ENV: "staging", STAGING_TEST_KEY: KEY })).toBe(true);
+    expect(stagingTester(h(KEY), { SOMNIAI_ENV: "production", STAGING_TEST_KEY: KEY })).toBe(false);
+    expect(stagingTester(h(KEY), { STAGING_TEST_KEY: KEY })).toBe(false);
+    expect(stagingTester(h(`${KEY}x`), { SOMNIAI_ENV: "staging", STAGING_TEST_KEY: KEY })).toBe(false);
+    expect(stagingTester(h(), { SOMNIAI_ENV: "staging", STAGING_TEST_KEY: KEY })).toBe(false);
+    expect(stagingTester(h("short"), { SOMNIAI_ENV: "staging", STAGING_TEST_KEY: "short" })).toBe(false);
+  });
+});
+
 describe("the middleware", () => {
   // Fixed windows start afresh on the clock's minute, quarter-hour and hour: a test
   // running across one (CI did, at 15:30:00) sees its count reset. Only Date is
@@ -105,6 +119,24 @@ describe("the middleware", () => {
     expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
     expect(await refused.json()).toEqual({ ok: false, error: "Too many requests. Try again shortly." });
     expect(passedThrough(await call("POST", "/api/auth/register", { ip: freshIp() }))).toBe(true);
+  });
+
+  it("on staging, the end-to-end flows' key lifts the sign-up limit; without it, the limit holds", async () => {
+    await makeUser();
+    const key = "e".repeat(40);
+    vi.stubEnv("SOMNIAI_ENV", "staging");
+    vi.stubEnv("STAGING_TEST_KEY", key);
+    const ip = freshIp();
+    const signUp = (withKey: boolean) => middleware(new NextRequest("http://localhost/api/auth/register", {
+      method: "POST", headers: { "x-forwarded-for": ip, ...(withKey ? { "x-somniai-test-key": key } : {}) },
+    }));
+    for (let i = 0; i < 15; i++) {
+      expect(passedThrough(await signUp(true))).toBe(true);
+    }
+    for (let i = 0; i < 10; i++) {
+      await signUp(false);
+    }
+    expect((await signUp(false)).status).toBe(429);
   });
 
   it("sign-in: 30 attempts in 15 minutes from one address", async () => {

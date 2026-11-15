@@ -3,8 +3,16 @@ import { defineConfig, devices } from "@playwright/test";
 // A port of its own, so the flows never land on a `npm run dev` you have open.
 const PORT = 3100;
 
+// Against a deployed site instead (prompt 7.4, DEPLOY.md): E2E_BASE_URL is the
+// staging address, and E2E_TEST_KEY the staging-only key that exempts these
+// flows from the sign-up limit (one address signs up every flow's user).
+// Production is never a target: it has no such key, and real people use it.
+const REMOTE = process.env.E2E_BASE_URL?.replace(/\/+$/, "");
+
 export default defineConfig({
   testDir: "e2e",
+  // The developer simulator exists only under `next dev` (prompt 4.4): nothing to test on a deployed site.
+  testIgnore: REMOTE ? ["simulator.spec.ts"] : [],
   // Compiles every API route before the flows start; see e2e/warmup.ts.
   globalSetup: "./e2e/warmup.ts",
   // Each flow waits for a real alarm to come due, up to a minute. On CI the
@@ -22,12 +30,13 @@ export default defineConfig({
   forbidOnly: true,
   reporter: [["list"]],
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: REMOTE ?? `http://localhost:${PORT}`,
     headless: true,
     trace: "retain-on-failure",
+    extraHTTPHeaders: REMOTE && process.env.E2E_TEST_KEY ? { "x-somniai-test-key": process.env.E2E_TEST_KEY } : undefined,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
+  webServer: REMOTE ? undefined : {
     command: "node e2e/serve.mjs",
     url: `http://localhost:${PORT}/sign-in`,
     env: { E2E_PORT: String(PORT) },

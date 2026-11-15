@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
+import access as access_mod
 import errors as errors_mod
 import predict as predict_mod
 import recommend as recommend_mod
@@ -40,6 +41,14 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
     # Error tracking (prompt 7.3): a clear 500 the app records, never a bare
     # "Internal Server Error"; personal details removed (errors.py).
     return JSONResponse(status_code=500, content=errors_mod.report(exc, request.url.path))
+
+
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    # Deployed, only the app may call it (access.py, prompt 7.4). Read per request, so tests can set it.
+    if not access_mod.allowed(request.url.path, request.headers.get("authorization"), os.environ.get("AI_BRAIN_TOKEN")):
+        return JSONResponse(status_code=401, content={"error": "unauthorized"})
+    return await call_next(request)
 
 
 _origins = os.environ.get("AI_BRAIN_ALLOW_ORIGINS", "*").split(",")

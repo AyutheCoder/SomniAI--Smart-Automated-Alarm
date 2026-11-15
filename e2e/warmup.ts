@@ -34,6 +34,9 @@ function urlFor(file: string): string | null {
 }
 
 export default async function warmup(config: FullConfig) {
+  if (process.env.E2E_BASE_URL) {
+    return; // A deployed site is a production build: nothing compiles on first request (7.4).
+  }
   const api = await request.newContext({ baseURL: config.projects[0].use.baseURL, timeout: 120_000 });
   try {
     const email = `warmup-${Date.now()}@example.test`;

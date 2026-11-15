@@ -1,5 +1,8 @@
 import type { BehavioralMetrics } from "@/lib/features";
 const AI_BRAIN_URL = process.env.AI_BRAIN_URL?.replace(/\/+$/, "") ?? "";
+// The deployed AI Brain answers only the app (ai-brain/access.py, prompt 7.4).
+const AI_BRAIN_TOKEN = process.env.AI_BRAIN_TOKEN?.trim() ?? "";
+const AUTH: Record<string, string> = AI_BRAIN_TOKEN ? { Authorization: `Bearer ${AI_BRAIN_TOKEN}` } : {};
 // How long to wait for the AI Brain before using the app's own rules. Settable for the failure-mode tests (7.3).
 const TIMEOUT_MS = Number(process.env.AI_BRAIN_TIMEOUT_MS) > 0 ? Number(process.env.AI_BRAIN_TIMEOUT_MS) : 4000;
 /** Whether an AI Brain is configured at all, as opposed to configured and not answering. */
@@ -72,7 +75,7 @@ async function postJson<T>(path: string, body: unknown): Promise<T | null> {
   try {
     const res = await fetch(`${AI_BRAIN_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...AUTH },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",

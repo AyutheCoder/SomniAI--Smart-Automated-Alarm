@@ -15,5 +15,6 @@ COPY . .
 # (prompt 5.2, MODEL_CARD.md); the image has no datasets and trains nothing.
 RUN python -c "import predict; predict.load_models(); print('models loaded:', sorted(predict.get_meta()['models']))"
 
+# Render and Railway say which port to listen on in $PORT (prompt 7.4); 8000 locally.
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]

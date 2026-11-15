@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
   process.env.AI_BRAIN_URL = "http://ai-brain.test";
+  process.env.AI_BRAIN_TOKEN = "test-brain-token";
 });
 
 import { POST as wakePlan } from "@/app/api/ai/wake-plan/route";
@@ -50,6 +51,8 @@ describe("POST /api/ai/wake-plan", () => {
     const [url, init] = brain.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://ai-brain.test/plan/wake");
     expect(JSON.parse(String(init.body))).toMatchObject({ requiredReliability: 0.9, wakeTime: "05:40", minSleepHours: 6.5 });
+    // The deployed AI Brain answers only the app (7.4).
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer test-brain-token");
   });
 
   it("reports the planner offline when the Brain answers with an error", async () => {
