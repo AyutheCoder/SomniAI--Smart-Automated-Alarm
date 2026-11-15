@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { attachDatabasePool } from "@vercel/functions";
 const MONGO_URI = process.env.MONGO_DB_URI || "";
 type MongooseCache = {
   conn: typeof mongoose | null;
@@ -28,7 +29,17 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
         connectTimeoutMS: 4000,
         socketTimeoutMS: 20000,
       })
-      .then((m) => m)
+      .then((m) => {
+        // On Vercel (7.4): a function is paused between requests, and sockets it
+        // held go stale meanwhile; a query on one waited for an answer that never
+        // came (seen on staging: requests hanging with no response). Vercel's
+        // helper closes idle connections before a pause, so a woken function
+        // opens fresh ones.
+        if (process.env.VERCEL) {
+          attachDatabasePool(m.connection.getClient());
+        }
+        return m;
+      })
       .catch((err) => {
         // Drop the rejected promise so the next request retries rather than
         // re-awaiting a permanently failed connection attempt.

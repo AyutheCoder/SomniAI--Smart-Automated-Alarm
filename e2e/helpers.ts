@@ -1,6 +1,33 @@
 import { expect, type Page } from "@playwright/test";
 import { SUMS } from "../lib/mathChallenge";
 
+/**
+ * Against a deployed site (npm run e2e:staging, prompt 7.4), which has what
+ * production has: an AI Brain, Google and Twilio. The local e2e server has
+ * none of them on purpose, so each flow expects what its environment has.
+ */
+export const DEPLOYED = Boolean(process.env.E2E_BASE_URL);
+
+/**
+ * A GET of the test's own (the page's session, outside the page). Against a
+ * deployed site, the request client reuses a kept-alive connection the host
+ * may have closed while a flow waited a minute for its alarm; that shows as
+ * ECONNRESET with nothing wrong in the app. A GET is safe to send again, so a
+ * dropped connection is retried once; any other failure is the test's result.
+ */
+export async function getJson(page: Page, path: string): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await (await page.request.get(path)).json();
+    }
+    catch (e) {
+      if (attempt > 0 || !/ECONNRESET|socket hang up|EPIPE/.test(String(e))) {
+        throw e;
+      }
+    }
+  }
+}
+
 /** Signs up a new account and waits for the home page; returns its email address. */
 export async function signUp(page: Page, name = "E2E Sleeper"): Promise<string> {
   const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
@@ -37,8 +64,8 @@ export async function addAlarmOneMinuteAhead(page: Page, label: string, strategy
   }
   await form.getByRole("button", { name: "Add alarm" }).click();
   await expect(alarmRow(page, label)).toContainText("scheduled");
-  // No AI Brain in the e2e server, so the plan is rule-based and says so.
-  await expect(alarmRow(page, label)).toContainText("plan: rule-based");
+  // The plan says who made it: the AI Brain where there is one, else the rules.
+  await expect(alarmRow(page, label)).toContainText(DEPLOYED ? "plan: AI Brain" : "plan: rule-based");
 }
 
 export async function waitForRingAndOpenChallenge(page: Page) {
@@ -70,7 +97,6 @@ export async function solveSums(page: Page) {
 }
 
 export async function alarmStatus(page: Page, label: string): Promise<string | undefined> {
-  const res = await page.request.get("/api/alarms");
-  const json = await res.json();
+  const json = await getJson(page, "/api/alarms");
   return json.data.items.find((a: { label: string }) => a.label === label)?.status;
 }

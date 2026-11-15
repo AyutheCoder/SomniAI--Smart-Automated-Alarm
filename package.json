@@ -28,6 +28,7 @@
   "dependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
+    "@vercel/functions": "3.10.4",
     "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.7",
     "lucide-react": "^0.469.0",

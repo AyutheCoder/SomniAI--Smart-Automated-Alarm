@@ -5,7 +5,7 @@
 // and once the network is back the outbox's resends must not record the ring
 // twice (lib/idempotency.ts).
 import { expect, test } from "@playwright/test";
-import { addAlarmOneMinuteAhead, alarmStatus, SERVER, signUp, solveSums, waitForRingAndOpenChallenge } from "./helpers";
+import { addAlarmOneMinuteAhead, alarmStatus, getJson, SERVER, signUp, solveSums, waitForRingAndOpenChallenge } from "./helpers";
 
 test("network lost mid-request: the alarm rings and stops, the page says so, and nothing is recorded twice", async ({ page }) => {
   const label = `Lost ${Date.now()}`;
@@ -39,10 +39,10 @@ test("network lost mid-request: the alarm rings and stops, the page says so, and
   expect(lost.size).toBeGreaterThan(0);
 
   // Every result the server did twice-asked is recorded once.
-  const alarms = await (await page.request.get("/api/alarms")).json();
+  const alarms = await getJson(page, "/api/alarms");
   const id = alarms.data.items.find((a: { label: string }) => a.label === label)._id;
   for (const type of ["alarm_fire", "dismiss"]) {
-    const events = await (await page.request.get(`/api/events?type=${type}&limit=500`)).json();
+    const events = await getJson(page, `/api/events?type=${type}&limit=500`);
     const mine = events.data.items.filter((e: { meta?: { alarmId?: string } }) => e.meta?.alarmId === id);
     expect(mine, `${type} events for the alarm`).toHaveLength(1);
   }

@@ -3,7 +3,7 @@
 // tests/api/buddy.test.ts; its push needs Firebase and two phones
 // (DEVICE_TESTS.md, 3.2).
 import { expect, test } from "@playwright/test";
-import { alarmRow, signUp } from "./helpers";
+import { alarmRow, DEPLOYED, getJson, signUp } from "./helpers";
 
 // Found in the two-device test: the form had no way to make an alarm critical,
 // so a hand-made alarm could never alert a buddy.
@@ -22,7 +22,7 @@ test("the alarm form can make an alarm critical, which is what alerts a buddy", 
     await form.getByRole("button", { name: "Add alarm" }).click();
     await expect(alarmRow(page, label)).toContainText("scheduled");
   }
-  const alarms = (await (await page.request.get("/api/alarms")).json()).data.items as
+  const alarms = (await getJson(page, "/api/alarms")).data.items as
     { label: string; minConfidence: number; verificationRequired: boolean; ringPlan: { critical: boolean } }[];
   const byLabel = Object.fromEntries(alarms.map((a) => [a.label, a]));
   expect(byLabel.Exam).toMatchObject({ minConfidence: 85, verificationRequired: true, ringPlan: { critical: true } });
@@ -77,8 +77,14 @@ test("an emergency contact needs their agreement, and can be removed", async ({ 
   await form.getByLabel("They've agreed to get these texts from SomniAI.").check();
   await form.getByRole("button", { name: "Save contact" }).click();
   await expect(form.getByRole("button", { name: "Remove" })).toBeVisible();
-  // No Twilio in the e2e server: the panel says texts wouldn't be sent, rather than pretend.
-  await expect(form).toContainText("Texts aren't set up on this server yet");
+  if (DEPLOYED) {
+    // Twilio is set up on a deployed site: the panel doesn't warn. (This user has no alarm, so nothing is texted.)
+    await expect(form).not.toContainText("Texts aren't set up");
+  }
+  else {
+    // No Twilio in the e2e server: the panel says texts wouldn't be sent, rather than pretend.
+    await expect(form).toContainText("Texts aren't set up on this server yet");
+  }
   await page.reload();
   await expect(form.getByLabel("Contact's number")).toHaveValue("+919876543210");
 

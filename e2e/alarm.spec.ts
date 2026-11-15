@@ -3,7 +3,7 @@
 import { expect, test } from "@playwright/test";
 import { SUMS } from "../lib/mathChallenge";
 import { forbiddenWordingIn } from "../lib/predictionCopy";
-import { addAlarmOneMinuteAhead, alarmRow, alarmStatus, readProblem, SERVER, signUp, solveSums, waitForRingAndOpenChallenge } from "./helpers";
+import { addAlarmOneMinuteAhead, alarmRow, alarmStatus, DEPLOYED, getJson, readProblem, SERVER, signUp, solveSums, waitForRingAndOpenChallenge } from "./helpers";
 
 test("an alarm a minute ahead rings, and solving the maths turns it off", async ({ page }) => {
   const label = `Exam ${Date.now()}`;
@@ -15,7 +15,8 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   await expect(sources).toHaveText([
     /Sleep log\s*not connected\s*No nights logged yet\s*Sleep from Health Connect is read in the Android app/,
     /Weather\s*not connected\s*Not connected: allow location for live weather\s*Use my location/,
-    /Calendar\s*not connected\s*Not connected\s*Google isn't set up on this server/,
+    // Google is set up on a deployed site, and not in the local e2e server.
+    DEPLOYED ? /Calendar\s*not connected\s*Not connected\s*Connect Google Calendar/ : /Calendar\s*not connected\s*Not connected\s*Google isn't set up on this server/,
     /Wearable\s*not connected\s*Not connected/,
     /Screen time\s*not connected\s*Not measured in the last week\s*Screen time before bed is measured in the Android app/,
   ]);
@@ -24,8 +25,15 @@ test("an alarm a minute ahead rings, and solving the maths turns it off", async 
   // trust them; nothing on the page claims more.
   const insights = page.getByRole("region", { name: "Sleep score and coaching" });
   await expect(insights).toContainText("Wake-time regularity", { timeout: 30_000 });
-  await expect(insights).toContainText("Predictions from Fallback rules · rough estimate.");
-  await expect(insights).toContainText("Coaching from Fallback rules · rule-based advice.");
+  if (DEPLOYED) {
+    // The AI Brain answers, and says how far to trust it; coaching is still rules.
+    await expect(insights).toContainText(/Predictions from AI Brain · (low|moderate|higher) confidence\./);
+    await expect(insights).toContainText("Coaching from AI Brain · rule-based advice.");
+  }
+  else {
+    await expect(insights).toContainText("Predictions from Fallback rules · rough estimate.");
+    await expect(insights).toContainText("Coaching from Fallback rules · rule-based advice.");
+  }
   expect(forbiddenWordingIn(await page.locator("body").innerText())).toEqual([]);
 
   await addAlarmOneMinuteAhead(page, label);
@@ -78,7 +86,7 @@ test("a wrong answer does not turn the alarm off, and unset backups say so", asy
   // a "fire" call here): its record is untouched and it has no events at all,
   // so certainly no dismissal or passed wake check.
   expect(await alarmStatus(page, label)).toBe("scheduled");
-  const events = await (await page.request.get("/api/events")).json();
+  const events = await getJson(page, "/api/events");
   expect(events.data.items).toEqual([]);
 
   // Still unanswered at the last level: the backups are tried, and since none

@@ -337,7 +337,8 @@ function app(name) {
   mkdirSync(".vercel", { recursive: true });
   writeFileSync(".vercel/project.json", JSON.stringify({ orgId: s.vercelTeamId, projectId: s.vercelProjectId }));
   const commit = head();
-  const dirty = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" }).stdout.trim() !== "";
+  // Uncommitted changes other than this script's own record of addresses.
+  const dirty = spawnSync("git", ["status", "--porcelain", "--", ".", `:!${STATE_FILE}`], { encoding: "utf8" }).stdout.trim() !== "";
   console.log(`  Vercel: deploying ${commit.slice(0, 7)}${dirty ? " (with uncommitted changes)" : ""} to ${s.vercelProject}…`);
   const res = spawnSync("npx", ["--yes", VERCEL_CLI, "deploy", "--prod", "--yes", "--token", deploy.VERCEL_TOKEN,
     "--scope", s.vercelTeamId, "--env", `SOMNIAI_COMMIT=${commit.slice(0, 7)}${dirty ? "-dirty" : ""}`], {

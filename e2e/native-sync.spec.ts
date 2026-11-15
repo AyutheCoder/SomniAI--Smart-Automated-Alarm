@@ -4,7 +4,7 @@
 // nativePromise), so the page's own code runs unchanged: it keeps a schedule
 // the way the plugin's reconcile does and records every call.
 import { expect, test, type Page } from "@playwright/test";
-import { alarmRow, signUp } from "./helpers";
+import { alarmRow, getJson, signUp } from "./helpers";
 
 type Phone = {
   calls: { id: string; hour: number; minute: number; enabled: boolean }[][];
@@ -46,7 +46,7 @@ async function asPhone(page: Page, api = 2) {
 const phoneOf = (page: Page) => page.evaluate(() => (window as unknown as { __phone: Phone }).__phone);
 
 async function serverAlarm(page: Page, label: string) {
-  const json = await (await page.request.get("/api/alarms")).json();
+  const json = await getJson(page, "/api/alarms");
   return json.data.items.find((a: { label: string }) => a.label === label) as { _id: string; enabled: boolean; scheduledTime: string } | undefined;
 }
 
