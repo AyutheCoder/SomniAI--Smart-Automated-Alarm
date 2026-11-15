@@ -2,11 +2,14 @@
 
 import { useEffect } from "react";
 import { reportError } from "@/lib/errorReporter";
+import { reloadForChunkError } from "@/lib/chunkReload";
 
 /** A page that failed to render (7.3): said plainly, reported, and one press from trying again. */
 export default function PageError({ error, reset }: { error: Error; reset: () => void }) {
   useEffect(() => {
     reportError(error);
+    // Part of the page's code didn't load (a dropped connection, or a deploy since the tab opened): reload once (7.4).
+    reloadForChunkError(error);
   }, [error]);
   return (
     <main className="mx-auto max-w-md px-4 py-16 text-sm text-slate-300">

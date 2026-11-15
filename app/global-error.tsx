@@ -2,11 +2,14 @@
 
 import { useEffect } from "react";
 import { reportError } from "@/lib/errorReporter";
+import { reloadForChunkError } from "@/lib/chunkReload";
 
 /** The whole app failed to render, layout included (7.3). Its own <html>, as Next.js requires. */
 export default function GlobalError({ error, reset }: { error: Error; reset: () => void }) {
   useEffect(() => {
     reportError(error);
+    // Part of the page's code didn't load (a dropped connection, or a deploy since the tab opened): reload once (7.4).
+    reloadForChunkError(error);
   }, [error]);
   return (
     <html lang="en">
