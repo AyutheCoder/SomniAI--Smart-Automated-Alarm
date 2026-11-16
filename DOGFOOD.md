@@ -95,7 +95,7 @@ Found before Night 1 (2026-11-16), tester A, POCO (Android 16, HyperOS), build 0
 
 **Test.** `SyncCallsTest`: the fire alone equals the first call of a whole ring; the ending never sends the fire again, for every outcome. `RingServiceTest` (on the emulators in CI): the fire is in the queue while the alarm still rings.
 
-**Status:** Fixed. Shipped as the Firebase build after `0.1.0 (121)`. Verified once a ring cut short shows up as rung.
+**Status:** Fixed in `357287a`, Firebase build `0.1.0 (125)`. Verified once a ring cut short shows up as rung.
 
 ### Found before Night 1 (prompt 7.5, the first install from Firebase), both fixed
 
