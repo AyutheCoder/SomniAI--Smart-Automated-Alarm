@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "errors": "node scripts/errors.mjs",
+    "dogfood": "node scripts/dogfood.mjs",
     "deploy": "node scripts/deploy.mjs",
     "e2e:staging": "node scripts/e2e-staging.mjs",
     "buddy:cron": "node scripts/buddy-cron.mjs",
