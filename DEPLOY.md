@@ -8,9 +8,17 @@ people and the Android app use.
 | | Staging | Production |
 | --- | --- | --- |
 | Web app (Vercel, Mumbai) | project `somniai-staging` | project `somniai` |
-| AI Brain (Render, Singapore) | `somniai-brain-staging`, free plan (sleeps when idle) | `somniai-brain`, Starter plan (always on) |
+| AI Brain (Render, Singapore) | `somniai-brain-staging`, free plan (sleeps when idle) | `somniai-brain`, free plan (sleeps when idle) |
 | Database (Atlas M0, AWS Mumbai) | `somniai-staging`, its own user | `somniai-production`, its own user |
 | Addresses | `deploy/environments.json` | `deploy/environments.json` |
+
+Both AI Brains are on Render's free plan (the operator's choice, 2026-11-16). After 15
+minutes without a request one goes to sleep, and the next request takes about a minute
+to wake it; meanwhile the app uses its own rules and says predictions are offline
+(alarms never depend on it). The two share the workspace's 750 free hours a month, so
+near the end of a month one can be stopped until the next. Moving production to an
+always-on plan is one line in `scripts/deploy.mjs` (`renderPlan: "starter"`) and a card
+on the Render account.
 
 Each database user can read and write only its own database: a staging key can't
 touch production data (checked when they were set up).

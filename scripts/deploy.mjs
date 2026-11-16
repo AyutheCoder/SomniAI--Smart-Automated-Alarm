@@ -28,7 +28,7 @@ const STATE_FILE = "deploy/environments.json";
 
 export const ENVIRONMENTS = {
   staging: { vercelProject: "somniai-staging", renderService: "somniai-brain-staging", renderPlan: "free", atlas: "ATLAS_STAGING_URI", prefix: "STAGING" },
-  production: { vercelProject: "somniai", renderService: "somniai-brain", renderPlan: "starter", atlas: "ATLAS_PRODUCTION_URI", prefix: "PRODUCTION" },
+  production: { vercelProject: "somniai", renderService: "somniai-brain", renderPlan: "free", atlas: "ATLAS_PRODUCTION_URI", prefix: "PRODUCTION" },
 };
 
 /** KEY=value lines; values may be quoted; comments and blanks skipped. */
@@ -319,11 +319,22 @@ async function brain(name) {
   }
   const r = render(deploy);
   const d = await r("POST", `/services/${s.renderServiceId}/deploys`, { commitId: commit, clearCache: "do_not_clear" });
-  if (d.status !== 201 && d.status !== 200) {
+  let deployId = d.json?.id;
+  if (d.status === 202) {
+    // Queued behind a deploy already running (a new service builds once by itself),
+    // and Render answers without its id: wait for the newest one, which is ours.
+    const list = await r("GET", `/services/${s.renderServiceId}/deploys?limit=1`);
+    deployId = list.json?.[0]?.deploy?.id;
+    if (!deployId) {
+      fail("find the queued Render deploy", list);
+    }
+    console.log(`  Render: queued behind a deploy already running`);
+  }
+  else if (d.status !== 201 && d.status !== 200) {
     fail("start Render deploy", d);
   }
   console.log(`  Render: deploying ${commit.slice(0, 7)} to ${ENVIRONMENTS[name].renderService}…`);
-  await waitForRenderDeploy(r, s.renderServiceId, d.json.id);
+  await waitForRenderDeploy(r, s.renderServiceId, deployId);
   console.log("  Render: live");
 }
 
