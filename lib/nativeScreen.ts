@@ -15,9 +15,14 @@ export function hasScreenTime(native: NativeConnection | null): boolean {
 }
 
 /** Why SomniAI asks for Usage access, shown before Settings is opened. */
+// Play reviews this as the prominent disclosure for Usage access (play/DECLARATIONS.md),
+// so it claims no more than the code does: since 5.2 the trained models can't use
+// screen time (no dataset recorded it); only the built-in estimate, used while the
+// AI Brain can't be reached (lib/aiClient.ts fallbackSleep), does.
 export const SCREEN_WHY = [
-  "Using your phone in the hours before bed changes how well you sleep and how easily you wake, "
-  + "so it's one of the things SomniAI's predictions and bedtime plan weigh.",
+  "Using your phone in the hours before bed can change how well you sleep and how easily you wake. "
+  + "SomniAI's built-in sleep estimate, used when its prediction service can't be reached, takes it into account; "
+  + "its trained prediction models can't yet, because no public sleep dataset recorded screen time.",
   "To measure it, SomniAI needs Android's Usage access. It counts how many minutes your phone was in use "
   + "in the 3 hours before you went to bed, once a night. Only that number leaves your phone: never which apps, "
   + "sites or messages.",

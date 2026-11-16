@@ -98,5 +98,8 @@ describe("screen time from the app's page", () => {
     expect(text).toMatch(/Only that number leaves your phone: never which apps/);
     expect(text).toMatch(/turn it off there at any time: then nothing more is measured, and nights already measured stop counting once they're a week old/);
     expect(text).toMatch(/Without it, predictions simply leave screen time out/);
+    // The prominent disclosure Play reviews (7.5): the trained models don't use it (5.2), so it mustn't say they do.
+    expect(text).toMatch(/its trained prediction models can't yet/);
+    expect(text).not.toMatch(/predictions and bedtime plan weigh/);
   });
 });

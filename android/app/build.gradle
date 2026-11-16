@@ -7,8 +7,11 @@ android {
         applicationId "app.somniai.alarm"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // A release (scripts/release.mjs, prompt 7.5) passes the number of commits as
+        // the version code, so every upload to Google Play is higher than the last,
+        // and package.json's version as the name. Other builds keep 1 / "dev".
+        versionCode((project.findProperty("somniaiVersionCode") ?: "1") as Integer)
+        versionName((project.findProperty("somniaiVersionName") ?: "dev") as String)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +19,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The upload key (prompt 7.5, play/README.md): kept outside the repository and
+    // given only by scripts/release.mjs through the environment. Without it a
+    // release build is unsigned, which Google Play refuses, and the script stops.
+    def uploadStore = System.getenv("SOMNIAI_UPLOAD_STORE")
+    signingConfigs {
+        release {
+            if (uploadStore) {
+                storeFile file(uploadStore)
+                storeType "pkcs12"
+                storePassword System.getenv("SOMNIAI_UPLOAD_PASSWORD")
+                keyAlias "upload"
+                keyPassword System.getenv("SOMNIAI_UPLOAD_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            signingConfig uploadStore ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

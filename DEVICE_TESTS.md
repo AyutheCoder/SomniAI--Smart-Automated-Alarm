@@ -851,3 +851,41 @@ none rings.
 | 4 | **Delete my account**, the address and the right password | "Your account and everything stored with it were deleted. This phone's 2 alarms were cancelled and forgotten."; after a few seconds, the sign-in page says the account was deleted |
 | 5 | Wait past both alarm times | Neither rings; no SomniAI next-alarm icon; `adb shell dumpsys alarm` has no `app.somniai.alarm` alarm clock |
 | 6 | Sign in again with the deleted account | "Invalid email or password." |
+
+## 7.5 Google Play: screenshots, the declaration video, and installing from Play
+
+### Screenshots and video, POCO (25118PC98I, Android 16, HyperOS), 2026-11-16
+
+`node scripts/play-screenshots.mjs --use-installed`, a debug build pointed at staging with a demo account (no production data). Everything in the listing is a capture of the real app.
+
+| # | What | Result |
+| --- | --- | --- |
+| 1 | The alarm list, synced to the phone ("Alarms ring from this phone, even with the app closed.") | Pass |
+| 2 | Tonight's plan from staging's AI Brain: 85% at 06:30 refused honestly (68% the most tonight can reach, a backup alarm offered) | Pass. The first try met the free AI Brain asleep: the app said "The wake planner is offline right now", as it should; the script now wakes it first |
+| 3 | Insights, with "Just for you" from 8 logged nights | Pass |
+| 4 | Wake buddy with an invite code | Pass |
+| 5 | An alarm 1 minute ahead, phone locked: rang on time over the lock screen (`RingActivity` in front), the ring screen captured | Pass (11:35:00 and 15:28:00 runs) |
+| 6 | Stop alarm, then the wake check: 3 sums typed by adb, the alarm stopped | Pass: morning report "Wake check passed in 34 s (3 answers)", level 4 of 5 |
+| 7 | The morning report after the ring had synced | Pass |
+| 8 | The bedtime check screen | Pass: it found 2 real problems on this phone (battery optimisation on, among them) |
+| 9 | The screen recording for the foreground-service declaration | Pass, `android/app/build/play-video/` (not committed) |
+
+The status bar is cropped off every screenshot (HyperOS ignores demo mode and showed its USB indicator). On one run, the unlock after the ring timed out and two screens came out black. The script now refuses to capture a screen that's off, and `--finish` retook those two.
+
+Found on the way (the phone, not the app):
+* **USB installs refused.** HyperOS refused `adb install` (`INSTALL_FAILED_USER_RESTRICTED`) until **Install via USB** was on in Developer options, and after that still refused it. The APK was copied to the phone and installed from the phone itself (`--use-installed`).
+* **App lock covered the app.** Xiaomi's **App lock** put its own PIN screen over SomniAI after a fresh install ("lock new apps"). Turned off for SomniAI. **Not yet checked:** whether App lock would also cover the alarm's ring screen. If it does, the bedtime check should warn about it.
+* **Recorder refused the native size.** `screenrecord` failed at the phone's native 1080 × 2392 ("Encoder failed"); the script records at the screen's 1080 × 1920.
+
+The emulator (Android 17 image, a 4 GB guest) didn't fit in this laptop's 8 GB alongside everything else. One alarm there fired but couldn't start ringing: Android allows 10 s to start the ring service, and the starved emulator took 29 s to start the receiver. The app showed its notification and logged `ring_failed`, as designed. A phone doesn't get near that.
+
+### Installing from Google Play
+
+**Not run yet**: needs the Play developer account and the internal-testing release (`play/README.md`, steps 1-7).
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Upload `app-release.aab` to Internal testing, with Google-generated app signing | The release is accepted, with no errors on the declarations |
+| 2 | Uninstall the debug build from the phone; open the testers' opt-in link with a tester account; install from Play | Play installs SomniAI; Settings > Apps shows version 0.1.0 |
+| 3 | Sign in to your real account; your alarms appear | The next-alarm icon shows SomniAI's next alarm |
+| 4 | An alarm 2 minutes ahead; lock the phone | It rings on time over the lock screen; the wake check stops it |

@@ -14,10 +14,10 @@ Definitions used (Play Console Help, "Provide information for Google Play's Data
 | Question | Answer | Why |
 | --- | --- | --- |
 | Does your app collect or share any of the required user data types? | **Yes** | The account, alarms, and the optional sources below. |
-| Is all of the user data collected by your app encrypted in transit? | **Yes** | Release builds load the server over HTTPS only (`capacitor.config.ts`, tested in `tests/capacitor-config.test.ts`); Google, Firebase and Twilio are HTTPS. **Only true if the deployed server is HTTPS**: check before submitting. |
-| Which account creation methods does your app support? | **Username and password**, and **OAuth (Sign in with Google)** | `lib/auth.ts`. |
+| Is all of the user data collected by your app encrypted in transit? | **Yes** | Release builds load the server over HTTPS only (`capacitor.config.ts`, tested in `tests/capacitor-config.test.ts`); Google, Firebase and Twilio are HTTPS. Production is `https://somniai.vercel.app` (7.4), and the release bundle is checked to load it over HTTPS only (`scripts/release.mjs`, 7.5); its AI Brain and database connections are TLS too. |
+| Which account creation methods does your app support? | **Username and password** | `lib/auth.ts`. Add **OAuth (Sign in with Google)** when Google sign-in is switched on in production (`DEPLOY.md`); until then the button isn't shown. |
 | Do you provide a way for users to request that their data is deleted? | **Yes** | In the app: *Your data* > *Delete my account* (`app/_components/AccountPanel.tsx`). |
-| Delete account URL | `https://<your domain>/delete-account` | Public page (`app/delete-account/page.tsx`): sign in and delete, or write in if you can't sign in. |
+| Delete account URL | `https://somniai.vercel.app/delete-account` | Public page (`app/delete-account/page.tsx`): sign in and delete, or write in if you can't sign in. |
 | Data deletion: can users request that some data is deleted without deleting the account? | **Yes** | Telemetry (delete all), Google Calendar (disconnect), the study (leave), buddy pairing (end), emergency contact (remove). |
 
 ## Data types (section 2)
@@ -53,7 +53,7 @@ Not collected. The alerts and texts SomniAI sends are its own notifications, not
 
 | Type | Collected | Required? | Purposes | What |
 | --- | --- | --- | --- | --- |
-| Calendar events | Yes | Optional | App functionality | Google Calendar, read-only scope, next 7 days, turned into tasks (title, time, description); `lib/googleCalendar.ts`, `lib/calendarServer.ts`. The OAuth consent itself also needs Google's verification of the sensitive scope. |
+| Calendar events | Yes | Optional | App functionality | Google Calendar, read-only scope, next 7 days, turned into tasks (title, time, description); `lib/googleCalendar.ts`, `lib/calendarServer.ts`. The OAuth consent itself also needs Google's verification of the sensitive scope. Declared already, although production can't connect a calendar until its Google redirect address is registered (`DEPLOY.md`): declaring an optional type early is the safe side. |
 
 ### Contacts
 
@@ -92,6 +92,6 @@ Not collected by the Android app: it has no location permission (`AndroidManifes
 ## Before submitting
 
 1. The deployment's privacy policy must be complete: set `SOMNIAI_OPERATOR`, `SOMNIAI_CONTACT`, `SOMNIAI_HOSTING`, `SOMNIAI_BACKUPS`, `SOMNIAI_JURISDICTION` (`lib/legal.ts`). `/privacy` warns at the top while any is missing.
-2. Privacy policy URL: `https://<your domain>/privacy`. It must be public (it is: `middleware.ts`) and not a PDF.
-3. Check the answers against the release build (prompt 7.5) and the server it points at.
+2. Privacy policy URL: `https://somniai.vercel.app/privacy`. It must be public (it is: `middleware.ts`) and not a PDF.
+3. Checked against the release build's merged manifest and production in prompt 7.5 (`play/DECLARATIONS.md` lists every permission the release asks for).
 4. These are prepared answers, not legal advice; have the policy and the form reviewed before publishing.
