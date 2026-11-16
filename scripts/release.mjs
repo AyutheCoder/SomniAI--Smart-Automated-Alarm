@@ -349,9 +349,10 @@ function distribute(notes) {
     const show = (r) => console.log(`${r.stdout ?? ""}${r.stderr ?? ""}`.split("\n").filter((l) => l.trim() && !/npm warn/.test(l)).slice(-12).join("\n"));
     let res = upload({ ...process.env, GOOGLE_APPLICATION_CREDENTIALS: keyFile });
     if (res.status !== 0 && /403|does not have permission/i.test(`${res.stdout}${res.stderr}`)) {
-      // The server's push account may lack App Distribution's role (seen in 7.5): then
-      // upload as the project's owner, signed in once with `firebase login`.
-      console.log("  the server's Firebase account can't upload test builds; trying your own Firebase login");
+      // 403 until App Distribution is turned on in the Firebase console (its "Get
+      // started"; seen in 7.5, after which the server's account uploaded fine), or if
+      // that account lacks its role: then try the owner's own `firebase login`.
+      console.log("  the server's Firebase account was refused (is App Distribution turned on in the console?); trying your own Firebase login");
       const { GOOGLE_APPLICATION_CREDENTIALS: _unused, ...env } = process.env;
       void _unused;
       res = upload(env);

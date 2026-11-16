@@ -1,5 +1,6 @@
 package app.somniai.alarm.alarms;
 
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -306,6 +307,29 @@ public class RingService extends Service implements RingController.Effects {
             getSystemService(NotificationManager.class).notify(NOTIFICATION_ID, n);
             return false;
         }
+        finally {
+            openRingScreenIfInUse();
+        }
+    }
+
+    /**
+     * With the phone awake and unlocked, the full-screen intent only shows a banner,
+     * which some phones hide: open the ring screen directly (RingScreen says when).
+     */
+    private void openRingScreenIfInUse() {
+        boolean interactive = getSystemService(PowerManager.class).isInteractive();
+        boolean locked = getSystemService(KeyguardManager.class).isKeyguardLocked();
+        if (!RingScreen.openDirectly(interactive, locked, RingActivity.inFront)) {
+            return;
+        }
+        try {
+            startActivity(new Intent(this, RingActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION));
+            // Android may still hold back a start from the background without saying so; the notification stays.
+            Log.i(AlarmScheduler.TAG, "phone in use: opened the ring screen directly");
+        }
+        catch (RuntimeException e) {
+            Log.w(AlarmScheduler.TAG, "phone in use: couldn't open the ring screen (" + e + "); the notification opens it");
+        }
     }
 
     @Override
@@ -400,6 +424,8 @@ public class RingService extends Service implements RingController.Effects {
     @Override
     public void promptChallenge() {
         sendBroadcast(new Intent(ACTION_CHALLENGE).setPackage(getPackageName()));
+        // The check can only be answered on the ring screen: make sure it's there.
+        openRingScreenIfInUse();
     }
 
     /**

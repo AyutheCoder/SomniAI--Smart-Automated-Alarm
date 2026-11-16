@@ -879,6 +879,27 @@ Found on the way (the phone, not the app):
 
 The emulator (Android 17 image, a 4 GB guest) didn't fit in this laptop's 8 GB alongside everything else. One alarm there fired but couldn't start ringing: Android allows 10 s to start the ring service, and the starved emulator took 29 s to start the receiver. The app showed its notification and logged `ring_failed`, as designed. A phone doesn't get near that.
 
+### The first Firebase App Distribution build, POCO, 2026-11-16
+
+The tester chose Firebase App Distribution (free) over Google Play's US$25 fee.
+* Build 0.1.0 (120) was uploaded by `release.mjs distribute`. It was refused (403) until App Distribution was turned on in the Firebase console.
+* The invite e-mail reached the tester, and the phone installed 0.1.0 (120) from Firebase (`installerPackageName=com.google.android.packageinstaller`).
+* The tester signed in to production, and their alarms appeared.
+
+**Found: an alarm set while the phone was in use rang with no way to answer it.** The tester set an alarm 2 minutes ahead and stayed in SomniAI with the phone unlocked.
+* It fired 54 ms late and escalated through all 5 levels: level 4, the wake challenge, at 35 s; level 5, backups, at 75 s.
+* But the ring screen never appeared.
+* Android opens a full-screen intent only on a locked or sleeping phone; on a phone in use it shows a heads-up banner, and HyperOS hides those for a new app ("Floating notifications" off).
+* The only way in was the notification in the shade.
+
+**Fixed** (`RingScreen.java`, `RingScreenTest`): while the phone is awake and unlocked and the ring screen isn't in front, the ringing service opens the ring screen itself when the ring starts and again at the wake check.
+
+| # | Do this | Pass when |
+| --- | --- | --- |
+| 1 | Install the fixed build from Firebase App Tester; set an alarm 2 min ahead; keep SomniAI open, phone unlocked | At the alarm time the ring screen (Stop alarm / sums) opens over SomniAI; logcat `phone in use: opened the ring screen directly` |
+| 2 | The same, but in another app (e.g. the browser) | The ring screen opens, or, if Android holds the start back, the alarm's notification opens it (note which) |
+| 3 | The same with the phone locked | The ring screen opens over the lock screen (as before) |
+
 ### Installing from Google Play
 
 **Not run yet**: needs the Play developer account and the internal-testing release (`play/README.md`, steps 1-7).

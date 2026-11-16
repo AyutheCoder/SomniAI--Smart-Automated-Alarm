@@ -132,9 +132,19 @@ public class RingActivity extends Activity {
         }
     }
 
+    /** Whether the ring screen is in front, so the service doesn't open it again (RingScreen). */
+    static volatile boolean inFront;
+
+    @Override
+    protected void onPause() {
+        inFront = false;
+        super.onPause();
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        inFront = true;
         // Opened from an old notification after the ring already ended.
         if (RingService.current == null) {
             finish();
