@@ -1,15 +1,15 @@
-# Dogfooding SomniAI: 30 nights
+# Dogfooding SomniAI: 10 nights
 
-Prompt 8.1. SomniAI is used as the only alarm for 30 nights. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
+Prompt 8.1. SomniAI is used as the only alarm for 10 nights. The plan asked for 30; the tester chose 10 (2026-11-16). Ten nights show fewer of the slow failures (a weekend, a phone update, a battery manager on a bad night), so the result is stated as 10 nights, not more. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
 
 The plan asked for two testers. One is taking part (decided 2026-11-16), **tester A**. The B steps below stay for anyone who joins later. Testers are named only by letter, because this file is public; their addresses are in `.env.deploy.local` (`DOGFOOD_ACCOUNTS`), which git ignores.
 
 | | |
 | --- | --- |
-| Night 1 | *(the first night both testers are set up; fill in)* |
-| Night 30 | *(Night 1 + 29)* |
-| Build | Firebase App Distribution, the latest; note any update in the log |
-| Status | Not started |
+| Night 1 | The night ending **2026-11-17** (first alarm 05:30) |
+| Night 10 | The night ending **2026-11-26** |
+| Build | Firebase App Distribution, 0.1.0 (125) at the start; any update is noted in the log |
+| Status | Running |
 
 ## What counts
 
@@ -54,16 +54,14 @@ The plan asked for two testers. One is taking part (decided 2026-11-16), **teste
 4. **Commit with the failure's number** in the message (`D-003: ...`). Ship it: `release.mjs build --apk` + `distribute` for the phone, `npm run deploy -- app production` for the server and pages.
 5. **Record the commit and the build** under the failure, and mark it **Fixed**. Mark it **Verified** after a night where it didn't happen again.
 
-## Weekly review
+## Review
 
-| Week | Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1-7 | | | | | |
-| 2 | 8-14 | | | | | |
-| 3 | 15-21 | | | | | |
-| 4 | 22-30 | | | | | |
+| Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
+| --- | --- | --- | --- | --- | --- |
+| 1-5 | | | | | |
+| 6-10 | | | | | |
 
-At the end: **nights where every alarm of both testers rang on time and was stopped properly**, out of 30. That figure is the honest headline, with every failure behind it.
+At the end: **nights where every alarm rang on time and was stopped properly**, out of 10. That figure is the honest headline, with every failure behind it.
 
 ## Nights
 
