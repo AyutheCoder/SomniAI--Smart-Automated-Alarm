@@ -353,8 +353,8 @@ function distribute(notes) {
       // started"; seen in 7.5, after which the server's account uploaded fine), or if
       // that account lacks its role: then try the owner's own `firebase login`.
       console.log("  the server's Firebase account was refused (is App Distribution turned on in the console?); trying your own Firebase login");
-      const { GOOGLE_APPLICATION_CREDENTIALS: _unused, ...env } = process.env;
-      void _unused;
+      const env = { ...process.env };
+      delete env.GOOGLE_APPLICATION_CREDENTIALS;
       res = upload(env);
       if (res.status !== 0 && /authenticate|firebase login/i.test(`${res.stdout}${res.stderr}`)) {
         show(res);

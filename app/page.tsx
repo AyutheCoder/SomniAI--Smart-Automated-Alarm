@@ -12,6 +12,7 @@ import { resolveRingPlan } from "@/lib/ringPlan";
 import { connectNative, type NativeConnection, type NativeSyncStatus } from "@/lib/nativeSync";
 import { SomniAlarm } from "@/lib/nativeAlarm";
 import { hasPreflight, preflightLine } from "@/lib/nativePreflight";
+import { allowNotifications, ASKED_KEY as NOTIFICATIONS_ASKED, ensureNotifications, NOTIFICATIONS_OFF, type NotificationState } from "@/lib/nativeNotifications";
 import { hasPush, registerPush, type PushRegistration } from "@/lib/nativeBuddy";
 import { requestBackupsFromServer } from "@/lib/backupClient";
 import RingingOverlay, { type ResolveResult } from "./_components/RingingOverlay";
@@ -797,8 +798,44 @@ function NativeNotice({ native, status, onRetry }: { native: NativeConnection | 
         {status.state === "synced" ? "Alarms ring from this phone, even with the app closed." : "Updating the alarms on this phone…"}
         {status.state === "synced" && status.skipped.length > 0 ? ` ${status.skipped.length} without a valid time weren't set.` : ""}
       </p>
+      <NativeNotifications />
       {hasPreflight(native) && <NativePreflight />}
     </>
+  );
+}
+
+/**
+ * Notifications for the phone's alarms (7.5): asked for once per app start, and
+ * while they're off, said plainly, since an alarm then rings with no screen.
+ */
+function NativeNotifications() {
+  const [state, setState] = useState<NotificationState>("unknown");
+  useEffect(() => {
+    let asked = false;
+    try {
+      asked = sessionStorage.getItem(NOTIFICATIONS_ASKED) === "1";
+      sessionStorage.setItem(NOTIFICATIONS_ASKED, "1");
+    }
+    catch {
+      asked = true; // Without storage, don't risk asking on every load.
+    }
+    void ensureNotifications(SomniAlarm, !asked).then(setState);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void ensureNotifications(SomniAlarm, false).then(setState);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+  if (state !== "off") {
+    return null;
+  }
+  return (
+    <p role="alert" aria-label="Notifications" className="mb-4 rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+      {NOTIFICATIONS_OFF}{" "}
+      <button onClick={() => void allowNotifications(SomniAlarm).then(setState)} className="underline">Allow notifications</button>
+    </p>
   );
 }
 
