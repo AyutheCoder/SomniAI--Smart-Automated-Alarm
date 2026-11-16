@@ -342,11 +342,25 @@ function distribute(notes) {
     const notesFile = join(dir, "release-notes.txt");
     writeFileSync(notesFile, `SomniAI ${info.versionName} (${info.versionCode}), ${info.commit}. ${notes || "Test build."}`);
     console.log(`Sending SomniAI ${info.versionName} (${info.versionCode}) to ${testers.length} tester(s)…`);
-    const res = spawnSync("npx", ["--yes", FIREBASE_CLI, "appdistribution:distribute", APK,
+    const upload = (env) => spawnSync("npx", ["--yes", FIREBASE_CLI, "appdistribution:distribute", APK,
       "--app", appId, "--testers", testers.join(","), "--release-notes-file", notesFile],
-    { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32", env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: keyFile } });
+    { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32", env });
     // The CLI prints the console and tester links; nothing secret is in its output.
-    console.log(`${res.stdout ?? ""}${res.stderr ?? ""}`.trim().split("\n").filter((l) => l.trim()).slice(-12).join("\n"));
+    const show = (r) => console.log(`${r.stdout ?? ""}${r.stderr ?? ""}`.split("\n").filter((l) => l.trim() && !/npm warn/.test(l)).slice(-12).join("\n"));
+    let res = upload({ ...process.env, GOOGLE_APPLICATION_CREDENTIALS: keyFile });
+    if (res.status !== 0 && /403|does not have permission/i.test(`${res.stdout}${res.stderr}`)) {
+      // The server's push account may lack App Distribution's role (seen in 7.5): then
+      // upload as the project's owner, signed in once with `firebase login`.
+      console.log("  the server's Firebase account can't upload test builds; trying your own Firebase login");
+      const { GOOGLE_APPLICATION_CREDENTIALS: _unused, ...env } = process.env;
+      void _unused;
+      res = upload(env);
+      if (res.status !== 0 && /authenticate|firebase login/i.test(`${res.stdout}${res.stderr}`)) {
+        show(res);
+        throw new Error(`sign in to Firebase once, in a terminal: npx ${FIREBASE_CLI} login  (then run this again)`);
+      }
+    }
+    show(res);
     if (res.status !== 0) {
       throw new Error("Firebase refused the upload (above)");
     }
