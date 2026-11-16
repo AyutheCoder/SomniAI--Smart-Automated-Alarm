@@ -1,8 +1,8 @@
 # Dogfooding SomniAI: 30 nights
 
-Prompt 8.1. Two testers, **A** and **B**, use SomniAI as their only alarm for 30 nights. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
+Prompt 8.1. SomniAI is used as the only alarm for 30 nights. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
 
-Testers are named only by letter: this file is public. Their addresses are in `.env.deploy.local` (`DOGFOOD_ACCOUNTS`), which git ignores.
+The plan asked for two testers. One is taking part (decided 2026-11-16), **tester A**. The B steps below stay for anyone who joins later. Testers are named only by letter, because this file is public; their addresses are in `.env.deploy.local` (`DOGFOOD_ACCOUNTS`), which git ignores.
 
 | | |
 | --- | --- |
@@ -32,7 +32,7 @@ Testers are named only by letter: this file is public. Their addresses are in `.
    * Battery saver → **No restrictions**.
    * **App lock** off for SomniAI.
 5. **Turn off every alarm in other alarm apps**, including the phone's own Clock.
-6. **Pair as wake buddies (A with B)** in the Wake buddy panel. This works only once production's every-minute buddy check is scheduled (cron-job.org, `DEPLOY.md`). Until then buddy alerts don't go out: write that in the log rather than wonder why.
+6. **Only with a second tester:** pair as wake buddies (A with B) in the Wake buddy panel. This works only once production's every-minute buddy check is scheduled (cron-job.org, `DEPLOY.md`). Until then buddy alerts don't go out: write that in the log rather than wonder why.
 7. **Optional: turn on Alarm telemetry.** It records how long each alarm took to get a first touch, which makes misses and slow wakes measurable.
 
 ## Every morning, 2 minutes
@@ -83,6 +83,19 @@ Test: path/to/test (fails before the fix)
 Fix: commit, build or deploy
 Status: Open / Fixed / Verified (night N)
 ```
+
+### D-001: a ring cut short left no trace on the server
+Found before Night 1 (2026-11-16), tester A, POCO (Android 16, HyperOS), build 0.1.0 (121).
+
+**What happened.** The first `npm run dogfood` flagged the 18:35 alarm of 2026-11-16 as `NO RING ON RECORD`. It had rung: the phone's log shows it fired 54 ms late and climbed all five levels. It was stopped from the laptop with `am force-stop` (that ring had no way to answer it, the bug fixed in 7.5).
+
+**Cause.** The phone reported a ring only when it ended: fire, then how it ended, in one batch (`RingService.queueSync`). A ring cut short has no end, so nothing was sent. A force-stop kills the app outright, and so can a phone maker's battery manager. That is the commonest way an alarm fails on these phones, and exactly the failure the log most needs to see. The phone's own log said "interrupted" only when Android stopped the service cleanly, and never told the server.
+
+**Fix.** The fire is queued the moment the ring starts (`SyncCalls.fire`, in `RingService.record`), and the ring's ending follows when it ends (`SyncCalls.afterFire`). Queued, not sent: the alarm never waits on the network. A ring cut short now reaches the server as "rang", and the night report says "rang but how it ended never reached the server" instead of nothing.
+
+**Test.** `SyncCallsTest`: the fire alone equals the first call of a whole ring; the ending never sends the fire again, for every outcome. `RingServiceTest` (on the emulators in CI): the fire is in the queue while the alarm still rings.
+
+**Status:** Fixed. Shipped as the Firebase build after `0.1.0 (121)`. Verified once a ring cut short shows up as rung.
 
 ### Found before Night 1 (prompt 7.5, the first install from Firebase), both fixed
 

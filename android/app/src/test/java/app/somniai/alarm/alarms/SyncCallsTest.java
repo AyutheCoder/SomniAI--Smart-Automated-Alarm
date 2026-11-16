@@ -80,6 +80,31 @@ public class SyncCallsTest {
     }
 
     @Test
+    public void theFireAloneIsWhatARingSendsAsItStarts() throws Exception {
+        // D-001 (8.1): queued at the ring's start, so a ring killed mid-way still left a trace.
+        SyncCalls.Call fire = SyncCalls.fire(ID, RANG);
+        assertEquals("/api/alarms/" + ID + "/fire", fire.path);
+        assertEquals("2026-10-26T06:40:00Z", fire.body.getString("at"));
+        // The same call forRing begins with: the server can't tell them apart.
+        SyncCalls.Call first = SyncCalls.forRing(ID, RANG, "unanswered", RANG + 60_000, null, 5, List.of()).get(0);
+        assertEquals(first.path, fire.path);
+        assertEquals(first.body.toString(), fire.body.toString());
+    }
+
+    @Test
+    public void theEndingNeverSendsTheFireAgain() {
+        // Fire at the start plus this at the end is exactly what forRing sent in one go.
+        Verification v = new Verification(true, true, 1.0, 9_000, 3, 1, List.of("math"), 88, RANG + 40_000);
+        for (String outcome : List.of("dismissed", "snoozed", "unanswered", "interrupted")) {
+            List<SyncCalls.Call> whole = SyncCalls.forRing(ID, RANG, outcome, RANG + 42_000, v, 4, List.of());
+            List<SyncCalls.Call> after = SyncCalls.afterFire(ID, RANG, outcome, RANG + 42_000, v, 4, List.of());
+            assertFalse(outcome, paths(after).contains("/api/alarms/" + ID + "/fire"));
+            assertEquals(outcome, paths(whole).subList(1, whole.size()), paths(after));
+        }
+        assertEquals(List.of(), paths(SyncCalls.afterFire(ID, RANG, "interrupted", RANG + 60_000, null, 2, List.of())));
+    }
+
+    @Test
     public void aSnoozeSendsFireThenSnoozeWithWhenItRingsAgain() throws Exception {
         // As the web's syncCalls: fire, then the snooze; nothing else until the wake ends.
         List<SyncCalls.Call> calls = SyncCalls.forRing(ID, RANG, "snoozed", RANG + 20_000, null, 2, List.of());

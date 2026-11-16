@@ -521,6 +521,11 @@ public class RingService extends Service implements RingController.Effects {
             AlarmStore.log(this, AlarmScheduler.logEntry(alarm.id, alarm.label, outcome, alarm.scheduledFor, at, context));
         }
         Log.i(AlarmScheduler.TAG, outcome + " " + alarm.id + ": " + context);
+        // The server hears that it rang as it starts, not only once it ends (D-001):
+        // queued here, sent when there's a network; the ring never waits for it.
+        if (outcome.equals("ringing") && !BackupRing.isBackup(alarm.id)) {
+            Outbox.enqueue(this, java.util.Collections.singletonList(SyncCalls.fire(alarm.id, at)));
+        }
     }
 
     @Override
@@ -530,7 +535,8 @@ public class RingService extends Service implements RingController.Effects {
             // Another device's alarm rang here: that device reports its ring, not this one.
             return;
         }
-        Outbox.enqueue(this, SyncCalls.forRing(alarm.id, rangAt, outcome, endedAt, verification, level, backups));
+        // The fire went when the ring started (record, above); this is how it ended.
+        Outbox.enqueue(this, SyncCalls.afterFire(alarm.id, rangAt, outcome, endedAt, verification, level, backups));
         JSONObject wake = Telemetry.get(this).ringEnded(alarm.id, outcome, endedAt, SystemClock.elapsedRealtime(), level,
             alarm.ladder.stageOf(level), verification, alarm.check.required);
         if (wake != null) {

@@ -31,6 +31,23 @@ final class SyncCalls {
     private SyncCalls() {}
 
     /**
+     * The fire alone, queued the moment a ring starts (8.1, D-001). Sent only with
+     * the rest when the ring ended, a ring cut short (the app force-stopped, or a
+     * phone maker's battery manager killing it mid-ring) left the server no trace
+     * that the alarm had rung at all.
+     */
+    static Call fire(String alarmId, long rangAt) {
+        return new Call(alarmId, "/api/alarms/" + alarmId + "/fire", body("at", iso(rangAt)));
+    }
+
+    /** The ring's ending, its fire already queued by {@link #fire} when it started. */
+    static List<Call> afterFire(String alarmId, long rangAt, String outcome, long endedAt, Verification verification,
+            int level, List<Backups.Outcome> backups) {
+        List<Call> all = forRing(alarmId, rangAt, outcome, endedAt, verification, level, backups);
+        return new ArrayList<>(all.subList(1, all.size()));
+    }
+
+    /**
      * @param outcome "dismissed", "snoozed" or "unanswered"
      * @param verification how it was stopped; null for unanswered
      * @param level the escalation level the ring had reached when it ended

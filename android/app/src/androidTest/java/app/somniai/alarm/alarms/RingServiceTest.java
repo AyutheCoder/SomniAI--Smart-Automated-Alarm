@@ -216,6 +216,14 @@ public class RingServiceTest {
     public void aStoppedRingIsQueuedForTheServer() throws Exception {
         assertTrue(RingService.start(context, spec("t-queue"), System.currentTimeMillis()));
         waitFor("ringing", () -> RingService.current != null);
+        // D-001 (8.1): the fire is queued while it still rings, so a ring killed now isn't lost.
+        JSONArray whileRinging = Outbox.queue(context).pending();
+        boolean fireQueued = false;
+        for (int i = 0; i < whileRinging.length(); i++) {
+            JSONObject e = whileRinging.getJSONObject(i);
+            fireQueued |= e.getString("alarmId").equals("t-queue") && e.getString("path").endsWith("/fire") && e.getLong("queuedAt") >= startedAt;
+        }
+        assertTrue("the fire is queued as the ring starts", fireQueued);
         RingService.dismiss(context, Verification.none(System.currentTimeMillis()));
         waitFor("stopped", () -> RingService.current == null);
         List<String> paths = new ArrayList<>();
