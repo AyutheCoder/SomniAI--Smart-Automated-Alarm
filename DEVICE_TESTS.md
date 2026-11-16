@@ -894,11 +894,29 @@ The tester chose Firebase App Distribution (free) over Google Play's US$25 fee.
 
 **Fixed** (`RingScreen.java`, `RingScreenTest`): while the phone is awake and unlocked and the ring screen isn't in front, the ringing service opens the ring screen itself when the ring starts and again at the wake check.
 
+**Found too: notifications were off on the fresh install, and nothing asked for them.** On Android 13+ that means the alarm's notification and its ring screen never show: only the sound.
+* `POST_NOTIFICATIONS: granted=false` on the phone.
+* The app had `requestNotifications()` but no page called it.
+* The ringing was stopped from the laptop (`am force-stop`).
+
+**Fixed** (`lib/nativeNotifications.ts`, tested, web only, deployed to production as `f4bcfc6`): the app asks once per start, and while notifications are off it shows a red warning with **Allow notifications**.
+
 | # | Do this | Pass when |
 | --- | --- | --- |
 | 1 | Install the fixed build from Firebase App Tester; set an alarm 2 min ahead; keep SomniAI open, phone unlocked | At the alarm time the ring screen (Stop alarm / sums) opens over SomniAI; logcat `phone in use: opened the ring screen directly` |
 | 2 | The same, but in another app (e.g. the browser) | The ring screen opens, or, if Android holds the start back, the alarm's notification opens it (note which) |
 | 3 | The same with the phone locked | The ring screen opens over the lock screen (as before) |
+
+**Run 2026-11-16, POCO, build 0.1.0 (121) from Firebase, production f4bcfc6:**
+* Opening the app asked for notifications, and the tester allowed them (`POST_NOTIFICATIONS: granted=true, USER_SET`).
+* **1: pass.** The alarm rang at 19:30:00, 20 ms late, with the phone unlocked and SomniAI open.
+  * Logcat: `phone in use: opened the ring screen directly`; `RingActivity` in front.
+  * It was dismissed after 57 s at level 4: wake check passed, score 95, 0 wrong answers.
+  * The morning report notification was shown.
+* **3: pass.** The second alarm rang at 19:33:00 (20 ms late) with the phone locked: `RingActivity` came up over the lock screen (`isKeyguardShowing=true`).
+* **2: not run yet.**
+
+The 7.5 gate, adjusted to the tester's choice of Firebase over Google Play: **the build was accepted by Firebase App Distribution, installed from it on the phone, and rang there: met.**
 
 ### Installing from Google Play
 
