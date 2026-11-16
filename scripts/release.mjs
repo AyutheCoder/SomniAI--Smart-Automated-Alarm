@@ -1,8 +1,13 @@
 #!/usr/bin/env node
-// A Google Play release of the Android app (prompt 7.5, play/README.md).
+// A release of the Android app (prompt 7.5, play/README.md).
 //
-//   node scripts/release.mjs key     make the upload key, once (refuses if one exists)
-//   node scripts/release.mjs build   the signed app bundle (.aab) against production, checked
+//   node scripts/release.mjs key                 make the upload key, once (refuses if one exists)
+//   node scripts/release.mjs build --apk         the signed app (.apk) against production, checked
+//   node scripts/release.mjs distribute [notes]  send it to the testers by Firebase App Distribution
+//   node scripts/release.mjs build               the signed bundle (.aab) for Google Play, checked
+//
+// The tester chose Firebase App Distribution (free) over Google Play's US$25 fee
+// (7.5); the Play bundle and its listing stay ready in play/.
 //
 // The upload key lives outside the repository, in ~/.somniai/, and its password
 // in .env.deploy.local (ANDROID_UPLOAD_KEYSTORE, ANDROID_UPLOAD_PASSWORD), which
@@ -14,7 +19,7 @@
 // environment (keytool's -storepass:env), never from the command line.
 import { spawnSync, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +30,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DEPLOY_FILE = join(ROOT, ".env.deploy.local");
 export const KEY_ALIAS = "upload";
 export const AAB = join(ROOT, "android", "app", "build", "outputs", "bundle", "release", "app-release.aab");
+export const APK = join(ROOT, "android", "app", "build", "outputs", "apk", "release", "app-release.apk");
 const MERGED_MANIFESTS = join(ROOT, "android", "app", "build", "intermediates", "merged_manifests", "release");
 
 /** Google Play's limit on versionCode. */
@@ -83,6 +89,53 @@ export function configProblems(json, expectedUrl) {
     problems.push("the app allows plain HTTP");
   }
   return problems;
+}
+
+/** The signer's SHA-256 from `apksigner verify --print-certs`, in keytool's form (AB:CD:…). */
+export function apksignerSha256(text) {
+  const hex = /Signer #1 certificate SHA-256 digest:\s*([0-9a-f]{64})/i.exec(text)?.[1];
+  return hex ? hex.toUpperCase().match(/../g).join(":") : null;
+}
+
+/** The testers' addresses from FIREBASE_TESTERS (comma-separated); throws if there are none or one isn't an address. */
+export function testerList(value) {
+  const list = (value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (list.length === 0) {
+    throw new Error("no testers: put FIREBASE_TESTERS=you@example.com,friend@example.com in .env.deploy.local");
+  }
+  for (const e of list) {
+    if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(e)) {
+      throw new Error(`"${e}" in FIREBASE_TESTERS isn't an e-mail address`);
+    }
+  }
+  return list;
+}
+
+/** The Firebase app id for a package, from google-services.json. */
+export function firebaseAppId(googleServicesJson, pkg) {
+  const client = JSON.parse(googleServicesJson).client?.find((c) => c.client_info?.android_client_info?.package_name === pkg);
+  const id = client?.client_info?.mobilesdk_app_id;
+  if (!id) {
+    throw new Error(`google-services.json has no Firebase app for ${pkg}`);
+  }
+  return id;
+}
+
+/** A service-account key file's contents from .env.local's Firebase settings (the server's own). */
+export function serviceAccount(local) {
+  for (const k of ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"]) {
+    if (!local[k]) {
+      throw new Error(`${k} isn't in .env.local`);
+    }
+  }
+  return {
+    type: "service_account",
+    project_id: local.FIREBASE_PROJECT_ID,
+    client_email: local.FIREBASE_CLIENT_EMAIL,
+    // .env files keep the key's line breaks as \n.
+    private_key: local.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    token_uri: "https://oauth2.googleapis.com/token",
+  };
 }
 
 /** SHA-256 and SHA-1 fingerprints from keytool's output. */
@@ -155,11 +208,21 @@ function findFile(dir, name) {
   return null;
 }
 
-function build() {
+/** What `build` made, kept beside it so `distribute` sends only a checked build of a pushed commit. */
+const INFO = (file) => `${file}.json`;
+
+/**
+ * The release, against production. `apk`: an APK for Firebase App Distribution
+ * (the tester's choice in 7.5, instead of Google Play's fee); otherwise the app
+ * bundle Google Play takes.
+ */
+function build(apk) {
   const t = findToolchain();
   if (t.missing.length > 0) {
     throw new Error("the Android toolchain is incomplete; run npm run android:doctor");
   }
+  const file = apk ? APK : AAB;
+  const kind = apk ? "app" : "bundle";
   const deploy = existsSync(DEPLOY_FILE) ? parseEnv(readFileSync(DEPLOY_FILE, "utf8")) : {};
   const signing = signingEnv(deploy);
   const url = androidServerUrl(readState(join(ROOT, "deploy", "environments.json")));
@@ -169,17 +232,19 @@ function build() {
   const versionCode = versionCodeFor(commits);
   const versionName = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
   if (dirty) {
-    console.log("note: uncommitted changes are in this build; upload only a build of a pushed commit");
+    console.log("note: uncommitted changes are in this build; it can't be distributed (commit and push first)");
   }
 
   process.env.CAP_SERVER_URL = url;
   process.env.CAP_RELEASE = "1";
   Object.assign(process.env, signing);
-  rmSync(AAB, { force: true });
+  rmSync(file, { force: true });
+  rmSync(INFO(file), { force: true });
   console.log(`Building SomniAI ${versionName} (${versionCode}) at ${commit} against ${url}`);
-  const status = gradle([":app:bundleRelease", `-PsomniaiVersionCode=${versionCode}`, `-PsomniaiVersionName=${versionName}`], t);
+  const task = apk ? ":app:assembleRelease" : ":app:bundleRelease";
+  const status = gradle([task, `-PsomniaiVersionCode=${versionCode}`, `-PsomniaiVersionName=${versionName}`], t);
   delete process.env.SOMNIAI_UPLOAD_PASSWORD;
-  if (status !== 0 || !existsSync(AAB)) {
+  if (status !== 0 || !existsSync(file)) {
     throw new Error("the release build failed");
   }
 
@@ -192,12 +257,13 @@ function build() {
   else {
     problems.push(...manifestProblems(readFileSync(manifest, "utf8")));
   }
-  const out = mkdtempSync(join(tmpdir(), "somniai-aab-"));
+  const config = apk ? "assets/capacitor.config.json" : "base/assets/capacitor.config.json";
+  const out = mkdtempSync(join(tmpdir(), "somniai-release-"));
   try {
-    execFileSync(tool(t, "jar"), ["xf", AAB, "base/assets/capacitor.config.json", "base/manifest/AndroidManifest.xml"], { cwd: out });
-    problems.push(...configProblems(readFileSync(join(out, "base", "assets", "capacitor.config.json"), "utf8"), url));
-    const listing = execFileSync(tool(t, "jar"), ["tf", AAB], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-    // Native libraries would need 16 KB page alignment (Play, Android 15+); the app has none.
+    execFileSync(tool(t, "jar"), ["xf", file, config], { cwd: out });
+    problems.push(...configProblems(readFileSync(join(out, ...config.split("/")), "utf8"), url));
+    const listing = execFileSync(tool(t, "jar"), ["tf", file], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    // Native libraries would need 16 KB page alignment (Android 15+); the app has none.
     const native = listing.split(/\r?\n/).filter((f) => f.endsWith(".so"));
     if (native.length) {
       problems.push(`native libraries to check for 16 KB alignment: ${native.join(", ")}`);
@@ -206,24 +272,86 @@ function build() {
   finally {
     rmSync(out, { recursive: true, force: true });
   }
-  const verify = spawnSync(tool(t, "jarsigner"), ["-verify", AAB], { encoding: "utf8" });
-  if (!/jar verified/.test(verify.stdout)) {
-    problems.push(`the bundle's signature doesn't verify: ${verify.stdout.trim().split("\n")[0]}`);
-  }
-  const signer = fingerprints(execFileSync(tool(t, "keytool"), ["-printcert", "-jarfile", AAB], { encoding: "utf8" }));
   const own = keystoreFingerprints(t, signing.SOMNIAI_UPLOAD_STORE, signing.SOMNIAI_UPLOAD_PASSWORD);
-  if (!signer.sha256 || signer.sha256 !== own.sha256) {
-    problems.push("the bundle isn't signed with the upload key");
+  let signedBy = null;
+  if (apk) {
+    // APKs from minSdk 26 carry only the v2/v3 signature schemes, which apksigner checks (jarsigner can't).
+    const res = spawnSync(apksigner(t), ["verify", "--print-certs", file], { encoding: "utf8", shell: process.platform === "win32" });
+    signedBy = res.status === 0 ? apksignerSha256(res.stdout) : null;
+    if (res.status !== 0) {
+      problems.push(`the app's signature doesn't verify: ${(res.stderr || res.stdout).trim().split("\n")[0]}`);
+    }
+  }
+  else {
+    const verify = spawnSync(tool(t, "jarsigner"), ["-verify", file], { encoding: "utf8" });
+    if (!/jar verified/.test(verify.stdout)) {
+      problems.push(`the bundle's signature doesn't verify: ${verify.stdout.trim().split("\n")[0]}`);
+    }
+    signedBy = fingerprints(execFileSync(tool(t, "keytool"), ["-printcert", "-jarfile", file], { encoding: "utf8" })).sha256;
+  }
+  if (!signedBy || signedBy !== own.sha256) {
+    problems.push(`the ${kind} isn't signed with the upload key`);
   }
   if (problems.length) {
     for (const p of problems) {
       console.error(`  PROBLEM: ${p}`);
     }
-    throw new Error("the release bundle failed its checks; don't upload it");
+    throw new Error(`the release ${kind} failed its checks; don't distribute it`);
   }
-  console.log(`Release bundle: ${AAB}`);
-  console.log(`  version ${versionName} (code ${versionCode}), ${Math.round(statSync(AAB).size / 1024)} KB, signed by the upload key (SHA-256 ${own.sha256})`);
+  writeFileSync(INFO(file), JSON.stringify({ commit, dirty, versionCode, versionName, url, sha256: own.sha256 }, null, 2));
+  console.log(`Release ${kind}: ${file}`);
+  console.log(`  version ${versionName} (code ${versionCode}), ${Math.round(statSync(file).size / 1024)} KB, signed by the upload key (SHA-256 ${own.sha256})`);
   console.log(`  loads ${url} over HTTPS; no debug parts; no native libraries`);
+}
+
+function apksigner(t) {
+  const dir = join(t.sdk, "build-tools", t.sdkParts.buildTools);
+  return join(dir, process.platform === "win32" ? "apksigner.bat" : "apksigner");
+}
+
+/** The Firebase CLI, pinned (a version over two weeks old when chosen, 2026-11-16). */
+export const FIREBASE_CLI = "firebase-tools@15.34.0";
+
+/**
+ * Sends the checked release APK to the testers in FIREBASE_TESTERS through
+ * Firebase App Distribution. Signs in as the Firebase service account already
+ * in .env.local (the server's push sender), through a key file that exists only
+ * while the upload runs.
+ */
+function distribute(notes) {
+  if (!existsSync(APK) || !existsSync(INFO(APK))) {
+    throw new Error("no checked release app: run node scripts/release.mjs build --apk first");
+  }
+  const info = JSON.parse(readFileSync(INFO(APK), "utf8"));
+  const head = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
+  if (info.dirty || info.commit !== head) {
+    throw new Error(`the app was built from ${info.commit}${info.dirty ? " with uncommitted changes" : ""}, not ${head}: commit, push and build again`);
+  }
+  if (!execFileSync("git", ["branch", "-r", "--contains", head], { cwd: ROOT, encoding: "utf8" }).trim()) {
+    throw new Error(`commit ${head} isn't on GitHub yet: push first, so every tester build is a published commit`);
+  }
+  const deploy = existsSync(DEPLOY_FILE) ? parseEnv(readFileSync(DEPLOY_FILE, "utf8")) : {};
+  const testers = testerList(deploy.FIREBASE_TESTERS);
+  const local = parseEnv(readFileSync(join(ROOT, ".env.local"), "utf8"));
+  const appId = firebaseAppId(readFileSync(join(ROOT, "android", "app", "google-services.json"), "utf8"), "app.somniai.alarm");
+  const dir = mkdtempSync(join(tmpdir(), "somniai-firebase-"));
+  const keyFile = join(dir, "service-account.json");
+  try {
+    writeFileSync(keyFile, JSON.stringify(serviceAccount(local)), { mode: 0o600 });
+    const releaseNotes = `SomniAI ${info.versionName} (${info.versionCode}), ${info.commit}. ${notes || "Test build."}`;
+    console.log(`Sending SomniAI ${info.versionName} (${info.versionCode}) to ${testers.length} tester(s)…`);
+    const res = spawnSync("npx", ["--yes", FIREBASE_CLI, "appdistribution:distribute", APK,
+      "--app", appId, "--testers", testers.join(","), "--release-notes", releaseNotes],
+    { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32", env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: keyFile } });
+    // The CLI prints the console and tester links; nothing secret is in its output.
+    console.log(`${res.stdout ?? ""}${res.stderr ?? ""}`.trim().split("\n").filter((l) => l.trim()).slice(-12).join("\n"));
+    if (res.status !== 0) {
+      throw new Error("Firebase refused the upload (above)");
+    }
+  }
+  finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -233,10 +361,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       key();
     }
     else if (command === "build") {
-      build();
+      build(process.argv.includes("--apk"));
+    }
+    else if (command === "distribute") {
+      distribute(process.argv.slice(3).join(" "));
     }
     else {
-      console.error("usage: node scripts/release.mjs key|build");
+      console.error("usage: node scripts/release.mjs key | build [--apk] | distribute [release notes]");
       process.exit(2);
     }
   }

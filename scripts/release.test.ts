@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { configProblems, fingerprints, manifestProblems, MAX_VERSION_CODE, signingEnv, versionCodeFor } from "./release.mjs";
+import {
+  apksignerSha256, configProblems, firebaseAppId, fingerprints, manifestProblems, MAX_VERSION_CODE, serviceAccount, signingEnv,
+  testerList, versionCodeFor,
+} from "./release.mjs";
 
 const SHA256 = Array.from({ length: 32 }, (_, i) => (i * 7 % 256).toString(16).toUpperCase().padStart(2, "0")).join(":");
 const SHA1 = Array.from({ length: 20 }, (_, i) => (i * 11 % 256).toString(16).toUpperCase().padStart(2, "0")).join(":");
@@ -69,5 +72,36 @@ describe("the release bundle's checks", () => {
       "the app allows plain HTTP",
     ]);
     expect(configProblems(JSON.stringify({}), url)).toEqual([`the app loads nothing, not ${url}`]);
+  });
+});
+
+describe("Firebase App Distribution (the tester's choice over Google Play's fee)", () => {
+  it("reads the APK's signer from apksigner in keytool's form, to compare with the upload key", () => {
+    const hex = SHA256.replace(/:/g, "").toLowerCase();
+    const out = `Signer #1 certificate DN: CN=SomniAI upload key\nSigner #1 certificate SHA-256 digest: ${hex}\nSigner #1 certificate SHA-1 digest: abc`;
+    expect(apksignerSha256(out)).toBe(SHA256);
+    expect(apksignerSha256("DOES NOT VERIFY")).toBeNull();
+  });
+
+  it("takes testers as comma-separated addresses, and refuses none or a non-address", () => {
+    expect(testerList(" a@example.com, b@example.org ,")).toEqual(["a@example.com", "b@example.org"]);
+    expect(() => testerList(undefined)).toThrow(/FIREBASE_TESTERS/);
+    expect(() => testerList("a@example.com,not an address")).toThrow(/isn't an e-mail address/);
+  });
+
+  it("finds the app's Firebase id for its package in google-services.json", () => {
+    const json = JSON.stringify({ client: [
+      { client_info: { mobilesdk_app_id: "1:1:android:other", android_client_info: { package_name: "com.other" } } },
+      { client_info: { mobilesdk_app_id: "1:1:android:somni", android_client_info: { package_name: "app.somniai.alarm" } } },
+    ] });
+    expect(firebaseAppId(json, "app.somniai.alarm")).toBe("1:1:android:somni");
+    expect(() => firebaseAppId(JSON.stringify({ client: [] }), "app.somniai.alarm")).toThrow(/no Firebase app/);
+  });
+
+  it("makes the service-account key from .env.local's Firebase settings, with real line breaks in the key", () => {
+    const key = serviceAccount({ FIREBASE_PROJECT_ID: "p", FIREBASE_CLIENT_EMAIL: "sa@p.iam.gserviceaccount.com", FIREBASE_PRIVATE_KEY: "-----BEGIN-----\\nabc\\n-----END-----" });
+    expect(key).toMatchObject({ type: "service_account", project_id: "p", client_email: "sa@p.iam.gserviceaccount.com" });
+    expect(key.private_key).toBe("-----BEGIN-----\nabc\n-----END-----");
+    expect(() => serviceAccount({ FIREBASE_PROJECT_ID: "p" })).toThrow(/FIREBASE_CLIENT_EMAIL/);
   });
 });

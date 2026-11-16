@@ -1,6 +1,31 @@
-# Releasing SomniAI on Google Play
+# Releasing SomniAI
 
-Prompt 7.5: the Android app on Google Play's **internal testing** track, where only the testers you list can install it. What's here:
+Prompt 7.5 asked for Google Play's **internal testing** track. Google Play charges a one-time US$25 for a developer account. The tester chose not to pay it (2026-11-16), so test builds go out through **Firebase App Distribution**, which is free; SomniAI already uses Firebase for wake-buddy alerts. Everything for Google Play is still prepared here, for whenever that changes.
+
+## Test builds with Firebase App Distribution (free)
+
+```
+git push                                       # only a pushed commit is sent to testers
+node scripts/release.mjs build --apk           # the signed app against production, checked
+node scripts/release.mjs distribute "What changed in this build"
+```
+
+* **Who gets it.** `FIREBASE_TESTERS` in `.env.deploy.local`: comma-separated e-mail addresses. Never in this repository.
+* **Signing in.** `distribute` signs in as the Firebase service account the server already uses for push (`FIREBASE_*` in `.env.local`), through a key file that exists only during the upload.
+* **What it refuses.** An app built from uncommitted changes, an app built from another commit, and a commit that isn't on GitHub.
+* **What the tester does.** Each tester gets an e-mail from Firebase:
+  1. On the phone, open it and accept.
+  2. Install **Firebase App Tester** when asked (or download from the link).
+  3. Allow "install unknown apps" for it, then install SomniAI.
+
+  Later builds show up in App Tester.
+* **The first install on a phone with a development build** needs that build uninstalled first, because it's signed with another key.
+
+The same upload key signs these builds as would sign Play uploads, so moving to Play later changes nothing for the app.
+
+## Google Play (prepared, not used yet)
+
+What's here for Google Play:
 
 | | |
 | --- | --- |
