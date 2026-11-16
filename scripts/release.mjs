@@ -338,10 +338,12 @@ function distribute(notes) {
   const keyFile = join(dir, "service-account.json");
   try {
     writeFileSync(keyFile, JSON.stringify(serviceAccount(local)), { mode: 0o600 });
-    const releaseNotes = `SomniAI ${info.versionName} (${info.versionCode}), ${info.commit}. ${notes || "Test build."}`;
+    // In a file: Windows' shell would split notes with spaces into separate arguments.
+    const notesFile = join(dir, "release-notes.txt");
+    writeFileSync(notesFile, `SomniAI ${info.versionName} (${info.versionCode}), ${info.commit}. ${notes || "Test build."}`);
     console.log(`Sending SomniAI ${info.versionName} (${info.versionCode}) to ${testers.length} tester(s)…`);
     const res = spawnSync("npx", ["--yes", FIREBASE_CLI, "appdistribution:distribute", APK,
-      "--app", appId, "--testers", testers.join(","), "--release-notes", releaseNotes],
+      "--app", appId, "--testers", testers.join(","), "--release-notes-file", notesFile],
     { cwd: ROOT, encoding: "utf8", shell: process.platform === "win32", env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: keyFile } });
     // The CLI prints the console and tester links; nothing secret is in its output.
     console.log(`${res.stdout ?? ""}${res.stderr ?? ""}`.trim().split("\n").filter((l) => l.trim()).slice(-12).join("\n"));
