@@ -58,7 +58,7 @@ The plan asked for two testers. One is taking part (decided 2026-11-16), **teste
 
 | Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
 | --- | --- | --- | --- | --- | --- |
-| 1-5 | | | | | |
+| 1-5 (1 done) | 1 | 0 | 0 | 0 | 0 |
 | 6-10 | | | | | |
 
 At the end: **nights where every alarm rang on time and was stopped properly**, out of 10. That figure is the honest headline, with every failure behind it.
@@ -66,6 +66,17 @@ At the end: **nights where every alarm rang on time and was stopped properly**, 
 ## Nights
 
 *(Paste each morning's `npm run dogfood` output here, newest at the bottom, and add the testers' own notes under it.)*
+
+### Night 1, ending 2026-11-17
+
+**Tester A**, build 0.1.0 (125):
+- 05:30 #dbed: woke, level 4 (Wake challenge), check passed in 22 s, score 96, on time.
+
+Not counted (set-up tests on the evening before Night 1, both fine): 19:30 #f926 and 19:33 #f919. Both woke at level 4, with the check passed in 40 s and 32 s, and both fired on time.
+
+App errors that night: 4 kinds, all the AI Brain's 502s while it woke from the free plan's sleep (15:27-15:39 UTC on 2026-11-16, i.e. 20:57-21:09 IST). That's the annoyance already known, with nothing near the alarm.
+
+**Result: a clean night.** The one alarm rang on time and was stopped by its wake check. Tester's notes: *(none yet)*.
 
 ## Failures
 
