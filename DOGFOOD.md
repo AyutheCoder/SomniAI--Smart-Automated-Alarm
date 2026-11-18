@@ -58,7 +58,7 @@ The plan asked for two testers. One is taking part (decided 2026-11-16), **teste
 
 | Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
 | --- | --- | --- | --- | --- | --- |
-| 1-5 (1 done) | 1 | 0 | 0 | 0 | 0 |
+| 1-5 (2 done) | 2 | 0 | 0 | 0 | 0 |
 | 6-10 | | | | | |
 
 At the end: **nights where every alarm rang on time and was stopped properly**, out of 10. That figure is the honest headline, with every failure behind it.
@@ -77,6 +77,21 @@ Not counted (set-up tests on the evening before Night 1, both fine): 19:30 #f926
 App errors that night: 4 kinds, all the AI Brain's 502s while it woke from the free plan's sleep (15:27-15:39 UTC on 2026-11-16, i.e. 20:57-21:09 IST). That's the annoyance already known, with nothing near the alarm.
 
 **Result: a clean night.** The one alarm rang on time and was stopped by its wake check. Tester's notes: *(none yet)*.
+
+### Night 2, the sleep ending 2026-11-18 at 17:30
+
+A "night" here is a **sleep that ends with a SomniAI alarm**, at whatever time of day; a shifted sleep isn't a gap. The report's windows run noon to noon, so this sleep appears under the window ending 2026-11-19. The window ending 2026-11-18 had no alarm, because there was no sleep to wake from in it.
+
+**Tester A**, build 0.1.0 (125):
+- 17:30 #350d: woke, level 5 (Trying backups), check passed in 36 s, score 95, on time.
+
+It was set at 10:30 the same morning for the tester's daytime sleep (10:30 to 17:30), as intended. The tester confirmed this; it wasn't an AM/PM slip.
+
+It reached level 5 within 54 s. Earlier rings took about 35 s to reach level 4 and about 75 s to reach level 5. This is the escalation profile having learned from three earlier wakes, as designed (`lib/wakeHistory.ts`, 3.4). At level 5 the backups had nothing to call: no second device or contact is set, and they say so.
+
+App errors that window: none.
+
+**Result: a clean night.**
 
 ## Failures
 
