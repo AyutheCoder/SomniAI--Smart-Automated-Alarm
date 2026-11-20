@@ -58,7 +58,7 @@ The plan asked for two testers. One is taking part (decided 2026-11-16), **teste
 
 | Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
 | --- | --- | --- | --- | --- | --- |
-| 1-5 (3 done) | 3 | 0 | 0 | 0 | 0 |
+| 1-5 (4 done) | 4 | 0 | 0 | 0 | 0 |
 | 6-10 | | | | | |
 
 At the end: **nights where every alarm rang on time and was stopped properly**, out of 10. That figure is the honest headline, with every failure behind it.
@@ -101,6 +101,15 @@ App errors that window: none.
 App errors since Night 2: none.
 
 **Result: a clean night.** It took longer to wake than on the first two nights (87 s against 54-57 s), and the ladder escalated as it should until the check was passed.
+
+### Night 4, the sleep ending 2026-11-20 at 08:00
+
+**Tester A**, build 0.1.0 (125):
+- 08:00 #c866: set at 01:00. It fired at 08:00:02 (on time) and woke at level 5 (Trying backups). The check passed in 37 s, score 95, and the ring ended at 08:01:51, 111 s after it started.
+
+App errors since Night 3: none.
+
+**Result: a clean night.** It was the longest ring so far (111 s), still well within the ladder, and stopped by the check.
 
 ## Failures
 
