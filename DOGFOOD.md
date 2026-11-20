@@ -1,15 +1,30 @@
-# Dogfooding SomniAI: 10 nights
+# Dogfooding SomniAI: 4 nights
 
-Prompt 8.1. SomniAI is used as the only alarm for 10 nights. The plan asked for 30; the tester chose 10 (2026-11-16). Ten nights show fewer of the slow failures (a weekend, a phone update, a battery manager on a bad night), so the result is stated as 10 nights, not more. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
+Prompt 8.1. SomniAI was used as the only alarm. The plan asked for 30 nights; the tester chose 10 (2026-11-16), then ended after 4 (2026-11-21). The result below is stated as 4 nights and no more. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
 
 The plan asked for two testers. One is taking part (decided 2026-11-16), **tester A**. The B steps below stay for anyone who joins later. Testers are named only by letter, because this file is public; their addresses are in `.env.deploy.local` (`DOGFOOD_ACCOUNTS`), which git ignores.
 
 | | |
 | --- | --- |
-| Night 1 | The night ending **2026-11-17** (first alarm 05:30) |
-| Night 10 | The night ending **2026-11-26** |
-| Build | Firebase App Distribution, 0.1.0 (125) at the start; any update is noted in the log |
-| Status | Running |
+| Night 1 | The sleep ending **2026-11-17** at 05:30 |
+| Last night | Night 4, the sleep ending **2026-11-20** at 08:00 |
+| Build | Firebase App Distribution, 0.1.0 (125) throughout |
+| Status | **Ended after 4 nights**, the tester's choice (2026-11-21). The plan asked for 30; 10 were planned |
+
+## Result
+
+**4 of 4 nights clean.** Every alarm rang on time (0-2 s late) and was stopped by its wake check (22-47 s, scores 94-96). There were no misses, no false alarms and no annoyances reported, and no app errors during the four nights.
+
+**One failure was found and fixed before Night 1** (D-001: a ring cut short left no trace on the server). Two more turned up during the first install from Firebase (7.5): notifications never asked for, and no ring screen on a phone in use.
+
+**What 4 nights don't show.** Four nights, one tester, one phone (a POCO on HyperOS) is a small sample. These were not covered:
+* a weekend or a repeating alarm (every alarm was set once by hand);
+* a phone update, a restart overnight, or a low battery;
+* a night in airplane mode;
+* the battery manager closing the app on a night it's been idle for long;
+* the wake buddy, which needs its every-minute check scheduled first.
+
+So the result is "no failure in 4 nights", not "reliable". Running more nights later would strengthen it.
 
 ## What counts
 
@@ -58,10 +73,9 @@ The plan asked for two testers. One is taking part (decided 2026-11-16), **teste
 
 | Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
 | --- | --- | --- | --- | --- | --- |
-| 1-5 (4 done) | 4 | 0 | 0 | 0 | 0 |
-| 6-10 | | | | | |
+| 1-4 | 4 | 0 | 0 | 0 | 0 (D-001 fixed before Night 1) |
 
-At the end: **nights where every alarm rang on time and was stopped properly**, out of 10. That figure is the honest headline, with every failure behind it.
+**Nights where every alarm rang on time and was stopped properly: 4 of 4.** That figure is the honest headline, with every failure behind it.
 
 ## Nights
 
