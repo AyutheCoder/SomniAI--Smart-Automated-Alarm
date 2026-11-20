@@ -5,7 +5,8 @@ import { getUserId } from "@/lib/session";
 import { SleepLog } from "@/models/SleepLog";
 import { BehaviorEvent } from "@/models/BehaviorEvent";
 import { computeMetrics, type BehaviorEventInput, type SleepLogInput } from "@/lib/features";
-import { deriveEscalationProfile } from "@/lib/escalation";
+import { currentProfile } from "@/lib/wakeHistory";
+import { isInt } from "@/lib/validate";
 
 export async function GET(req: NextRequest) {
   return guard(async () => {
@@ -15,7 +16,11 @@ export async function GET(req: NextRequest) {
     }
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
-    const days = Math.min(180, Math.max(1, Number(searchParams.get("days")) || 30));
+    const rawDays = searchParams.get("days");
+    const days = rawDays === null ? 30 : Number(rawDays);
+    if (!isInt(days, 1, 180)) {
+      return jsonError("days must be a whole number from 1 to 180", 422);
+    }
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const [logs, events] = await Promise.all([
       SleepLog.find({ userId }).sort({ date: -1 }).limit(days).lean(),
@@ -27,15 +32,10 @@ export async function GET(req: NextRequest) {
 
     const metrics = computeMetrics(logs as unknown as SleepLogInput[], events as unknown as BehaviorEventInput[]);
 
-    // Escalation levels this user actually woke at, newest first. `escalation`
-    // events carry the level the alarm reached before it was resolved; a wake
-    // with no escalation event resolved at level 1.
-    const effectiveLevels = (events as unknown as BehaviorEventInput[])
-      .filter((e) => e.type === "escalation" && typeof e.value === "number")
-      .map((e) => Number(e.value))
-      .filter((n) => n >= 1 && n <= 5)
-      .slice(0, 40);
-    const escalationProfile = deriveEscalationProfile({ effectiveLevels });
+    // The same profile the ring plans use: learnt from the morning reports,
+    // one per ring including missed ones (lib/wakeHistory.ts), not only from
+    // this window.
+    const escalationProfile = await currentProfile(userId);
 
     return jsonOk({
       metrics,

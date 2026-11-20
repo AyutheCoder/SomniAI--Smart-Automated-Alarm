@@ -11,6 +11,8 @@ import {
   Wand2,
 } from "lucide-react";
 import { SKIP_EXPLANATIONS, type SkippedTask } from "@/lib/scheduler";
+import { describeConfidence } from "@/lib/predictionCopy";
+import PredictionOrigin from "./PredictionOrigin";
 
 type AISource = "ai" | "fallback";
 type Impact = "increase" | "decrease" | "neutral";
@@ -70,6 +72,7 @@ interface LifecycleSummary {
 interface ScheduleResponse {
   mode: "assisted" | "autonomous";
   predictionSource: AISource;
+  predictionConfidence?: number | null;
   proposals: AlarmPlan[];
   skipped?: SkippedTask[];
   created: unknown[];
@@ -141,9 +144,49 @@ function formatTime(iso: string): string {
   });
 }
 
+/**
+ * The proposed alarms. Each one's score is the scheduler's own blend of task
+ * importance and the predictions: a rule of thumb, so it is not called a
+ * confidence or shown as a probability.
+ */
+export function ProposalList({ proposals }: { proposals: AlarmPlan[] }) {
+  return (
+    <ul className="space-y-3">
+      {proposals.map((p, i) => (
+        <li
+          key={p.linkedTaskId ?? `plan-${i}`}
+          className="rounded-xl border border-white/10 bg-slate-900/40 p-4"
+        >
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <AlarmClock className="h-4 w-4 text-indigo-300" />
+            <span className="font-medium text-white">{p.label}</span>
+            <span className="flex items-center gap-1 text-sm text-slate-300">
+              <CalendarClock className="h-3.5 w-3.5" />
+              {formatTime(p.scheduledTime)}
+            </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 text-xs ${
+                STRATEGY_STYLES[p.wakeStrategy] ?? STRATEGY_STYLES.adaptive
+              }`}
+            >
+              {p.wakeStrategy}
+            </span>
+            <span className="ml-auto text-xs text-slate-400">
+              rule-of-thumb score {Math.round(p.confidence * 100)}/100
+            </span>
+          </div>
+          <p className="mb-2 text-sm text-slate-300">{p.rationale}</p>
+          <AttributionChips attributions={p.explanation?.attributions ?? []} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function SmartSchedulePanel({ onChange }: { onChange?: () => void }) {
   const [proposals, setProposals] = useState<AlarmPlan[]>([]);
   const [source, setSource] = useState<AISource | null>(null);
+  const [confidence, setConfidence] = useState<number | null>(null);
   const [maintenance, setMaintenance] = useState<LifecycleSummary | null>(null);
   const [loading, setLoading] = useState<"preview" | "create" | "tidy" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -166,6 +209,7 @@ export default function SmartSchedulePanel({ onChange }: { onChange?: () => void
       const data = json.data as ScheduleResponse;
       setProposals(data.proposals);
       setSource(data.predictionSource);
+      setConfidence(data.predictionConfidence ?? null);
       setPreviewed(true);
       if (mode === "autonomous") {
         setMaintenance(data.maintenance ?? null);
@@ -223,11 +267,6 @@ export default function SmartSchedulePanel({ onChange }: { onChange?: () => void
         <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
           <BrainCircuit className="h-5 w-5 text-violet-300" /> AI Alarm Scheduler
         </h2>
-        {source && (
-          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs text-slate-300">
-            {source === "ai" ? "AI Brain" : "Rule-based"}
-          </span>
-        )}
         <div className="ml-auto flex flex-wrap gap-2">
           <button
             type="button"
@@ -272,8 +311,8 @@ export default function SmartSchedulePanel({ onChange }: { onChange?: () => void
       </div>
 
       <p className="mb-4 text-sm text-slate-400">
-        Generates wake alarms from your upcoming tasks, sized by importance and
-        oversleep risk. <span className="text-slate-300">Preview</span> to review,{" "}
+        Generates wake alarms from your upcoming tasks, sized by how important each
+        task is and the predicted chance of waking off your usual time. <span className="text-slate-300">Preview</span> to review,{" "}
         <span className="text-slate-300">Auto-schedule</span> to let SomniAI set them.
       </p>
 
@@ -283,37 +322,17 @@ export default function SmartSchedulePanel({ onChange }: { onChange?: () => void
         </div>
       )}
 
-      {previewed && proposals.length > 0 && (
-        <ul className="space-y-3">
-          {proposals.map((p, i) => (
-            <li
-              key={p.linkedTaskId ?? `plan-${i}`}
-              className="rounded-xl border border-white/10 bg-slate-900/40 p-4"
-            >
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <AlarmClock className="h-4 w-4 text-indigo-300" />
-                <span className="font-medium text-white">{p.label}</span>
-                <span className="flex items-center gap-1 text-sm text-slate-300">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  {formatTime(p.scheduledTime)}
-                </span>
-                <span
-                  className={`rounded-full border px-2 py-0.5 text-xs ${
-                    STRATEGY_STYLES[p.wakeStrategy] ?? STRATEGY_STYLES.adaptive
-                  }`}
-                >
-                  {p.wakeStrategy}
-                </span>
-                <span className="ml-auto text-xs text-slate-400">
-                  {Math.round(p.confidence * 100)}% confidence
-                </span>
-              </div>
-              <p className="mb-2 text-sm text-slate-300">{p.rationale}</p>
-              <AttributionChips attributions={p.explanation?.attributions ?? []} />
-            </li>
-          ))}
-        </ul>
+      {source && (
+        <div className="mb-4">
+          <PredictionOrigin
+            what="Predictions"
+            origin={source}
+            confidence={describeConfidence(source, confidence ?? undefined)}
+          />
+        </div>
       )}
+
+      {previewed && proposals.length > 0 && <ProposalList proposals={proposals} />}
 
       {maintenance && maintenance.actions.length > 0 && (
         <div className="mt-4">

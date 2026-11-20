@@ -33,9 +33,14 @@ ai-brain/.venv/
 ai-brain/venv/
 *.pyc
 
-# Trained model artifacts (~25 MB of binaries). predict.py retrains them from
-# the dataset on first boot if they are missing, so they don't belong in git.
+# The old synthetic-panel models (training/model_training.py), kept only for the
+# research comparison. The models the service ships are in ai-brain/models/real/,
+# trained on real data that isn't in the repository, so they are committed
+# (prompt 5.2, ai-brain/MODEL_CARD.md).
 ai-brain/models/*.joblib
+# The dataset cache lands here if SOMNIAI_DATA_DIR isn't set (datasets/cache.py):
+# derived from the datasets, never committed.
+ai-brain/cache/
 
 # Third-party datasets. Large, and redistribution terms vary by source - each is
 # fetched from its own repository by scripts in ai-brain/data/. See
@@ -55,3 +60,20 @@ paper/authors.local.tex
 
 # Identity list for scripts/check-anonymity.mjs. Never commit.
 .anonymity-terms.local
+
+# Playwright output
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Firebase (wake-buddy push, BUDDY.md): the app config names the project, and
+# the service-account key is a secret. Neither is ever committed.
+google-services.json
+*-firebase-adminsdk-*.json
+*service-account*.json
+
+# Local MongoDB data for npm run dev:phone (scripts/dev-phone.mjs).
+/.data/
+
+# Vercel CLI link (prompt 7.4)
+.vercel

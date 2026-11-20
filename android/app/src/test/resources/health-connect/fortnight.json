@@ -1,0 +1,66 @@
+{
+  "zone": "Asia/Kolkata",
+  "now": "2026-11-16T03:30:00Z",
+  "sessions": [
+    {
+      "id": "watch-night-14",
+      "origin": "com.example.watch",
+      "start": "2026-11-13T17:30:00Z",
+      "end": "2026-11-14T01:30:00Z",
+      "stages": [
+        { "start": "2026-11-13T17:30:00Z", "end": "2026-11-13T17:50:00Z", "stage": 7 },
+        { "start": "2026-11-13T17:50:00Z", "end": "2026-11-13T20:00:00Z", "stage": 4 },
+        { "start": "2026-11-13T20:00:00Z", "end": "2026-11-13T21:30:00Z", "stage": 5 },
+        { "start": "2026-11-13T21:30:00Z", "end": "2026-11-13T21:40:00Z", "stage": 1 },
+        { "start": "2026-11-13T21:40:00Z", "end": "2026-11-13T23:30:00Z", "stage": 6 },
+        { "start": "2026-11-13T23:30:00Z", "end": "2026-11-14T01:30:00Z", "stage": 4 }
+      ]
+    },
+    {
+      "id": "phone-night-15-first",
+      "origin": "com.example.sleepapp",
+      "start": "2026-11-14T18:00:00Z",
+      "end": "2026-11-14T20:30:00Z"
+    },
+    {
+      "id": "phone-night-15-second",
+      "origin": "com.example.sleepapp",
+      "start": "2026-11-14T21:30:00Z",
+      "end": "2026-11-15T02:00:00Z"
+    },
+    {
+      "id": "phone-nap-15",
+      "origin": "com.example.sleepapp",
+      "start": "2026-11-15T08:30:00Z",
+      "end": "2026-11-15T09:10:00Z"
+    },
+    {
+      "id": "watch-night-16",
+      "origin": "com.example.watch",
+      "start": "2026-11-15T17:45:00Z",
+      "end": "2026-11-16T01:15:00Z",
+      "stages": [
+        { "start": "2026-11-15T17:45:00Z", "end": "2026-11-15T18:05:00Z", "stage": 1 },
+        { "start": "2026-11-15T18:05:00Z", "end": "2026-11-16T01:15:00Z", "stage": 2 }
+      ]
+    },
+    {
+      "id": "phone-partial-16",
+      "origin": "com.example.sleepapp",
+      "start": "2026-11-15T21:00:00Z",
+      "end": "2026-11-16T01:00:00Z"
+    },
+    {
+      "id": "watch-still-recording",
+      "origin": "com.example.watch",
+      "start": "2026-11-16T02:00:00Z",
+      "end": "2026-11-16T04:00:00Z"
+    }
+  ],
+  "restingHeartRate": [
+    { "time": "2026-11-14T02:00:00Z", "bpm": 58 },
+    { "time": "2026-11-15T02:00:00Z", "bpm": 64 },
+    { "time": "2026-11-15T06:00:00Z", "bpm": 60 },
+    { "time": "2026-11-15T12:00:00Z", "bpm": 62 }
+  ]
+}

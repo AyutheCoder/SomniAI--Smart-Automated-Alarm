@@ -1,0 +1,18 @@
+{
+  "staging": {
+    "app": "https://somniai-staging.vercel.app",
+    "brain": "https://somniai-brain-staging.onrender.com",
+    "vercelProject": "somniai-staging",
+    "vercelProjectId": "prj_EK1dN67ek2dIu7v6XVAFBggYDdj7",
+    "vercelTeamId": "team_hRC97oG5888R2ETAAvUa3i7r",
+    "renderServiceId": "srv-dbt3drlg1s2s738lh7dg"
+  },
+  "production": {
+    "app": "https://somniai.vercel.app",
+    "brain": "https://somniai-brain.onrender.com",
+    "vercelProject": "somniai",
+    "vercelProjectId": "prj_TSMrpQXmURErM5i8rsaCCWP9a3oG",
+    "vercelTeamId": "team_hRC97oG5888R2ETAAvUa3i7r",
+    "renderServiceId": "srv-dbt5q4ek1f9s73au6eg0"
+  }
+}

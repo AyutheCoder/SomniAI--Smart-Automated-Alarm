@@ -14,9 +14,13 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return jsonError("Unauthorized", 401);
     }
-    await connectToDatabase();
     const body = (await parseJson<LifecycleBody>(req)) ?? {};
-    const summary = await runLifecycle(userId, new Date(), Boolean(body.dryRun));
+    // Boolean("false") is true; a stringly dry run must not quietly delete.
+    if (body.dryRun !== undefined && typeof body.dryRun !== "boolean") {
+      return jsonError("dryRun must be true or false", 422);
+    }
+    await connectToDatabase();
+    const summary = await runLifecycle(userId, new Date(), body.dryRun ?? false);
     return jsonOk(summary);
   });
 }

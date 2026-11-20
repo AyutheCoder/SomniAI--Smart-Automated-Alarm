@@ -1,0 +1,167 @@
+# Dogfooding SomniAI: 4 nights
+
+Prompt 8.1. SomniAI was used as the only alarm. The plan asked for 30 nights; the tester chose 10 (2026-11-16), then ended after 4 (2026-11-21). The result below is stated as 4 nights and no more. Every miss, every false alarm and every annoyance is written down here, and every real failure becomes a test and a fix.
+
+The plan asked for two testers. One is taking part (decided 2026-11-16), **tester A**. The B steps below stay for anyone who joins later. Testers are named only by letter, because this file is public; their addresses are in `.env.deploy.local` (`DOGFOOD_ACCOUNTS`), which git ignores.
+
+| | |
+| --- | --- |
+| Night 1 | The sleep ending **2026-11-17** at 05:30 |
+| Last night | Night 4, the sleep ending **2026-11-20** at 08:00 |
+| Build | Firebase App Distribution, 0.1.0 (125) throughout |
+| Status | **Ended after 4 nights**, the tester's choice (2026-11-21). The plan asked for 30; 10 were planned |
+
+## Result
+
+**4 of 4 nights clean.** Every alarm rang on time (0-2 s late) and was stopped by its wake check (22-47 s, scores 94-96). There were no misses, no false alarms and no annoyances reported, and no app errors during the four nights.
+
+**One failure was found and fixed before Night 1** (D-001: a ring cut short left no trace on the server). Two more turned up during the first install from Firebase (7.5): notifications never asked for, and no ring screen on a phone in use.
+
+**What 4 nights don't show.** Four nights, one tester, one phone (a POCO on HyperOS) is a small sample. These were not covered:
+* a weekend or a repeating alarm (every alarm was set once by hand);
+* a phone update, a restart overnight, or a low battery;
+* a night in airplane mode;
+* the battery manager closing the app on a night it's been idle for long;
+* the wake buddy, which needs its every-minute check scheduled first.
+
+So the result is "no failure in 4 nights", not "reliable". Running more nights later would strengthen it.
+
+## What counts
+
+| | Means | Examples |
+| --- | --- | --- |
+| **Miss** | An alarm didn't do its job | Didn't ring; rang more than 1 minute late; rang silently; rang with no screen to stop it; couldn't be stopped; stopped without the wake check it should have had |
+| **False alarm** | Something went off that shouldn't have | Rang when turned off or deleted; rang at the wrong time; rang twice; a buddy alert while you were already up |
+| **Annoyance** | Anything that made you want another alarm app | Confusing words, a slow screen, a sum too hard at 6 am, a notification you didn't want |
+
+**Mornings that can't be missed** (a flight, an exam): keep a second alarm on another device, as SomniAI's own plan suggests. Write it in the log. It doesn't spoil the test: a miss by SomniAI is still a miss.
+
+## Before Night 1, each tester
+
+1. **Install the latest SomniAI from Firebase.** Tester B first needs adding: put B's Google address in `FIREBASE_TESTERS` in `.env.deploy.local`, then `node scripts/release.mjs build --apk` and `node scripts/release.mjs distribute`.
+2. **Sign in.** Notifications are allowed when there's no red "Notifications are off" box on the alarms page.
+3. **Run Tonight's alarm check** (the line under Adaptive Alarms). Fix everything it lists until it says all clear. On 2026-11-16 tester A's phone had 2 problems, battery optimisation among them.
+4. **On Xiaomi, Redmi or POCO:** Settings → Apps → SomniAI.
+   * Notifications → **Floating notifications** on.
+   * **Autostart** on.
+   * Battery saver → **No restrictions**.
+   * **App lock** off for SomniAI.
+5. **Turn off every alarm in other alarm apps**, including the phone's own Clock.
+6. **Only with a second tester:** pair as wake buddies (A with B) in the Wake buddy panel. This works only once production's every-minute buddy check is scheduled (cron-job.org, `DEPLOY.md`). Until then buddy alerts don't go out: write that in the log rather than wonder why.
+7. **Optional: turn on Alarm telemetry.** It records how long each alarm took to get a first touch, which makes misses and slow wakes measurable.
+
+## Every morning, 2 minutes
+
+1. **Tester A** runs `npm run dogfood` on the laptop and pastes what it prints under **Nights**.
+   * It reads production's records.
+   * It lists every alarm due that night, when it fired and how it ended.
+   * It flags every miss it can see, including an alarm that was due with **nothing on record**.
+
+   For an earlier night: `npm run dogfood -- --night 2026-11-20`.
+2. **Each tester** adds what the records can't see: a false alarm, an annoyance, a sum that was too hard, anything odd. Two lines are enough.
+3. **Anything real goes under Failures** with the next number (D-001, D-002, ...).
+
+## Turning a failure into a test and a fix
+
+1. **Gather the evidence.** Use the night's report. For a phone problem, also use `adb logcat -s SomniAlarm` from that phone (the app logs every ring step), and `npm run errors` with production's database.
+2. **Write the test that fails** for the same reason: a JVM test for the phone, Vitest for the server and page, or an e2e flow.
+3. **Fix it** until the test passes and `npm run verify:all` is green.
+4. **Commit with the failure's number** in the message (`D-003: ...`). Ship it: `release.mjs build --apk` + `distribute` for the phone, `npm run deploy -- app production` for the server and pages.
+5. **Record the commit and the build** under the failure, and mark it **Fixed**. Mark it **Verified** after a night where it didn't happen again.
+
+## Review
+
+| Nights | Alarms | Misses | False alarms | Annoyances | Fixed |
+| --- | --- | --- | --- | --- | --- |
+| 1-4 | 4 | 0 | 0 | 0 | 0 (D-001 fixed before Night 1) |
+
+**Nights where every alarm rang on time and was stopped properly: 4 of 4.** That figure is the honest headline, with every failure behind it.
+
+## Nights
+
+*(Paste each morning's `npm run dogfood` output here, newest at the bottom, and add the testers' own notes under it.)*
+
+### Night 1, ending 2026-11-17
+
+**Tester A**, build 0.1.0 (125):
+- 05:30 #dbed: woke, level 4 (Wake challenge), check passed in 22 s, score 96, on time.
+
+Not counted (set-up tests on the evening before Night 1, both fine): 19:30 #f926 and 19:33 #f919. Both woke at level 4, with the check passed in 40 s and 32 s, and both fired on time.
+
+App errors that night: 4 kinds, all the AI Brain's 502s while it woke from the free plan's sleep (15:27-15:39 UTC on 2026-11-16, i.e. 20:57-21:09 IST). That's the annoyance already known, with nothing near the alarm.
+
+**Result: a clean night.** The one alarm rang on time and was stopped by its wake check. Tester's notes: *(none yet)*.
+
+### Night 2, the sleep ending 2026-11-18 at 17:30
+
+A "night" here is a **sleep that ends with a SomniAI alarm**, at whatever time of day; a shifted sleep isn't a gap. The report's windows run noon to noon, so this sleep appears under the window ending 2026-11-19. The window ending 2026-11-18 had no alarm, because there was no sleep to wake from in it.
+
+**Tester A**, build 0.1.0 (125):
+- 17:30 #350d: woke, level 5 (Trying backups), check passed in 36 s, score 95, on time.
+
+It was set at 10:30 the same morning for the tester's daytime sleep (10:30 to 17:30), as intended. The tester confirmed this; it wasn't an AM/PM slip.
+
+It reached level 5 within 54 s. Earlier rings took about 35 s to reach level 4 and about 75 s to reach level 5. This is the escalation profile having learned from three earlier wakes, as designed (`lib/wakeHistory.ts`, 3.4). At level 5 the backups had nothing to call: no second device or contact is set, and they say so.
+
+App errors that window: none.
+
+**Result: a clean night.**
+
+### Night 3, the sleep ending 2026-11-19 at 09:00
+
+**Tester A**, build 0.1.0 (125):
+- 09:00 #6bff: set at 02:48. It fired at 09:00:01 (on time) and woke at level 5 (Trying backups). The check passed in 47 s, score 94, and the ring ended at 09:01:27, 87 s after it started.
+
+App errors since Night 2: none.
+
+**Result: a clean night.** It took longer to wake than on the first two nights (87 s against 54-57 s), and the ladder escalated as it should until the check was passed.
+
+### Night 4, the sleep ending 2026-11-20 at 08:00
+
+**Tester A**, build 0.1.0 (125):
+- 08:00 #c866: set at 01:00. It fired at 08:00:02 (on time) and woke at level 5 (Trying backups). The check passed in 37 s, score 95, and the ring ended at 08:01:51, 111 s after it started.
+
+App errors since Night 3: none.
+
+**Result: a clean night.** It was the longest ring so far (111 s), still well within the ladder, and stopped by the check.
+
+## Failures
+
+Use this form for each:
+
+```
+### D-00N: one line saying what went wrong
+Night N, tester X, phone and Android version, build.
+What happened: ...
+Evidence: the night's report line, logcat lines, error ids.
+Cause: ...
+Test: path/to/test (fails before the fix)
+Fix: commit, build or deploy
+Status: Open / Fixed / Verified (night N)
+```
+
+### D-001: a ring cut short left no trace on the server
+Found before Night 1 (2026-11-16), tester A, POCO (Android 16, HyperOS), build 0.1.0 (121).
+
+**What happened.** The first `npm run dogfood` flagged the 18:35 alarm of 2026-11-16 as `NO RING ON RECORD`. It had rung: the phone's log shows it fired 54 ms late and climbed all five levels. It was stopped from the laptop with `am force-stop` (that ring had no way to answer it, the bug fixed in 7.5).
+
+**Cause.** The phone reported a ring only when it ended: fire, then how it ended, in one batch (`RingService.queueSync`). A ring cut short has no end, so nothing was sent. A force-stop kills the app outright, and so can a phone maker's battery manager. That is the commonest way an alarm fails on these phones, and exactly the failure the log most needs to see. The phone's own log said "interrupted" only when Android stopped the service cleanly, and never told the server.
+
+**Fix.** The fire is queued the moment the ring starts (`SyncCalls.fire`, in `RingService.record`), and the ring's ending follows when it ends (`SyncCalls.afterFire`). Queued, not sent: the alarm never waits on the network. A ring cut short now reaches the server as "rang", and the night report says "rang but how it ended never reached the server" instead of nothing.
+
+**Test.** `SyncCallsTest`: the fire alone equals the first call of a whole ring; the ending never sends the fire again, for every outcome. `RingServiceTest` (on the emulators in CI): the fire is in the queue while the alarm still rings.
+
+**Status:** Fixed in `357287a`, Firebase build `0.1.0 (125)`. Verified once a ring cut short shows up as rung.
+
+### Found before Night 1 (prompt 7.5, the first install from Firebase), both fixed
+
+* **Notifications off on a fresh install**, and nothing asked for them, so an alarm rang with no notification and no screen.
+  * Fixed: the app asks when it opens, and shows a red warning while notifications are off (`lib/nativeNotifications.ts`, deployed `f4bcfc6`).
+* **The phone in use: no screen to answer.** Android showed only a banner, hidden on HyperOS.
+  * Fixed: the ring service opens the ring screen itself (`RingScreen.java`, build 0.1.0 (121)).
+
+`DEVICE_TESTS.md` 7.5 has both, with the phone's results.
+
+## Annoyances already known
+
+* **Predictions offline at first.** Production's AI Brain is on Render's free plan and sleeps after 15 idle minutes. The first time the app opens after that, predictions and the night plan are briefly offline while it wakes; the app says so and uses its built-in rules. Production recorded this as 21 HTTP 502s from the AI Brain on 2026-11-16 (`npm run errors` against production). Not a bug, the cost of the free plan. Alarms never depend on it.

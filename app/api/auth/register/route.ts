@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { connectToDatabase } from "@/lib/mongoose";
 import { User } from "@/models/User";
-import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
+import { jsonError, jsonOk, parseJson, guard, routeError } from "@/lib/http";
 
 interface RegisterBody {
   email?: string;
@@ -18,15 +18,22 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return jsonError("Invalid request body", 400);
     }
-    const email = body.email?.toLowerCase().trim();
-    const password = body.password;
-    const name = body.name?.trim();
+    // Non-string fields used to crash (.toLowerCase on a number: 500) or reach
+    // bcrypt (a 503 that echoed "Illegal arguments" back to the caller).
+    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
+    const password = typeof body.password === "string" ? body.password : "";
+    const name = typeof body.name === "string" ? body.name.trim() : undefined;
 
     if (!email || !EMAIL_RE.test(email)) {
       return jsonError("A valid email is required", 400);
     }
-    if (!password || password.length < 8) {
+    if (password.length < 8) {
       return jsonError("Password must be at least 8 characters", 400);
+    }
+    // bcrypt ignores everything past 72 bytes, so two long passwords sharing
+    // their first 72 bytes would both unlock the account.
+    if (Buffer.byteLength(password, "utf8") > 72) {
+      return jsonError("Password must be 72 characters or fewer", 400);
     }
 
     try {
@@ -47,14 +54,18 @@ export async function POST(req: NextRequest) {
       return jsonOk({ id: String(user._id), email: user.email }, { status: 201 });
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Unknown error";
-      console.error("[auth/register] failed:", detail);
       const isDbConnection = /MONGO_DB_URI|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|querySrv|getaddrinfo|server selection|topology/i.test(detail);
-      return jsonError(
-        isDbConnection
-          ? "Database is not reachable. Make sure MongoDB is running and MONGO_DB_URI in .env.local is correct."
-          : `Could not create account: ${detail}`,
-        503
-      );
+      if (isDbConnection) {
+        console.error("[auth/register] failed:", detail);
+        return jsonError(
+          "Database is not reachable. Make sure MongoDB is running and MONGO_DB_URI in .env.local is correct.",
+          503,
+        );
+      }
+      // Everything else used to come back as a 503 quoting the raw error: a
+      // too-long name said "Could not create account: User validation failed:
+      // name: Path `name` ...", and a sign-up race was a 503 instead of a 409.
+      return routeError(err);
     }
   });
 }

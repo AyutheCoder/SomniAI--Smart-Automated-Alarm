@@ -1,0 +1,24 @@
+# What a Vercel deploy uploads (prompt 7.4, DEPLOY.md): the web app's sources only.
+# Secrets first: never uploaded, whatever else changes here.
+.env
+.env*.local
+.vercel
+# Local data and build output.
+.data
+.next
+node_modules
+test-results
+playwright-report
+# The phone app, the research, and the AI Brain (deployed to Render), except the
+# one file the web app reads from it: the model card (lib/modelCard.ts).
+/android
+/paper
+/docs
+/device-results
+/study
+/ai-brain/*
+!/ai-brain/models
+/ai-brain/models/*
+!/ai-brain/models/real
+/ai-brain/models/real/*
+!/ai-brain/models/real/model_card.json

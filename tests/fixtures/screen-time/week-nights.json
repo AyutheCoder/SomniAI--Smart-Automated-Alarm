@@ -1,0 +1,9 @@
+{
+  "nights": [
+    { "date": "2026-11-13", "bedtime": "2026-11-12T17:10:00Z", "minutes": 120, "windowMinutes": 180, "bedtimeFrom": "phone" },
+    { "date": "2026-11-14", "bedtime": "2026-11-13T17:30:00Z", "minutes": 135, "windowMinutes": 180, "bedtimeFrom": "phone" },
+    { "date": "2026-11-15", "bedtime": "2026-11-14T16:30:00Z", "minutes": 60, "windowMinutes": 180, "bedtimeFrom": "sleep_log" },
+    { "date": "2026-11-16", "bedtime": "2026-11-15T16:20:00Z", "minutes": 5, "windowMinutes": 180, "bedtimeFrom": "phone" }
+  ],
+  "skipped": ["2026-11-10: before_records", "2026-11-11: before_records", "2026-11-12: before_records"]
+}

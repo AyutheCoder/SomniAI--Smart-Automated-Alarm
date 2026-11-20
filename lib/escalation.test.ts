@@ -6,6 +6,7 @@ import {
   levelForElapsed,
   type EscalationProfile,
 } from "./escalation";
+import { BACKUP_KINDS } from "./backupAdapters";
 
 /** Timings from TIMELINE, restated so a silent edit to them fails here. */
 const ADAPTIVE = [0, 10, 22, 35, 75];
@@ -114,11 +115,10 @@ describe("the shared ladder", () => {
   it("reserves every backup channel for the final level", () => {
     const plan = buildEscalationPlan("adaptive");
     expect(plan.slice(0, 4).every((l) => l.backup.length === 0)).toBe(true);
+    // Smart lights and speakers were removed in prompt 1.1: they were never real.
     expect(plan[4].backup).toEqual([
       "secondaryAlarm",
       "smartwatch",
-      "smartLight",
-      "smartSpeaker",
       "emergencyContact",
     ]);
   });
@@ -179,7 +179,7 @@ describe("the criticality override", () => {
       critical: true,
     });
 
-    expect(critical[4].backup).toHaveLength(5);
+    expect(critical[4].backup).toHaveLength(BACKUP_KINDS.length);
     expect(critical.some((l) => l.label.includes("held back"))).toBe(false);
   });
 
@@ -191,7 +191,7 @@ describe("the criticality override", () => {
       critical: true,
     });
     expect(critical[4].afterSeconds).toBe(45);
-    expect(critical[4].backup).toHaveLength(5);
+    expect(critical[4].backup).toHaveLength(BACKUP_KINDS.length);
   });
 
   it("differs from the ordinary path only in what it holds back", () => {
@@ -202,7 +202,7 @@ describe("the criticality override", () => {
 
     expect(ordinary.map((l) => l.afterSeconds)).toEqual(critical.map((l) => l.afterSeconds));
     expect(ordinary[4].backup).toEqual([]);
-    expect(critical[4].backup).toHaveLength(5);
+    expect(critical[4].backup).toHaveLength(BACKUP_KINDS.length);
   });
 
   it("does not resurrect the ladder for an under-sampled critical alarm", () => {
@@ -215,7 +215,7 @@ describe("the criticality override", () => {
       { critical: true },
     );
     expect(critical).toEqual(plan);
-    expect(critical[4].backup).toHaveLength(5);
+    expect(critical[4].backup).toHaveLength(BACKUP_KINDS.length);
   });
 });
 

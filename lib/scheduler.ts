@@ -37,7 +37,7 @@ export interface SchedulableTask {
 }
 export interface SchedulerPrediction {
   predictedSleepDuration: number;
-  wakeupConsistency: number;
+  wakeupConsistency: number | null;
   oversleepProbability: number;
   wakeSuccessProbability: number;
 }
@@ -280,14 +280,14 @@ function buildScheduleExplanation(input: {
           : undefined,
     },
     {
-      feature: "Oversleep risk",
+      feature: "Off-schedule wake chance",
       value: `${oversleepPct}%`,
       impact: prediction.oversleepProbability > 0.5 ? "increase" : "neutral",
       weight: prediction.oversleepProbability > 0.5
         ? 0.55 + (prediction.oversleepProbability - 0.5)
         : prediction.oversleepProbability * 0.5,
       detail: wake.riskBumped
-        ? "High oversleep risk raised intensity and enforced verification."
+        ? "A high chance of waking off your usual time raised intensity and enforced verification."
         : undefined,
     },
     {
@@ -341,7 +341,7 @@ function buildScheduleExplanation(input: {
         value: "fatigue",
         impact: "increase",
         weight: 0.3,
-        detail: "Fatigue cues raise oversleep risk.",
+        detail: "Fatigue cues make an off-schedule wake more likely.",
       });
     }
     const startText = hadExplicitTime
@@ -349,7 +349,7 @@ function buildScheduleExplanation(input: {
       : "(no set time, using your usual wake hour)";
     let rationale = `Wake at ${timeLabel(wakeAt)} to allow ${buffer} min before "${task.title}" ${startText}.`;
     if (wake.riskBumped) {
-      rationale += ` Intensity raised and verification enforced because oversleep risk is ${oversleepPct}%.`;
+      rationale += ` Intensity raised and verification enforced because the chance of waking off your usual time is ${oversleepPct}%.`;
     }
     return makeExplanation({
       summary: `${wake.wakeStrategy} wake for "${task.title}"`,
@@ -435,7 +435,7 @@ function buildScheduleExplanation(input: {
         },
         { label: "Prep buffer", value: `${buffer} min` },
         {
-          label: "Oversleep risk",
+          label: "Off-schedule wake chance",
           value: `${Math.round(prediction.oversleepProbability * 100)}%`,
         },
         { label: "Wake strategy", value: wake.wakeStrategy },
@@ -443,7 +443,7 @@ function buildScheduleExplanation(input: {
       const confidence = clamp(0.45 +
         score * 0.3 +
         prediction.wakeSuccessProbability * 0.15 +
-        prediction.wakeupConsistency * 0.1, 0, 1);
+        (prediction.wakeupConsistency ?? 0) * 0.1, 0, 1);
       const explanation = buildScheduleExplanation({
         task,
         label,

@@ -1,11 +1,20 @@
 import type { BehavioralMetrics } from "@/lib/features";
 const AI_BRAIN_URL = process.env.AI_BRAIN_URL?.replace(/\/+$/, "") ?? "";
-const TIMEOUT_MS = 4000;
+// The deployed AI Brain answers only the app (ai-brain/access.py, prompt 7.4).
+const AI_BRAIN_TOKEN = process.env.AI_BRAIN_TOKEN?.trim() ?? "";
+const AUTH: Record<string, string> = AI_BRAIN_TOKEN ? { Authorization: `Bearer ${AI_BRAIN_TOKEN}` } : {};
+// How long to wait for the AI Brain before using the app's own rules. Settable for the failure-mode tests (7.3).
+const TIMEOUT_MS = Number(process.env.AI_BRAIN_TIMEOUT_MS) > 0 ? Number(process.env.AI_BRAIN_TIMEOUT_MS) : 4000;
+/** Whether an AI Brain is configured at all, as opposed to configured and not answering. */
+export function aiBrainConfigured(): boolean {
+  return AI_BRAIN_URL !== "";
+}
 export type AISource = "ai" | "fallback";
 export type ModelFeatures = Record<string, number>;
 export interface SleepPrediction {
   predictedSleepDuration: number;
-  wakeupConsistency: number;
+  /** The user's measured sleep consistency (0-100), passed back; not a prediction since 5.2. Null if unknown. */
+  wakeupConsistency: number | null;
   confidence: number;
 }
 export interface WakePrediction {
@@ -66,18 +75,43 @@ async function postJson<T>(path: string, body: unknown): Promise<T | null> {
   try {
     const res = await fetch(`${AI_BRAIN_URL}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...AUTH },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: "no-store",
     });
-    if (!res.ok)
+    if (!res.ok) {
+      if (res.status >= 500 && res.status !== 503) {
+        await recordBrainError(path, res);
+      }
       return null;
+    }
     return (await res.json()) as T;
   }
-  catch (e) {
+  catch {
+    // Unreachable, too slow, or the connection dropped mid-answer: the app's own rules answer instead.
+    // Outages are the uptime check's to record (lib/uptime.ts), not an error per request.
     return null;
   }
+}
+
+/**
+ * The AI Brain's own error answer (ai-brain/errors.py), recorded in the error
+ * tracker (7.3). A 503 is "no models loaded", a state the uptime check reports.
+ */
+async function recordBrainError(path: string, res: Response): Promise<void> {
+  const body = (await res.json().catch(() => null)) as { kind?: unknown; message?: unknown; stack?: unknown } | null;
+  const { recordError } = await import("./errorTracking");
+  await recordError({
+    source: "ai-brain",
+    kind: typeof body?.kind === "string" ? body.kind : `HTTP ${res.status}`,
+    message: typeof body?.message === "string" ? body.message : `The AI Brain answered ${res.status} to ${path}`,
+    // Python's frames ('File "x.py", line 3, in f'), in the shape the tracker keeps ("at ...").
+    stack: typeof body?.stack === "string"
+      ? body.stack.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("File ")).map((l) => `at ${l}`).join("\n")
+      : undefined,
+    where: path,
+  });
 }
 export async function aiBrainHealth(): Promise<boolean> {
   if (!AI_BRAIN_URL)
@@ -89,7 +123,7 @@ export async function aiBrainHealth(): Promise<boolean> {
     });
     return res.ok;
   }
-  catch (e) {
+  catch {
     return false;
   }
 }
@@ -98,12 +132,12 @@ const num = (v: unknown, d: number) => typeof v === "number" && Number.isFinite(
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const r2 = (x: number) => Math.round(x * 100) / 100;
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
-// Kept in step with ai-brain/recommend.py. The wake-success model is calibrated
-// against a ~50% base rate, so oversleep probability has its median at 0.47 -
-// a `> 0.5` alert fired on 46.7% of nights. 0.70 is the 75th percentile, and
-// 0.75 wake reliability is roughly the top quartile on the other side.
-const OVERSLEEP_ALERT = 0.70;
-const WAKE_RELIABLE = 0.75;
+// Kept in step with ai-brain/recommend.py, which sets them from the shipped
+// model's held-out scores (ai-brain/MODEL_CARD.md, prompt 5.2): the top quartile
+// of predicted off-schedule risk, and of predicted regularity.
+// lib/modelCard.test.ts checks they match the model card.
+export const OVERSLEEP_ALERT = 0.309;
+export const WAKE_RELIABLE = 0.833;
 
 const PRIORITY_WEIGHT: Record<Recommendation["priority"], number> = {
   high: 3,
@@ -130,7 +164,8 @@ function fallbackSleep(f: ModelFeatures): SleepPrediction {
     loud / 80, 4, 10);
   return {
     predictedSleepDuration: r2(duration),
-    wakeupConsistency: r1(clamp(num(f.sleep_consistency, 60), 0, 100)),
+    // Measured, as the AI Brain now returns it; no made-up 60 when there's nothing to measure.
+    wakeupConsistency: typeof f.sleep_consistency === "number" && Number.isFinite(f.sleep_consistency) ? r1(clamp(f.sleep_consistency, 0, 100)) : null,
     confidence: 0.4,
   };
 }
@@ -195,7 +230,7 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   else if (durationHours > 9.5) {
     tips.push({
-      text: `You're sleeping about ${durationHours.toFixed(1)} h. Consistently long sleep can signal sleep debt or low quality.`,
+      text: `You're sleeping about ${durationHours.toFixed(1)} h. That is more than the 7-9 h most adults are advised to get.`,
       priority: "low",
       icon: "moon",
       basis: "long sleep duration",
@@ -211,15 +246,15 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (oversleep > OVERSLEEP_ALERT) {
     tips.push({
-      text: "Elevated oversleep risk for your next wake. Enable verification and a backup escalation level.",
+      text: "Your next wake time is likely to drift from your usual one. If it matters, turn on verification and a backup level.",
       priority: "high",
       icon: "alert-triangle",
-      basis: "high oversleep probability",
+      basis: "low predicted wake-time regularity",
     });
   }
   if (num(m.fatigueScore, 40) > 60) {
     tips.push({
-      text: "High fatigue detected. Cut caffeine after midday and reduce evening screen time.",
+      text: "Your logs point to building fatigue. Try cutting caffeine after midday and reducing evening screen time.",
       priority: "medium",
       icon: "battery-low",
       basis: "high fatigue score",
@@ -235,7 +270,7 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (num(m.sleepDisruptionScore, 30) > 55) {
     tips.push({
-      text: "Nighttime noise or movement is disrupting your sleep. Aim for a quieter, cooler, darker room.",
+      text: "Your logs show frequent nighttime noise or movement. A quieter, cooler, darker room may help.",
       priority: "medium",
       icon: "volume-x",
       basis: "high sleep disruption",
@@ -243,10 +278,10 @@ function fallbackReport(p: ReportPayload): SleepReport {
   }
   if (wakeSuccess >= WAKE_RELIABLE && num(m.sleepConsistencyScore, 50) >= 60) {
     tips.push({
-      text: "Great wake reliability and steady timing - keep your current routine going.",
+      text: "You usually wake close to your usual time, and your sleep timing is steady. Keep your current routine.",
       priority: "low",
       icon: "check",
-      basis: "strong wake success",
+      basis: "high predicted wake-time regularity",
     });
   }
   if (tips.length === 0) {
@@ -262,10 +297,10 @@ function fallbackReport(p: ReportPayload): SleepReport {
     }
     else {
       tips.push({
-        text: "Nothing needs attention - your sleep and wake routine are on track.",
+        text: "Nothing in your logged data needs attention right now.",
         priority: "low",
         icon: "check",
-        basis: "all metrics within target",
+        basis: "no rule triggered",
       });
     }
   }
@@ -290,6 +325,17 @@ export async function predictSleep(features: ModelFeatures): Promise<{
     return { data: ai, source: "ai" };
   }
   return { data: fallbackSleep(features), source: "fallback" };
+}
+/**
+ * The population models for many nights at once (prompt 5.3), for comparing a
+ * person's past nights with what the models would have said. Null when the AI
+ * Brain isn't there: there is no fallback for this, as the rules aren't the model.
+ */
+export async function predictBatch(rows: ModelFeatures[]): Promise<{ sleep: number[]; regular: number[] } | null> {
+  const ai = await postJson<{ sleep: number[]; regular: number[] }>("/predict/batch", { rows });
+  return ai && Array.isArray(ai.sleep) && Array.isArray(ai.regular) && ai.sleep.length === rows.length && ai.regular.length === rows.length
+    ? ai
+    : null;
 }
 export async function predictWakeSuccess(features: ModelFeatures): Promise<{
   data: WakePrediction;
@@ -507,7 +553,7 @@ export function fallbackSemantic(text: string): SemanticAnalysis {
     stressScore: Math.round(stress),
     wakeReliabilityNeed,
     rationale: cues.length
-      ? `Detected ${cues.slice(0, 5).join(", ")}`
+      ? `Matched cues: ${cues.slice(0, 5).join(", ")}`
       : "No strong urgency or emotion cues; treated as routine",
     tier: "rules",
   };

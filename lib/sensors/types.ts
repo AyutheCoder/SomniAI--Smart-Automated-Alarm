@@ -22,6 +22,12 @@ export interface ScreenSample {
     at: number;
 }
 
+/**
+ * A sensor. The adapters in this folder read real browser sensors only: one
+ * that isn't there, or isn't allowed, says so (start() rejects) and never
+ * makes readings up. Simulated sensors are the developer simulator's
+ * (lib/simulators/sensors.ts), and say so in `simulated`.
+ */
 export interface SensorAdapter<T> {
     readonly kind: SensorKind;
     readonly supported: boolean;
@@ -29,4 +35,12 @@ export interface SensorAdapter<T> {
     start(onSample: (sample: T) => void): Promise<void> | void;
     stop(): void;
     isRunning(): boolean;
+}
+
+/** Why a real sensor couldn't start. */
+export class SensorUnavailable extends Error {
+    constructor(readonly kind: SensorKind, readonly reason: "unsupported" | "refused", message: string) {
+        super(message);
+        this.name = "SensorUnavailable";
+    }
 }

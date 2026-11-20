@@ -35,7 +35,9 @@ export default function RootLayout({ children }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // The Android shell (Capacitor) sets --safe-area-inset-* on <html> before
+    // React loads; that attribute alone may differ from the server's HTML.
+    <html lang="en" suppressHydrationWarning>
       <body>
         <a href="#main-content" className="skip-link">
           Skip to main content

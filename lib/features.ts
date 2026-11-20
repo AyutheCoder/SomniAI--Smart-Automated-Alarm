@@ -6,6 +6,8 @@ export interface SleepLogInput {
   snoozeCount?: number | null;
   alarmResponseMs?: number | null;
   wakeConfidence?: number | null;
+  /** Resting heart rate that day, from Health Connect (prompt 4.2). */
+  restingHr?: number | null;
 }
 export interface BehaviorEventInput {
   type: string;

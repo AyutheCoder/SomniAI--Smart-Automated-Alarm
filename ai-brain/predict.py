@@ -1,8 +1,18 @@
 """Model loading + sleep/wake inference for the AI Brain.
 
-Models are loaded once at import. If the artifacts are missing (e.g. a fresh
-checkout), the training script is invoked automatically so the service is
-self-sufficient on first boot.
+Since prompt 5.2 the models are trained on real data: the LifeSnaps cohort,
+through the paper's pipeline (`training/train_shipped.py`), committed in
+`models/real/` with their model card (`model_card.json`, `MODEL_CARD.md`).
+They replace forests trained on a synthetic panel.
+
+Each model reads only the inputs it was trained on, in the card's order; an
+input the caller doesn't send takes the training nights' median, so it
+neither helps nor hurts. Inputs no dataset recorded (screen time, caffeine,
+room noise and temperature, snoozes) can't move a prediction.
+
+There is no synthetic fallback: if the models aren't there, nothing is
+predicted (`ModelsUnavailable`), the service says so on /health, and the app
+uses its own rule-based fallback, labelled as such.
 """
 
 from __future__ import annotations
@@ -13,51 +23,49 @@ from threading import Lock
 
 import joblib
 import numpy as np
+import pandas as pd
+import sklearn
 
-from feature_spec import FEATURE_DEFAULTS, FEATURE_NAMES, build_feature_vector
+from feature_spec import FEATURE_DEFAULTS, FEATURE_NAMES
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(HERE, "models")
+MODELS_DIR = os.path.join(HERE, "models", "real")
+CARD_FILE = "model_card.json"
 
-_MODEL_FILES = {
-    "sleep_duration": "sleep_duration_model.joblib",
-    "wakeup_consistency": "wakeup_consistency_model.joblib",
-    "wake_success": "wake_success_model.joblib",
-}
+
+class ModelsUnavailable(RuntimeError):
+    """The shipped models or their card are missing or unusable."""
+
 
 _lock = Lock()
 _models: dict[str, object] = {}
-_meta: dict = {}
+_card: dict = {}
 
 
-def _artifacts_present() -> bool:
-    return all(
-        os.path.exists(os.path.join(MODELS_DIR, fname))
-        for fname in _MODEL_FILES.values()
-    )
-
-
-def _train_if_missing() -> None:
-    if _artifacts_present():
-        return
-    # Imported lazily so serving doesn't depend on training-only modules.
-    from training.model_training import main as train_main
-
-    train_main()
-
-
-def load_models() -> None:
-    """Load (training first if needed) all models into the module cache."""
+def load_models(models_dir: str | None = None) -> None:
+    """Load the shipped models and their card, once. Raises ModelsUnavailable."""
     with _lock:
         if _models:
             return
-        _train_if_missing()
-        for key, fname in _MODEL_FILES.items():
-            _models[key] = joblib.load(os.path.join(MODELS_DIR, fname))
-        meta_path = os.path.join(MODELS_DIR, "feature_meta.json")
-        if os.path.exists(meta_path):
-            with open(meta_path, encoding="utf-8") as fh:
-                _meta.update(json.load(fh))
+        root = models_dir or MODELS_DIR
+        card_path = os.path.join(root, CARD_FILE)
+        if not os.path.exists(card_path):
+            raise ModelsUnavailable(f"no model card at {card_path}; see training/train_shipped.py")
+        with open(card_path, encoding="utf-8") as fh:
+            card = json.load(fh)
+        trained_with = card.get("sklearnVersion", "")
+        # A forest pickled by one scikit-learn minor version isn't promised to load in another.
+        if trained_with.split(".")[:2] != sklearn.__version__.split(".")[:2]:
+            raise ModelsUnavailable(f"models were trained with scikit-learn {trained_with}; this is {sklearn.__version__}")
+        loaded = {}
+        for key, spec in card["models"].items():
+            path = os.path.join(root, spec["file"])
+            if not os.path.exists(path):
+                raise ModelsUnavailable(f"{spec['file']} is missing from {root}")
+            loaded[key] = joblib.load(path)
+        _models.update(loaded)
+        _card.clear()
+        _card.update(card)
 
 
 def models_loaded() -> bool:
@@ -65,94 +73,131 @@ def models_loaded() -> bool:
 
 
 def get_meta() -> dict:
-    return dict(_meta)
+    """The model card: what the models were trained on and how well they do."""
+    return dict(_card)
 
 
-def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
-    return max(lo, min(hi, x))
+def _frame(rows: list[dict | None]) -> pd.DataFrame:
+    """The models' inputs, in the card's order; anything not sent takes the training median."""
+    feats = _card["features"]
+    medians = _card["featureMedians"]
+    out = []
+    for r in rows:
+        r = r or {}
+        row = []
+        for f in feats:
+            v = r.get(f)
+            try:
+                v = float(v)
+                ok = np.isfinite(v)
+            except (TypeError, ValueError):
+                ok = False
+            row.append(v if ok else float(medians[f]))
+        out.append(row)
+    return pd.DataFrame(out, columns=feats)
 
 
-def _regressor_confidence(model, x_row: np.ndarray, scale: float) -> float:
+def _regressor_confidence(model, x: pd.DataFrame, scale: float) -> float:
     """Confidence from the spread of per-tree predictions (tighter == surer)."""
     try:
-        preds = np.array([tree.predict(x_row)[0] for tree in model.estimators_])
-        std = float(preds.std())
-        return round(_clamp(1.0 - std / scale), 3)
+        preds = np.array([tree.predict(x.to_numpy())[0] for tree in model.estimators_])
+        return round(max(0.0, min(1.0, 1.0 - float(preds.std()) / scale)), 3)
     except Exception:
         return 0.5
 
 
+def _measured_consistency(features: dict | None) -> float | None:
+    v = (features or {}).get("sleep_consistency")
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return round(max(0.0, min(100.0, v)), 1) if np.isfinite(v) else None
+
+
 def predict_sleep(features: dict | None) -> dict:
-    """features -> {predictedSleepDuration, wakeupConsistency, confidence}."""
+    """features -> {predictedSleepDuration, wakeupConsistency, confidence}.
+
+    `wakeupConsistency` is no longer a prediction: no real-data target exists
+    for it (MODEL_CARD.md), so it is the caller's own measured sleep
+    consistency, passed back, or null when none was sent.
+    """
     load_models()
-    x_row = np.array([build_feature_vector(features)], dtype=float)
-
-    reg_sleep = _models["sleep_duration"]
-    reg_cons = _models["wakeup_consistency"]
-
-    duration = float(reg_sleep.predict(x_row)[0])
-    consistency = float(reg_cons.predict(x_row)[0])
-    conf = round(
-        (
-            _regressor_confidence(reg_sleep, x_row, scale=2.0)
-            + _regressor_confidence(reg_cons, x_row, scale=25.0)
-        )
-        / 2.0,
-        3,
-    )
-
+    x = _frame([features])
+    model = _models["sleep_duration"]
     return {
-        "predictedSleepDuration": round(duration, 2),
-        "wakeupConsistency": round(consistency, 1),
-        "confidence": conf,
+        "predictedSleepDuration": round(float(model.predict(x)[0]), 2),
+        "wakeupConsistency": _measured_consistency(features),
+        "confidence": _regressor_confidence(model, x, scale=2.0),
     }
 
 
-def predict_wake_success_batch(rows: list[dict | None]) -> list[float]:
-    """Wake-success probability for many candidate feature vectors at once.
+def _regular_index(clf) -> int:
+    classes = list(getattr(clf, "classes_", [0, 1]))
+    return classes.index(1) if 1 in classes else len(classes) - 1
 
-    The planner scores dozens of hypothetical nights per request. Sending them
-    through `predict_wake_success` one at a time costs a separate forest
-    traversal each; scoring the whole matrix in one call turns a ~3s request
-    into a few tens of milliseconds, which is the difference between fitting
-    inside the caller's timeout and not.
+
+def predict_wake_success_batch(rows: list[dict | None]) -> list[float]:
+    """Wake-time regularity probability for many candidate feature vectors at once.
+
+    The planner scores dozens of hypothetical nights per request; one call over
+    the whole matrix keeps that inside the caller's timeout.
     """
     load_models()
     if not rows:
         return []
-    x = np.array([build_feature_vector(r) for r in rows], dtype=float)
-    clf = _models["wake_success"]
-    proba = clf.predict_proba(x)
-    classes = list(getattr(clf, "classes_", [0, 1]))
-    idx = classes.index(1) if 1 in classes else len(classes) - 1
-    return [float(p[idx]) for p in proba]
+    clf = _models["wake_regularity"]
+    return [float(p[_regular_index(clf)]) for p in clf.predict_proba(_frame(rows))]
 
 
 def predict_wake_success(features: dict | None) -> dict:
-    """features -> {wakeSuccessProbability, oversleepProbability, confidence}."""
+    """features -> {wakeSuccessProbability, oversleepProbability, confidence}.
+
+    The names are the API's from before; what they measure is wake-time
+    regularity (MODEL_CARD.md): the chance of waking close to your usual time.
+    """
     load_models()
-    x_row = np.array([build_feature_vector(features)], dtype=float)
-
-    clf = _models["wake_success"]
-    proba = clf.predict_proba(x_row)[0]
-    # Class order is [0, 1]; guard against a degenerate single-class model.
-    classes = list(getattr(clf, "classes_", [0, 1]))
-    idx = classes.index(1) if 1 in classes else len(classes) - 1
-    wake_success = float(proba[idx])
-
+    clf = _models["wake_regularity"]
+    proba = clf.predict_proba(_frame([features]))[0]
+    regular = float(proba[_regular_index(clf)])
     return {
-        "wakeSuccessProbability": round(wake_success, 3),
-        "oversleepProbability": round(1.0 - wake_success, 3),
+        "wakeSuccessProbability": round(regular, 3),
+        "oversleepProbability": round(1.0 - regular, 3),
         "confidence": round(float(max(proba)), 3),
+    }
+
+
+MAX_BATCH = 400
+
+
+def predict_batch(rows: list[dict | None]) -> dict:
+    """The population models' predictions for many nights at once (prompt 5.3).
+
+    For personalisation: what the models would have said for each of a
+    person's past nights, to compare with what happened. Same inputs and
+    medians as the single predictions.
+    """
+    load_models()
+    if len(rows) > MAX_BATCH:
+        raise ValueError(f"at most {MAX_BATCH} rows at a time")
+    if not rows:
+        return {"sleep": [], "regular": []}
+    x = _frame(rows)
+    clf = _models["wake_regularity"]
+    return {
+        "sleep": [round(float(v), 3) for v in _models["sleep_duration"].predict(x)],
+        "regular": [round(float(p[_regular_index(clf)]), 4) for p in clf.predict_proba(x)],
     }
 
 
 __all__ = [
     "FEATURE_DEFAULTS",
     "FEATURE_NAMES",
+    "ModelsUnavailable",
     "get_meta",
     "load_models",
     "models_loaded",
+    "predict_batch",
     "predict_sleep",
     "predict_wake_success",
     "predict_wake_success_batch",

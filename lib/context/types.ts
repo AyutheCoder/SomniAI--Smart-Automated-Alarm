@@ -1,3 +1,5 @@
+import type { ContextSources } from "@/lib/provenance";
+
 export interface WeatherInfo {
   tempC: number;
   condition: string;
@@ -15,10 +17,10 @@ export interface WearableInfo {
   lastSleepHours?: number;
 }
 
+/** Context as built: each group's values and, separately, where they came from. */
 export interface ContextData {
   weather?: WeatherInfo;
   calendar?: CalendarEvent[];
   wearable?: WearableInfo;
+  sources: ContextSources;
 }
-
-export type ContextSource = "simulated" | "live";

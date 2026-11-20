@@ -1,0 +1,1614 @@
+{
+ "shared": {
+  "gentle": [
+   {
+    "level": 1,
+    "afterSeconds": 0,
+    "label": "Normal alarm",
+    "volumeFactor": 1,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 2,
+    "afterSeconds": 20,
+    "label": "Increased volume",
+    "volumeFactor": 1.4,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 3,
+    "afterSeconds": 40,
+    "label": "Continuous vibration",
+    "volumeFactor": 1.5,
+    "vibrate": true,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "vibration"
+   },
+   {
+    "level": 4,
+    "afterSeconds": 60,
+    "label": "Wake challenge",
+    "volumeFactor": 1.6,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [],
+    "stage": "challenge"
+   },
+   {
+    "level": 5,
+    "afterSeconds": 120,
+    "label": "Trying backups",
+    "volumeFactor": 1.8,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [
+     "secondaryAlarm",
+     "smartwatch",
+     "emergencyContact"
+    ],
+    "stage": "challenge"
+   }
+  ],
+  "adaptive": [
+   {
+    "level": 1,
+    "afterSeconds": 0,
+    "label": "Normal alarm",
+    "volumeFactor": 1,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 2,
+    "afterSeconds": 10,
+    "label": "Increased volume",
+    "volumeFactor": 1.4,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 3,
+    "afterSeconds": 22,
+    "label": "Continuous vibration",
+    "volumeFactor": 1.5,
+    "vibrate": true,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "vibration"
+   },
+   {
+    "level": 4,
+    "afterSeconds": 35,
+    "label": "Wake challenge",
+    "volumeFactor": 1.6,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [],
+    "stage": "challenge"
+   },
+   {
+    "level": 5,
+    "afterSeconds": 75,
+    "label": "Trying backups",
+    "volumeFactor": 1.8,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [
+     "secondaryAlarm",
+     "smartwatch",
+     "emergencyContact"
+    ],
+    "stage": "challenge"
+   }
+  ],
+  "aggressive": [
+   {
+    "level": 1,
+    "afterSeconds": 0,
+    "label": "Normal alarm",
+    "volumeFactor": 1,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 2,
+    "afterSeconds": 5,
+    "label": "Increased volume",
+    "volumeFactor": 1.4,
+    "vibrate": false,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "ramp"
+   },
+   {
+    "level": 3,
+    "afterSeconds": 10,
+    "label": "Continuous vibration",
+    "volumeFactor": 1.5,
+    "vibrate": true,
+    "requireVerification": false,
+    "backup": [],
+    "stage": "vibration"
+   },
+   {
+    "level": 4,
+    "afterSeconds": 18,
+    "label": "Wake challenge",
+    "volumeFactor": 1.6,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [],
+    "stage": "challenge"
+   },
+   {
+    "level": 5,
+    "afterSeconds": 40,
+    "label": "Trying backups",
+    "volumeFactor": 1.8,
+    "vibrate": true,
+    "requireVerification": true,
+    "backup": [
+     "secondaryAlarm",
+     "smartwatch",
+     "emergencyContact"
+    ],
+    "stage": "challenge"
+   }
+  ]
+ },
+ "personalised": [
+  {
+   "strategy": "gentle",
+   "profile": "easy",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 25,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 50,
+     "label": "Continuous vibration (held back)",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 75,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 150,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "easy",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 25,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 50,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 75,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 150,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "hard",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 12,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 24,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 36,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 72,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "hard",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 12,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 24,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 36,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 72,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "middling",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 20,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 40,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 60,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 120,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "middling",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 20,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 40,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 60,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 120,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "new",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 20,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 40,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 60,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 120,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "gentle",
+   "profile": "new",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 20,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 40,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 60,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 120,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "easy",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 13,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 28,
+     "label": "Continuous vibration (held back)",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 44,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 94,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "easy",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 13,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 28,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 44,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 94,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "hard",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 6,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 13,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 21,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 45,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "hard",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 6,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 13,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 21,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 45,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "middling",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 10,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 22,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 35,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 75,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "middling",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 10,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 22,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 35,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 75,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "new",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 10,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 22,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 35,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 75,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "adaptive",
+   "profile": "new",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 10,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 22,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 35,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 75,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "easy",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 6,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 13,
+     "label": "Continuous vibration (held back)",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 23,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 50,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "easy",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 6,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 13,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 23,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 50,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "hard",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 3,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 6,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 11,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 24,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "hard",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 3,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 6,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 11,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 24,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "middling",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 5,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 10,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 18,
+     "label": "Wake challenge (held back)",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 40,
+     "label": "Trying backups (held back)",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "middling",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 5,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 10,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 18,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 40,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "new",
+   "critical": false,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 5,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 10,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 18,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 40,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  },
+  {
+   "strategy": "aggressive",
+   "profile": "new",
+   "critical": true,
+   "plan": [
+    {
+     "level": 1,
+     "afterSeconds": 0,
+     "label": "Normal alarm",
+     "volumeFactor": 1,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 2,
+     "afterSeconds": 5,
+     "label": "Increased volume",
+     "volumeFactor": 1.4,
+     "vibrate": false,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "ramp"
+    },
+    {
+     "level": 3,
+     "afterSeconds": 10,
+     "label": "Continuous vibration",
+     "volumeFactor": 1.5,
+     "vibrate": true,
+     "requireVerification": false,
+     "backup": [],
+     "stage": "vibration"
+    },
+    {
+     "level": 4,
+     "afterSeconds": 18,
+     "label": "Wake challenge",
+     "volumeFactor": 1.6,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [],
+     "stage": "challenge"
+    },
+    {
+     "level": 5,
+     "afterSeconds": 40,
+     "label": "Trying backups",
+     "volumeFactor": 1.8,
+     "vibrate": true,
+     "requireVerification": true,
+     "backup": [
+      "secondaryAlarm",
+      "smartwatch",
+      "emergencyContact"
+     ],
+     "stage": "challenge"
+    }
+   ]
+  }
+ ]
+}

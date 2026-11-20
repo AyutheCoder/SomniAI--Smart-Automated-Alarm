@@ -13,18 +13,17 @@ from __future__ import annotations
 
 _PRIORITY_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 
-# Thresholds on model probabilities, set from the score distribution the trained
-# model actually produces rather than from round numbers.
+# Thresholds on model probabilities, set from the score distribution the shipped
+# model actually produces rather than from round numbers: the 75th percentiles of
+# its held-out predictions (models/real/model_card.json "thresholds", written by
+# training/train_shipped.py; tests/test_shipped_models.py keeps these in step).
 #
-# The wake-success classifier is calibrated against a ~50% base rate, so
-# oversleep probability has its median at 0.47: the old `> 0.5` test fired on
-# 46.7% of nights and told half of all users their risk was "elevated". 0.70 is
-# the 75th percentile, so the warning now means the top quartile of risk.
-OVERSLEEP_ALERT = 0.70
-# Mirror on the other side: 0.75 is roughly the top quartile of wake reliability.
-# The previous 0.80 sat near the 12th percentile, so the encouraging message was
-# effectively unreachable for ordinary users.
-WAKE_RELIABLE = 0.75
+# The real-data regularity model is calibrated (prompt 5.3; ECE 0.0148) on a
+# label that is regular on 75% of nights, so most predictions sit high: the
+# warning means the top quartile of predicted off-schedule risk (above 0.309),
+# and the encouraging message the top quartile of predicted regularity (0.833).
+OVERSLEEP_ALERT = 0.309
+WAKE_RELIABLE = 0.833
 
 
 def _clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -116,7 +115,7 @@ def recommend(payload: dict | None) -> list[dict]:
         })
     elif duration > 9.5:
         tips.append({
-            "text": f"You're sleeping about {duration:.1f} h. Consistently long sleep can signal sleep debt or low quality.",
+            "text": f"You're sleeping about {duration:.1f} h. That is more than the 7-9 h most adults are advised to get.",
             "priority": "low",
             "icon": "moon",
             "basis": "long sleep duration",
@@ -132,15 +131,15 @@ def recommend(payload: dict | None) -> list[dict]:
 
     if oversleep > OVERSLEEP_ALERT:
         tips.append({
-            "text": "Elevated oversleep risk for your next wake. Enable verification and a backup escalation level.",
+            "text": "Your next wake time is likely to drift from your usual one. If it matters, turn on verification and a backup level.",
             "priority": "high",
             "icon": "alert-triangle",
-            "basis": "high oversleep probability",
+            "basis": "low predicted wake-time regularity",
         })
 
     if fatigue > 60:
         tips.append({
-            "text": "High fatigue detected. Cut caffeine after midday and reduce evening screen time.",
+            "text": "Your logs point to building fatigue. Try cutting caffeine after midday and reducing evening screen time.",
             "priority": "medium",
             "icon": "battery-low",
             "basis": "high fatigue score",
@@ -156,7 +155,7 @@ def recommend(payload: dict | None) -> list[dict]:
 
     if disruption > 55:
         tips.append({
-            "text": "Nighttime noise or movement is disrupting your sleep. Aim for a quieter, cooler, darker room.",
+            "text": "Your logs show frequent nighttime noise or movement. A quieter, cooler, darker room may help.",
             "priority": "medium",
             "icon": "volume-x",
             "basis": "high sleep disruption",
@@ -164,10 +163,10 @@ def recommend(payload: dict | None) -> list[dict]:
 
     if wake_success >= WAKE_RELIABLE and consistency >= 60:
         tips.append({
-            "text": "Great wake reliability and steady timing - keep your current routine going.",
+            "text": "You usually wake close to your usual time, and your sleep timing is steady. Keep your current routine.",
             "priority": "low",
             "icon": "check",
-            "basis": "strong wake success",
+            "basis": "high predicted wake-time regularity",
         })
 
     if not tips:
@@ -184,10 +183,10 @@ def recommend(payload: dict | None) -> list[dict]:
             })
         else:
             tips.append({
-                "text": "Nothing needs attention - your sleep and wake routine are on track.",
+                "text": "Nothing in your logged data needs attention right now.",
                 "priority": "low",
                 "icon": "check",
-                "basis": "all metrics within target",
+                "basis": "no rule triggered",
             })
 
     tips.sort(key=lambda t: _PRIORITY_WEIGHT.get(t["priority"], 0), reverse=True)

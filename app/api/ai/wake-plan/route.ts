@@ -3,6 +3,10 @@ import { jsonError, jsonOk, parseJson, guard } from "@/lib/http";
 import { getUserId } from "@/lib/session";
 import { buildUserSignals } from "@/lib/aiFeatures";
 import { planWake } from "@/lib/aiClient";
+import { isClockTime, isNum } from "@/lib/validate";
+import { connectToDatabase } from "@/lib/mongoose";
+import { wakePlanWithheldFor } from "@/lib/randomisationServer";
+import { WITHHELD_TEXT } from "@/lib/randomisation";
 
 interface WakePlanBody {
   /** 0..1. How sure the user needs to be of waking. */
@@ -11,6 +15,8 @@ interface WakePlanBody {
   wakeTime?: string;
   /** Reject a bedtime that meets reliability but starves sleep. */
   minSleepHours?: number;
+  /** The browser's timezone, to match wakeTime with an alarm (prompt 6.1). */
+  tz?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -20,6 +26,26 @@ export async function POST(req: NextRequest) {
       return jsonError("Unauthorized", 401);
     }
     const body = (await parseJson<WakePlanBody>(req)) ?? {};
+    // "very" used to become NaN here and go to the planner as the target.
+    if (body.requiredReliability !== undefined
+      && !(isNum(body.requiredReliability, 0, 1) && body.requiredReliability > 0)) {
+      return jsonError("requiredReliability must be a number above 0 and at most 1", 422);
+    }
+    if (body.minSleepHours !== undefined && !isNum(body.minSleepHours, 0, 14)) {
+      return jsonError("minSleepHours must be a number from 0 to 14", 422);
+    }
+    if (body.wakeTime !== undefined && !isClockTime(body.wakeTime)) {
+      return jsonError("wakeTime must be a 24-hour time like 05:40", 422);
+    }
+    // The study's randomisation (6.1): no plan for an alarm whose arm is "not shown".
+    if (body.wakeTime) {
+      await connectToDatabase();
+      const withheld = await wakePlanWithheldFor(userId, body.wakeTime, typeof body.tz === "string" ? body.tz : undefined);
+      if (withheld) {
+        return jsonOk({ plan: null, withheld: { alarmId: withheld.id, label: withheld.label, reason: WITHHELD_TEXT } });
+      }
+    }
+    // The planner cannot promise certainty, nor plan for near-zero targets.
     const required = Math.min(0.99, Math.max(0.05, body.requiredReliability ?? 0.9));
 
     const { features, sleepGoalHours } = await buildUserSignals(userId);

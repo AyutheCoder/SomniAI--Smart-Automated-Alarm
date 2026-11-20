@@ -1,0 +1,226 @@
+{
+  "cardVersion": 1,
+  "trainedAt": "2026-11-14T20:29:07+00:00",
+  "sklearnVersion": "1.8.0",
+  "seed": 42,
+  "trainedOn": {
+    "name": "LifeSnaps",
+    "citation": "Yfantidou et al., LifeSnaps, a 4-month multi-modal dataset capturing unobtrusive snapshots of our lives in the wild. Scientific Data 9:663, 2022.",
+    "source": "https://zenodo.org/records/7229547",
+    "licence": "CC BY 4.0",
+    "device": "Fitbit Sense",
+    "participants": 69,
+    "nights": 3551
+  },
+  "notUsed": "PMData (CC BY-NC 4.0, non-commercial) is not in the shipped models, so the app carries no non-commercial term. The paper's replication on PMData is unchanged.",
+  "pipeline": "training/train_shipped.py through datasets/ and training/train_real.py, as evaluation/run_study.py",
+  "features": [
+    "chronotype_code",
+    "bedtime_hour",
+    "exercise_minutes",
+    "resting_hr",
+    "steps",
+    "sleep_consistency",
+    "sleep_debt_hours"
+  ],
+  "featureMedians": {
+    "chronotype_code": 1.0,
+    "bedtime_hour": 24.3583,
+    "exercise_minutes": 30.0,
+    "resting_hr": 66.3123,
+    "steps": 7871.0,
+    "sleep_consistency": 63.8599,
+    "sleep_debt_hours": 4.0
+  },
+  "missingInputs": "An input the app doesn't send takes the training nights' median, so it neither helps nor hurts.",
+  "inputsNotUsed": [
+    {
+      "feature": "age",
+      "why": "LifeSnaps gives age only as a band (under or over 30), not a number"
+    },
+    {
+      "feature": "screen_minutes_before_bed",
+      "why": "no public wearable dataset records it"
+    },
+    {
+      "feature": "caffeine_mg",
+      "why": "no public wearable dataset records it"
+    },
+    {
+      "feature": "stress_level",
+      "why": "LifeSnaps has it for only 53% of nights; the study leaves it out rather than lose half the participants (docs/sleep-duration-results.md)"
+    },
+    {
+      "feature": "ambient_noise_db",
+      "why": "no public wearable dataset records it"
+    },
+    {
+      "feature": "room_temp_c",
+      "why": "no public wearable dataset records it"
+    },
+    {
+      "feature": "snooze_count",
+      "why": "no public wearable dataset records it"
+    },
+    {
+      "feature": "alarm_response_ms",
+      "why": "no public wearable dataset records it"
+    }
+  ],
+  "models": {
+    "sleep_duration": {
+      "file": "sleep_duration.joblib",
+      "predicts": "Hours asleep tonight",
+      "target": "sleep_duration_hours",
+      "trainingNights": 3376,
+      "trainingParticipants": 63,
+      "evaluation": {
+        "mae": {
+          "metric": "mae",
+          "n_splits": 8,
+          "mean": 1.0161,
+          "sd": 0.0909,
+          "ci_low": 0.9531,
+          "ci_high": 1.0791,
+          "min": 0.9211,
+          "max": 1.1698,
+          "usable": true
+        },
+        "rmse": {
+          "metric": "rmse",
+          "n_splits": 8,
+          "mean": 1.4179,
+          "sd": 0.1568,
+          "ci_low": 1.3092,
+          "ci_high": 1.5265,
+          "min": 1.2326,
+          "max": 1.6582,
+          "usable": true
+        },
+        "r2": {
+          "metric": "r2",
+          "n_splits": 8,
+          "mean": 0.186,
+          "sd": 0.1602,
+          "ci_low": 0.075,
+          "ci_high": 0.297,
+          "min": -0.0772,
+          "max": 0.3951,
+          "usable": true
+        },
+        "baselineMeanMae": 1.1968,
+        "oraclePersonMeanMae": 1.0004
+      },
+      "importances": {
+        "bedtime_hour": 0.5574,
+        "steps": 0.1119,
+        "resting_hr": 0.0942,
+        "sleep_consistency": 0.0721,
+        "sleep_debt_hours": 0.0665,
+        "exercise_minutes": 0.0539,
+        "chronotype_code": 0.044
+      }
+    },
+    "wake_regularity": {
+      "file": "wake_regularity.joblib",
+      "predicts": "Chance of waking close to your usual time (wake-time regularity)",
+      "label": "a night counts as regular unless the wake was more than 30 minutes later than the person's own habit (the median of their last 28 nights of the same kind, weekday or weekend; datasets/wake_proxy.py). It says nothing about how the morning went",
+      "trainingNights": 3132,
+      "trainingParticipants": 62,
+      "evaluation": {
+        "roc_auc": {
+          "metric": "roc_auc",
+          "n_splits": 8,
+          "mean": 0.6626,
+          "sd": 0.0675,
+          "ci_low": 0.6158,
+          "ci_high": 0.7093,
+          "min": 0.5307,
+          "max": 0.737,
+          "usable": true
+        },
+        "balanced_accuracy": {
+          "metric": "balanced_accuracy",
+          "n_splits": 8,
+          "mean": 0.5632,
+          "sd": 0.0337,
+          "ci_low": 0.5399,
+          "ci_high": 0.5865,
+          "min": 0.5219,
+          "max": 0.6296,
+          "usable": true
+        },
+        "accuracy": {
+          "metric": "accuracy",
+          "n_splits": 8,
+          "mean": 0.7587,
+          "sd": 0.0488,
+          "ci_low": 0.7249,
+          "ci_high": 0.7925,
+          "min": 0.6831,
+          "max": 0.8143,
+          "usable": true
+        },
+        "majorityBaselineAccuracy": 0.7484,
+        "positiveRateTest": 0.7484,
+        "calibration": {
+          "n": 3180,
+          "ece": 0.0148,
+          "mce": 0.1325,
+          "brier": 0.1727,
+          "base_rate": 0.7453,
+          "mean_prediction": 0.7524
+        },
+        "balancedVariantRocAuc": {
+          "metric": "roc_auc",
+          "n_splits": 8,
+          "mean": 0.6598,
+          "sd": 0.072,
+          "ci_low": 0.6099,
+          "ci_high": 0.7097,
+          "min": 0.5177,
+          "max": 0.7329,
+          "usable": true
+        }
+      },
+      "importances": {
+        "bedtime_hour": 0.3602,
+        "resting_hr": 0.1646,
+        "sleep_consistency": 0.1453,
+        "steps": 0.141,
+        "exercise_minutes": 0.103,
+        "chronotype_code": 0.0457,
+        "sleep_debt_hours": 0.0402
+      }
+    }
+  },
+  "noLongerPredicted": {
+    "wakeup_consistency": "No real-data target exists for it, so the synthetic model is gone; the app shows your measured sleep consistency instead."
+  },
+  "thresholds": {
+    "offScheduleAlert": 0.309,
+    "regularHigh": 0.833,
+    "from": "75th percentiles of held-out predictions over the evaluation splits"
+  },
+  "personalisation": {
+    "sleep_duration": {
+      "withinSd": 1.2173,
+      "betweenSd": 1.1047,
+      "nightsForHalfWeight": 1.21
+    },
+    "wake_regularity": {
+      "betweenSd": 0.1515,
+      "meanProbability": 0.7409,
+      "priorStrength": 7.36
+    },
+    "minimumNights": 7,
+    "from": "held-out participants over 8 splits: the variance of each person's mean residual, less its sampling noise, is the between-person variance"
+  },
+  "evaluationMethod": "Grouped by participant: 8 splits, 20% of people held out each time, never seen in training. Means with a 95% interval over the splits.",
+  "limits": [
+    "Weak in absolute terms: modestly better than chance at regularity, and duration explains under a fifth of the variance.",
+    "69 people with a Fitbit Sense (35 under 30, 31 aged 30 or over, 3 not given), May 2021 to January 2022: it may not describe you.",
+    "Nothing it predicts was ever about alarms: no public dataset records an alarm, a snooze or a wake check.",
+    "Screen time, caffeine, room noise and temperature can't move these predictions: no dataset recorded them."
+  ]
+}

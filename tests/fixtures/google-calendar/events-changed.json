@@ -1,0 +1,35 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p32cfixturechanged\"",
+  "summary": "sleeper@example.com",
+  "updated": "2026-11-16T06:00:00.000Z",
+  "timeZone": "Asia/Kolkata",
+  "accessRole": "owner",
+  "defaultReminders": [{ "method": "popup", "minutes": 30 }],
+  "items": [
+    {
+      "kind": "calendar#event",
+      "id": "exam20261117",
+      "status": "confirmed",
+      "summary": "Final exam (moved)",
+      "description": "Hall C",
+      "updated": "2026-11-16T05:00:00.000Z",
+      "eventType": "default",
+      "start": { "dateTime": "2026-11-17T10:30:00+05:30", "timeZone": "Asia/Kolkata" },
+      "end": { "dateTime": "2026-11-17T13:30:00+05:30", "timeZone": "Asia/Kolkata" }
+    },
+    { "kind": "calendar#event", "id": "passport20261118", "status": "cancelled" },
+    { "kind": "calendar#event", "id": "flight20261120", "status": "cancelled" },
+    {
+      "kind": "calendar#event",
+      "id": "gym_20261119T003000Z",
+      "status": "confirmed",
+      "summary": "Gym",
+      "updated": "2026-10-01T08:00:00.000Z",
+      "eventType": "default",
+      "recurringEventId": "gym",
+      "start": { "dateTime": "2026-11-19T06:00:00+05:30", "timeZone": "Asia/Kolkata" },
+      "end": { "dateTime": "2026-11-19T07:00:00+05:30", "timeZone": "Asia/Kolkata" }
+    }
+  ]
+}

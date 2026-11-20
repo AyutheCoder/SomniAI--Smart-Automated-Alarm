@@ -88,7 +88,7 @@ export function explainRlDecision(context: RlContext, action: RlAction, opts: {
       impact: fatigue >= 0.6 ? "increase" : "neutral",
       weight: fatigue >= 0.6 ? 0.5 + (fatigue - 0.6) : fatigue * 0.4,
       detail: fatigue >= 0.6
-        ? "Elevated fatigue raises oversleep risk, so the wake moves earlier."
+        ? "Elevated fatigue makes an off-schedule wake more likely, so the wake moves earlier."
         : undefined,
     },
     {
@@ -106,7 +106,7 @@ export function explainRlDecision(context: RlContext, action: RlAction, opts: {
       impact: sleepDebt >= 1 ? "increase" : "neutral",
       weight: clamp01(sleepDebt / 4) * 0.6,
       detail: sleepDebt >= 1
-        ? "Accumulated sleep debt makes oversleeping more likely."
+        ? "Accumulated sleep debt makes waking off your usual time more likely."
         : undefined,
     });
   }

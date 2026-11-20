@@ -1,0 +1,36 @@
+SomniAI is an alarm clock for mornings that matter. It rings from the phone itself, makes sure you're actually awake before it stops, and tells you the night before if something could get in the way.
+
+RINGS, EVEN WITH THE APP CLOSED
+• Alarms are set with Android's alarm clock, so they go off on time with the app closed, the screen locked, or after a restart.
+• The alarm screen opens over the lock screen and plays on the alarm volume.
+• If you don't respond, it steps up: louder, then continuous vibration, then the wake check.
+
+A WAKE CHECK THAT STOPS IT
+• To turn an alarm off, solve three quick sums. It's hard to do half asleep, so you won't switch it off without noticing.
+• Snooze for 5 minutes when you need it, except on alarms you've marked as unmissable.
+
+TONIGHT'S PLAN
+• Tell SomniAI when you must be up and how much it matters. It works backwards to the latest bedtime that still gets you there.
+• If tonight can't get you there, it says so plainly, says what's holding you back, and offers a second alarm.
+
+A CHECK BEFORE BED
+Before your next alarm, SomniAI checks what could stop it: alarm permission, notifications, the alarm screen over the lock screen, battery optimisation, your phone maker's battery manager, alarm volume, Do Not Disturb and the battery. If anything is wrong, it tells you how to fix it.
+
+A WAKE BUDDY
+Pair with someone you trust. If you haven't confirmed you're awake 15 minutes after an alarm you've marked critical, their phone tells them, with a button to call you. You both have to agree, and either of you can stop it at any time.
+
+A MORNING REPORT
+After each alarm, see which stage woke you, how long the wake check took, and how last night compared with the plan.
+
+PREDICTIONS, HONESTLY LABELLED
+SomniAI estimates tonight's sleep and how regular your wake time is likely to be. The models were trained on a public research dataset of 69 people, and the app shows how accurate they are: useful, but modest. After a week of your own nights, the estimates shift towards you. These are estimates, not medical advice, and SomniAI is not a medical device.
+
+YOUR DATA, YOUR CHOICE
+• Optional and off until you turn them on: sleep and resting heart rate from Health Connect (read-only), minutes of phone use before bed (never which apps), and alarm timing for your own insights.
+• No ads. Your data is not sold.
+• Download everything SomniAI holds about you, or delete your account and all of it, from inside the app.
+
+GOOD TO KNOW
+• You need an account and an internet connection to set alarms and see your plan. Alarms already set ring without a connection.
+• Some phone makers' battery managers can still stop any alarm app. SomniAI's bedtime check tells you when yours might, and how to exempt it.
+• Android only.

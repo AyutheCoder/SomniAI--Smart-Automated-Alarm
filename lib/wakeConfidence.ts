@@ -27,6 +27,8 @@ export type ChallengeOutcome = {
   attempts: number;
   motion?: number;
   interactions?: number;
+  /** How many answers `responseMs` covers (the sums in a maths challenge). Default 1. */
+  steps?: number;
 };
 
 export interface WakeSignals {
@@ -38,6 +40,12 @@ export interface WakeSignals {
   interactions?: number;
   /** Explicit gate. Defaults to `correctness >= 1` when omitted. */
   solved?: boolean;
+  /**
+   * How many answers `responseMs` covers. Speed is judged per answer: the
+   * 6 to 45 s brackets describe one answer, and three sums in a row would
+   * otherwise always read as "fell back asleep". Default 1.
+   */
+  steps?: number;
 }
 
 export interface WakeConfidence {
@@ -88,7 +96,8 @@ export function computeWakeConfidence(signals: WakeSignals): WakeConfidence {
   const correctness = clamp01(signals.correctness);
   const solved = signals.solved ?? correctness >= 1;
 
-  const speedNorm = clamp01((SLOW_MS - signals.responseMs) / (SLOW_MS - FAST_MS));
+  const perStepMs = signals.responseMs / Math.max(1, signals.steps ?? 1);
+  const speedNorm = clamp01((SLOW_MS - perStepMs) / (SLOW_MS - FAST_MS));
   // Unknown motion is genuinely uninformative, so it contributes nothing rather
   // than half a point of unearned credit.
   const motionNorm = signals.motion === undefined ? 0.5 : clamp01(signals.motion);
@@ -154,8 +163,12 @@ export function accumulateWakeEvidence(outcomes: ChallengeOutcome[]): WakeConfid
 
   return computeWakeConfidence({
     correctness: solvedCount / outcomes.length,
-    // Total time on task, not per-challenge, so a long fumble stays visible.
+    // Total time on task over every answer given, judged per answer: a long
+    // fumble still drags the average, and its wrong answers count as attempts.
+    // (Judging the total against one answer's brackets made any sequence of
+    // more than one challenge read as slow.)
     responseMs: outcomes.reduce((s, o) => s + o.responseMs, 0),
+    steps: outcomes.reduce((s, o) => s + Math.max(1, o.steps ?? 1), 0),
     attempts: outcomes.reduce((s, o) => s + o.attempts, 0),
     motion: motions.length ? motions.reduce((s, m) => s + m, 0) / motions.length : undefined,
     interactions: outcomes.reduce((s, o) => s + (o.interactions ?? 0), 0),

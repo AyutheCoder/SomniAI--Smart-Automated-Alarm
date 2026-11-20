@@ -43,6 +43,12 @@ export default function QRChallenge({ onComplete }: ChallengeProps) {
       interactions,
     });
   };
+  // The camera loop starts once; reading finish through a ref gives it the
+  // current attempt count without restarting the camera on every render.
+  const finishRef = useRef(finish);
+  useEffect(() => {
+    finishRef.current = finish;
+  });
 
   useEffect(() => {
     let raf = 0;
@@ -74,7 +80,7 @@ export default function QRChallenge({ onComplete }: ChallengeProps) {
           try {
             const codes = await detector.detect(videoRef.current);
             if (codes.length > 0) {
-              finish(1);
+              finishRef.current(1);
               return;
             }
           } catch {

@@ -1,0 +1,10 @@
+{
+  "kind": "calendar#events",
+  "etag": "\"p32cfixtureempty\"",
+  "summary": "sleeper@example.com",
+  "updated": "2026-11-15T18:00:00.000Z",
+  "timeZone": "Asia/Kolkata",
+  "accessRole": "owner",
+  "defaultReminders": [],
+  "items": []
+}

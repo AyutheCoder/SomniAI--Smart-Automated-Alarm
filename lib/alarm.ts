@@ -82,7 +82,7 @@ class AdaptiveAlarm {
       this.osc1?.stop();
       this.osc2?.stop();
     }
-    catch (e) {
+    catch {
     }
     this.osc1?.disconnect();
     this.osc2?.disconnect();

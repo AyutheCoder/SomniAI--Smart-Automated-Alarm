@@ -1,0 +1,90 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace = "app.somniai.alarm"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.somniai.alarm"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // A release (scripts/release.mjs, prompt 7.5) passes the number of commits as
+        // the version code, so every upload to Google Play is higher than the last,
+        // and package.json's version as the name. Other builds keep 1 / "dev".
+        versionCode((project.findProperty("somniaiVersionCode") ?: "1") as Integer)
+        versionName((project.findProperty("somniaiVersionName") ?: "dev") as String)
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // The upload key (prompt 7.5, play/README.md): kept outside the repository and
+    // given only by scripts/release.mjs through the environment. Without it a
+    // release build is unsigned, which Google Play refuses, and the script stops.
+    def uploadStore = System.getenv("SOMNIAI_UPLOAD_STORE")
+    signingConfigs {
+        release {
+            if (uploadStore) {
+                storeFile file(uploadStore)
+                storeType "pkcs12"
+                storePassword System.getenv("SOMNIAI_UPLOAD_PASSWORD")
+                keyAlias "upload"
+                keyPassword System.getenv("SOMNIAI_UPLOAD_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig uploadStore ? signingConfigs.release : null
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    // Sends ring results queued offline once there is a network (alarms/SyncWorker).
+    implementation "androidx.work:work-runtime:2.10.1"
+    // Health Connect, read-only (prompt 4.2: HealthConnect.java).
+    implementation "androidx.health.connect:connect-client:1.1.0"
+    // It brings Guava at runtime, which swaps the listenablefuture artifact
+    // WorkManager compiles against for an empty one; the same Guava at compile
+    // time puts ListenableFuture back (no new code in the app).
+    implementation "com.google.guava:guava:31.1-android"
+    // Wake-buddy alerts (alarms/BuddyMessagingService). Without google-services.json
+    // the app still builds and runs; push just reports that it isn't set up.
+    implementation platform("com.google.firebase:firebase-bom:33.7.0")
+    implementation "com.google.firebase:firebase-messaging"
+    testImplementation "junit:junit:$junitVersion"
+    // Reads the packaged capacitor.config.json in ShellConfigTest; Android's own
+    // org.json is a stub that throws in JVM unit tests.
+    testImplementation "org.json:json:20240303"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    // On-device tests of the ring service (src/androidTest, scripts/android-instrument.sh).
+    androidTestImplementation "androidx.test:runner:1.7.0"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

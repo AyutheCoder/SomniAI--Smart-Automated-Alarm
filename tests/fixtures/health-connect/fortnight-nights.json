@@ -1,0 +1,40 @@
+{
+  "nights": [
+    {
+      "date": "2026-11-14",
+      "sleepTime": "2026-11-13T17:30:00Z",
+      "wakeTime": "2026-11-14T01:30:00Z",
+      "asleepMinutes": 450,
+      "inBedMinutes": 480,
+      "stagesRecorded": true,
+      "sessions": 1,
+      "sessionId": "watch-night-14",
+      "origin": "com.example.watch",
+      "restingHr": 58
+    },
+    {
+      "date": "2026-11-15",
+      "sleepTime": "2026-11-14T21:30:00Z",
+      "wakeTime": "2026-11-15T02:00:00Z",
+      "asleepMinutes": 270,
+      "inBedMinutes": 270,
+      "stagesRecorded": false,
+      "sessions": 3,
+      "sessionId": "phone-night-15-second",
+      "origin": "com.example.sleepapp",
+      "restingHr": 62
+    },
+    {
+      "date": "2026-11-16",
+      "sleepTime": "2026-11-15T17:45:00Z",
+      "wakeTime": "2026-11-16T01:15:00Z",
+      "asleepMinutes": 430,
+      "inBedMinutes": 450,
+      "stagesRecorded": true,
+      "sessions": 2,
+      "sessionId": "watch-night-16",
+      "origin": "com.example.watch"
+    }
+  ],
+  "skipped": ["watch-still-recording: in_progress"]
+}

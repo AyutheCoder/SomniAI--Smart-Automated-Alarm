@@ -42,7 +42,9 @@ export async function GET() {
       const signals = await buildUserSignals(userId);
       coaching = await buildInsights({
         features: signals.features,
-        metrics: report.metrics,
+        // The report above is the user's whole history, simulator nights
+        // included; what goes to a model is the live-only view.
+        metrics: signals.metrics,
         recentSleepHours: signals.recentSleepHours,
         sleepGoalHours: signals.sleepGoalHours,
       });
